@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/detail-hub/"
+title = "DetailHub"
+version = "1.0.0"
+id = "artifacts/detail-hub"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/detail-hub/" ]
+localPort = 24540
+
+[services.development]
+run = "pnpm --filter @workspace/detail-hub run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/detail-hub", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/detail-hub/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24540"
+BASE_PATH = "/detail-hub/"

@@ -1,0 +1,15 @@
+Screens to build
+
+Build every screen below. Each maps directly to a section of the PRD — refer to it for exact fields and logic.
+
+Splash / login stub (brand-confidence register) — dark surface-inverse, large product wordmark, single "Continue as Admin" action. No real auth.
+Home — today snapshot card, quick actions, in the utility register.
+Calendar (Day / Week / Agenda) — color-coded bookings by status; Today button; tapping a booking opens Booking Detail.
+New Booking flow — client select/create → service select (from Package catalog) → employee assign (multi-select) → deposit → parking cost input → review & confirm. Show the Gas Meter badge and Weather panel as soon as an address and date are set, using mocked calculations (see below).
+Booking Detail / Edit — identical field set to New Booking, fully editable in place, including adding/removing line items after the fact (this is a deliberate fix for the gap found in the Vagaro audit — don't lock any field post-creation). Shows Gas Meter, Weather, and Parking Cost.
+Client list + Client Profile — searchable list; profile shows contact info, booking/purchase history, notes.
+Sales Reporting dashboard — top-line stat cards (revenue this week/month/year, jobs completed, avg ticket) in the brand-confidence numeral treatment (large tabular-nums figures even though the page itself is in the light utility register); Revenue by Employee and Revenue by Package tables/charts; date range and period toggle (week/month/year).
+Package Admin — list grouped by category with inline edit/archive; create/edit form (name, category, description, price, duration, is add-on toggle).
+Payroll dashboard — per-employee, per-period summary (revenue, tips as clearly-labeled pass-through, computed payout); booking-level split-commission editor (percentage slider or input, shown only when a booking has 2+ assigned employees).
+Payroll Rule settings (under More → Settings) — define/edit the commission calculation (flat % to start, per the PRD's v1 scope).
+Admin Settings — home base address, gas price per gallon (default $6.00), vehicle MPG, Gas Meter thresholds — all editable, matching the PRD's Open Questions defaults.
