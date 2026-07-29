@@ -1,5 +1,6 @@
 import { Home, Calendar, CheckSquare, Users, MoreHorizontal } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
+import logoSrc from '@assets/Group_3038_1785336419342.png';
 
 export function SidebarNav() {
   const [location] = useLocation();
@@ -19,7 +20,14 @@ export function SidebarNav() {
 
   return (
     <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-card border-r border-border flex-col">
-      <div className="p-6">
+      <div className="p-6 flex items-center gap-3">
+        <img
+          src={logoSrc}
+          alt="DetailHub logo"
+          className="w-8 h-8 object-contain"
+          style={{ mixBlendMode: 'multiply' }}
+          data-testid="img-sidebar-logo"
+        />
         <h1 className="text-xl font-bold">DetailHub</h1>
       </div>
       <nav className="flex-1 px-3">
