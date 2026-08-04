@@ -13,13 +13,13 @@ export function BottomNav() {
   ];
 
   const isActive = (path: string) => {
-    if (path === '/home') return location === '/' || location === '/home';
+    if (path === '/calendar') return location === '/' || location === '/calendar';
     return location.startsWith(path);
   };
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-      <div className="grid grid-cols-5 h-16">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-nav z-50">
+      <div className="grid grid-cols-5 h-16 safe-pb">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = isActive(tab.path);
