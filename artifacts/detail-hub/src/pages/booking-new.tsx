@@ -78,7 +78,7 @@ export default function BookingNew() {
 
   // Form state
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
-  const [newClient, setNewClient] = useState({ firstName: '', lastName: '', phone: '', email: '' });
+  const [newClient, setNewClient] = useState({ firstName: '', lastName: '', phone: '', email: '', address: '' });
   const [creatingClient, setCreatingClient] = useState(false);
   const [selectedPackages, setSelectedPackages] = useState<number[]>([]);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -164,11 +164,12 @@ export default function BookingNew() {
   const handleCreateClient = () => {
     const full = `${newClient.firstName} ${newClient.lastName}`.trim();
     if (!full || !newClient.phone) return;
-    const c = createClient({ name: full, phone: newClient.phone, email: newClient.email, address: '' });
+    const c = createClient({ name: full, phone: newClient.phone, email: newClient.email, address: newClient.address });
     setSelectedClient(c.id);
+    if (newClient.address) setAddress(newClient.address);
     setShowCustomers(false);
     setCreatingClient(false);
-    setNewClient({ firstName: '', lastName: '', phone: '', email: '' });
+    setNewClient({ firstName: '', lastName: '', phone: '', email: '', address: '' });
   };
 
   const filteredClients = clients.filter(c =>
@@ -500,7 +501,7 @@ export default function BookingNew() {
               {filteredClients.map(c => (
                 <button
                   key={c.id}
-                  onClick={() => { setSelectedClient(c.id); setShowCustomers(false); }}
+                  onClick={() => { setSelectedClient(c.id); if (c.address) setAddress(c.address); setShowCustomers(false); }}
                   className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left"
                 >
                   <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[13px] font-semibold shrink-0">
@@ -532,6 +533,7 @@ export default function BookingNew() {
               { key: 'lastName',  placeholder: 'Last name'  },
               { key: 'phone',     placeholder: 'Phone number' },
               { key: 'email',     placeholder: 'Email address' },
+              { key: 'address',   placeholder: 'Address (optional)' },
             ].map(f => (
               <input
                 key={f.key}

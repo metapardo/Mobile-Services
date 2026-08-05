@@ -125,7 +125,7 @@ export default function PayrollTimeTracking() {
                   <p className="text-[13px] font-medium tabular-nums">{log.hours}h</p>
                   <div className="flex items-center gap-1">
                     {log.source === 'derived_from_booking' && (
-                      <Briefcase className="w-3 h-3 text-muted-foreground shrink-0" title="From booking" />
+                      <Briefcase className="w-3 h-3 text-muted-foreground shrink-0" aria-label="From booking" />
                     )}
                     <span className="text-[11px] text-muted-foreground truncate">
                       {log.source === 'derived_from_booking' ? 'Job' : 'Manual'}
