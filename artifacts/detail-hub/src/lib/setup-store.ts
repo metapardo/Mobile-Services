@@ -32,16 +32,40 @@ const defaultProfile: SetupProfile = {
   setupComplete: false,
 };
 
-let profile: SetupProfile = { ...defaultProfile };
+const STORAGE_KEY = 'detailhub_setup_profile';
+
+function loadProfile(): SetupProfile {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      return { ...defaultProfile, ...JSON.parse(raw) };
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return { ...defaultProfile };
+}
+
+function saveProfile(p: SetupProfile): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+  } catch {
+    // ignore storage errors (e.g. private browsing quota)
+  }
+}
+
+let profile: SetupProfile = loadProfile();
 
 export function getSetupProfile(): SetupProfile { return profile; }
 
 export function updateSetupProfile(updates: Partial<SetupProfile>) {
   profile = { ...profile, ...updates };
+  saveProfile(profile);
 }
 
 export function completeSetup() {
   profile.setupComplete = true;
+  saveProfile(profile);
 }
 
 export const BUSINESS_CATEGORIES = [
