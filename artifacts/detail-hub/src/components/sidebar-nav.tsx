@@ -1,4 +1,4 @@
-import { Home, Calendar, CheckSquare, Users, MoreHorizontal } from 'lucide-react';
+import { Calendar, Users, Users2, BarChart3, Package, Settings } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import logoSrc from '@assets/logo_1785854923476.png';
 
@@ -6,15 +6,16 @@ export function SidebarNav() {
   const [location] = useLocation();
 
   const tabs = [
-    { name: 'Home', path: '/home', icon: Home },
-    { name: 'Calendar', path: '/calendar', icon: Calendar },
-    { name: 'Checkout', path: '/checkout', icon: CheckSquare },
-    { name: 'Clients', path: '/clients', icon: Users },
-    { name: 'More', path: '/more', icon: MoreHorizontal },
+    { name: 'Calendar',  path: '/calendar',        icon: Calendar    },
+    { name: 'Clients',   path: '/clients',          icon: Users       },
+    { name: 'Team',      path: '/more/payroll',     icon: Users2      },
+    { name: 'Reports',   path: '/more/reporting',   icon: BarChart3   },
+    { name: 'Packages',  path: '/more/packages',    icon: Package     },
+    { name: 'Settings',  path: '/more/settings',    icon: Settings    },
   ];
 
   const isActive = (path: string) => {
-    if (path === '/home') return location === '/' || location === '/home';
+    if (path === '/calendar') return location === '/' || location === '/calendar';
     return location.startsWith(path);
   };
 
@@ -29,22 +30,27 @@ export function SidebarNav() {
         />
         <h1 className="text-xl font-bold">DetailHub</h1>
       </div>
-      <nav className="flex-1 px-3">
-        {tabs.map((tab) => {
+
+      <nav className="flex-1 px-3 space-y-0.5">
+        {tabs.map((tab, i) => {
           const Icon = tab.icon;
           const active = isActive(tab.path);
+          // subtle divider before Team (index 3)
+          const showDivider = i === 3;
           return (
-            <Link
-              key={tab.path}
-              href={tab.path}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors ${
-                active ? 'bg-[var(--accent-subtle)] text-primary' : 'text-foreground hover:bg-muted'
-              }`}
-              data-testid={`nav-${tab.name.toLowerCase()}`}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="text-[15px]">{tab.name}</span>
-            </Link>
+            <div key={tab.path}>
+              {showDivider && <div className="h-px bg-white/10 mx-2 my-2" />}
+              <Link
+                href={tab.path}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                  active ? 'bg-[var(--accent-subtle)] text-primary' : 'text-foreground hover:bg-muted'
+                }`}
+                data-testid={`nav-${tab.name.toLowerCase()}`}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-[15px]">{tab.name}</span>
+              </Link>
+            </div>
           );
         })}
       </nav>

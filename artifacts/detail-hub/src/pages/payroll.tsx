@@ -79,7 +79,7 @@ export default function Payroll() {
           <span className="text-[15px]">Back to More</span>
         </Link>
 
-        <h1 className="text-2xl font-semibold mb-6">Payroll</h1>
+        <h1 className="text-2xl font-semibold mb-6">Team</h1>
 
         <Tabs value={period} onValueChange={(v) => setPeriod(v as any)} className="mb-6">
           <TabsList className="grid w-full grid-cols-3">

@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { settings, updateSettings } from '@/lib/mock-data';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Sparkles } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { SetupWizard } from '@/components/setup-wizard';
+import { getSetupProfile } from '@/lib/setup-store';
 
 export default function Settings() {
   const { toast } = useToast();
   const [formData, setFormData] = useState(settings);
+  const [showSetup, setShowSetup] = useState(false);
+  const setupProfile = getSetupProfile();
 
   const handleSave = () => {
     updateSettings(formData);
@@ -29,6 +33,32 @@ export default function Settings() {
         </Link>
 
         <h1 className="text-2xl font-semibold mb-6">Settings</h1>
+
+        {/* Account Setup Banner */}
+        <Card className="p-5 border border-primary/30 bg-primary/5 rounded-xl mb-6">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-2xl bg-primary/15 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[15px] font-semibold">
+                {setupProfile.setupComplete ? 'Account configured' : 'Finish account setup'}
+              </p>
+              <p className="text-[13px] text-muted-foreground mt-0.5">
+                {setupProfile.setupComplete
+                  ? `${setupProfile.businessName} · ${setupProfile.isStorefront ? 'Storefront' : 'Mobile service'} · ${setupProfile.paymentProcessor || 'No processor'}`
+                  : 'Add your business info, service type, and payment processor to start taking bookings.'}
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setShowSetup(true)}
+            variant={setupProfile.setupComplete ? 'outline' : 'default'}
+            className="w-full mt-4"
+          >
+            {setupProfile.setupComplete ? 'Edit Setup' : 'Initial Setup'}
+          </Button>
+        </Card>
 
         <Card className="p-6 border border-border rounded-xl mb-6">
           <h2 className="text-[18px] font-semibold mb-4">Business Settings</h2>
@@ -124,6 +154,8 @@ export default function Settings() {
           Save Settings
         </Button>
       </div>
+
+      <SetupWizard open={showSetup} onClose={() => setShowSetup(false)} />
     </div>
   );
 }

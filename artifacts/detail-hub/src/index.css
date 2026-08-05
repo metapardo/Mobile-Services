@@ -67,69 +67,69 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* BASE (dark-first — liquid glass) */
+/* BASE — light mode, liquid glass */
 :root {
-  --button-outline: rgba(255, 255, 255, 0.14);
-  --badge-outline: rgba(255, 255, 255, 0.08);
-  --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255, 255, 255, 0.04);
-  --elevate-2: rgba(255, 255, 255, 0.09);
+  --button-outline: rgba(0, 0, 0, 0.08);
+  --badge-outline: rgba(0, 0, 0, 0.05);
+  --opaque-button-border-intensity: -8;
+  --elevate-1: rgba(0, 0, 0, 0.03);
+  --elevate-2: rgba(0, 0, 0, 0.07);
 
-  /* Deep navy gradient base */
-  --background: 237 45% 4%;
-  --foreground: 0 0% 97%;
-  --border: 237 25% 18%;
-  --card: 237 35% 8%;
-  --card-foreground: 0 0% 97%;
-  --card-border: 237 25% 18%;
+  /* Light base */
+  --background: 230 50% 98%;
+  --foreground: 240 6% 10%;
+  --border: 230 20% 88%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 6% 10%;
+  --card-border: 230 20% 88%;
 
-  --sidebar: 237 40% 5%;
-  --sidebar-foreground: 0 0% 97%;
-  --sidebar-border: 237 25% 18%;
-  --sidebar-primary: 228 100% 65%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 240 6% 10%;
+  --sidebar-border: 230 20% 88%;
+  --sidebar-primary: 228 100% 60%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 237 30% 12%;
-  --sidebar-accent-foreground: 0 0% 97%;
-  --sidebar-ring: 228 100% 65%;
+  --sidebar-accent: 230 40% 96%;
+  --sidebar-accent-foreground: 240 6% 10%;
+  --sidebar-ring: 228 100% 60%;
 
-  --popover: 237 40% 7%;
-  --popover-foreground: 0 0% 97%;
-  --popover-border: 237 25% 18%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 6% 10%;
+  --popover-border: 230 20% 88%;
 
-  --primary: 228 100% 65%;
+  --primary: 228 100% 60%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 237 30% 12%;
-  --secondary-foreground: 0 0% 97%;
-  --muted: 237 25% 14%;
-  --muted-foreground: 237 15% 60%;
-  --accent: 228 100% 65%;
+  --secondary: 230 30% 95%;
+  --secondary-foreground: 240 6% 10%;
+  --muted: 230 25% 93%;
+  --muted-foreground: 230 10% 48%;
+  --accent: 228 100% 60%;
   --accent-foreground: 0 0% 100%;
-  --destructive: 0 75% 58%;
+  --destructive: 0 75% 51%;
   --destructive-foreground: 0 0% 100%;
-  --input: 237 25% 16%;
-  --ring: 228 100% 65%;
+  --input: 230 20% 88%;
+  --ring: 228 100% 60%;
 
-  --chart-1: 228 100% 65%;
-  --chart-2: 160 60% 50%;
-  --chart-3: 30 80% 60%;
-  --chart-4: 280 65% 65%;
-  --chart-5: 340 75% 60%;
+  --chart-1: 228 100% 60%;
+  --chart-2: 160 60% 40%;
+  --chart-3: 30 80% 52%;
+  --chart-4: 280 65% 58%;
+  --chart-5: 340 75% 52%;
 
   /* Custom tokens */
-  --surface-inverse: #07071e;
+  --surface-inverse: #0B0B0C;
   --ink-inverse: #F7F7F5;
-  --surface-sunken: rgba(255, 255, 255, 0.04);
-  --accent-subtle: rgba(54, 84, 255, 0.18);
-  --status-green: #34d399;
-  --status-amber: #fbbf24;
-  --status-red: #f87171;
+  --surface-sunken: rgba(0, 0, 0, 0.03);
+  --accent-subtle: rgba(54, 84, 255, 0.10);
+  --status-green: #1E9E62;
+  --status-amber: #D9A404;
+  --status-red: #DC2626;
 
   /* Glass tokens */
-  --glass-bg: rgba(255, 255, 255, 0.07);
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-shine: rgba(255, 255, 255, 0.10);
-  --glass-blur: blur(24px) saturate(1.8);
-  --glass-nav-bg: rgba(7, 7, 30, 0.68);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.90);
+  --glass-shine: rgba(255, 255, 255, 0.80);
+  --glass-blur: blur(24px) saturate(1.6);
+  --glass-nav-bg: rgba(255, 255, 255, 0.82);
 
   --app-font-sans: 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
@@ -193,8 +193,50 @@
   );
 }
 
-/* .dark is now a no-op — root already uses dark-first tokens */
-.dark {}
+/* Dark mode overrides (unused by default, kept for reference) */
+.dark {
+  --button-outline: rgba(255, 255, 255, 0.14);
+  --badge-outline: rgba(255, 255, 255, 0.08);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.09);
+  --background: 237 45% 4%;
+  --foreground: 0 0% 97%;
+  --border: 237 25% 18%;
+  --card: 237 35% 8%;
+  --card-foreground: 0 0% 97%;
+  --card-border: 237 25% 18%;
+  --sidebar: 237 40% 5%;
+  --sidebar-foreground: 0 0% 97%;
+  --sidebar-border: 237 25% 18%;
+  --sidebar-primary: 228 100% 65%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 237 30% 12%;
+  --sidebar-accent-foreground: 0 0% 97%;
+  --sidebar-ring: 228 100% 65%;
+  --popover: 237 40% 7%;
+  --popover-foreground: 0 0% 97%;
+  --popover-border: 237 25% 18%;
+  --primary: 228 100% 65%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 237 30% 12%;
+  --secondary-foreground: 0 0% 97%;
+  --muted: 237 25% 14%;
+  --muted-foreground: 237 15% 60%;
+  --accent: 228 100% 65%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 75% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 237 25% 16%;
+  --ring: 228 100% 65%;
+  --glass-bg: rgba(255, 255, 255, 0.07);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-nav-bg: rgba(7, 7, 30, 0.68);
+  --accent-subtle: rgba(54, 84, 255, 0.18);
+  --status-green: #34d399;
+  --status-amber: #fbbf24;
+  --status-red: #f87171;
+}
 
 @layer base {
   * {
@@ -215,27 +257,32 @@
 }
 
 @layer utilities {
-  /* ── Liquid glass surface ── */
+  /* ── Liquid glass surface (light mode) ── */
   .glass {
-    background: rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(24px) saturate(1.8);
-    -webkit-backdrop-filter: blur(24px) saturate(1.8);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(24px) saturate(1.6);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    border: 1px solid rgba(255, 255, 255, 0.90);
     box-shadow:
-      0 4px 32px rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 rgba(255, 255, 255, 0.10);
+      0 4px 24px rgba(54, 84, 255, 0.08),
+      0 1px 3px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.90);
   }
 
-  /* ── Glass navigation bar (bottom nav / sidebar) ── */
+  /* ── Glass navigation bar (light mode) ── */
   .glass-nav {
-    background: rgba(7, 7, 30, 0.68);
-    backdrop-filter: blur(32px) saturate(2);
-    -webkit-backdrop-filter: blur(32px) saturate(2);
-    border-color: rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(32px) saturate(1.8);
+    -webkit-backdrop-filter: blur(32px) saturate(1.8);
+    border-color: rgba(200, 205, 225, 0.70);
   }
 
   /* ── Gradient primary button ── */
-  .gradient-btn {
+  /* Hide scrollbar while keeping scroll behaviour */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.gradient-btn {
     background: linear-gradient(135deg, #3654ff 0%, #7c3aed 100%) !important;
     border: none !important;
     box-shadow: 0 4px 20px rgba(54, 84, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;

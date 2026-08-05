@@ -11,11 +11,11 @@ export default function Login() {
       {/* Gradient orbs */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-[20%] -left-[15%] w-[70vw] h-[70vw] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(54,84,255,0.45) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(54,84,255,0.18) 0%, transparent 70%)', filter: 'blur(60px)' }} />
         <div className="absolute -bottom-[20%] -right-[10%] w-[60vw] h-[60vw] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.4) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.14) 0%, transparent 70%)', filter: 'blur(60px)' }} />
         <div className="absolute top-[40%] left-[50%] w-[40vw] h-[40vw] rounded-full -translate-x-1/2 -translate-y-1/2"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.18) 0%, transparent 70%)', filter: 'blur(50px)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.10) 0%, transparent 70%)', filter: 'blur(50px)' }} />
       </div>
 
       <motion.div

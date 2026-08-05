@@ -1,15 +1,16 @@
-import { Home, Calendar, CheckSquare, Users, MoreHorizontal } from 'lucide-react';
+import { Calendar, Users, Users2, BarChart3, Package, Settings } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 
 export function BottomNav() {
   const [location] = useLocation();
 
   const tabs = [
-    { name: 'Home', path: '/home', icon: Home },
-    { name: 'Calendar', path: '/calendar', icon: Calendar },
-    { name: 'Checkout', path: '/checkout', icon: CheckSquare },
-    { name: 'Clients', path: '/clients', icon: Users },
-    { name: 'More', path: '/more', icon: MoreHorizontal },
+    { name: 'Calendar',  path: '/calendar',        icon: Calendar   },
+    { name: 'Clients',   path: '/clients',          icon: Users      },
+    { name: 'Team',      path: '/more/payroll',     icon: Users2     },
+    { name: 'Reports',   path: '/more/reporting',   icon: BarChart3  },
+    { name: 'Packages',  path: '/more/packages',    icon: Package    },
+    { name: 'Settings',  path: '/more/settings',    icon: Settings   },
   ];
 
   const isActive = (path: string) => {
@@ -19,7 +20,7 @@ export function BottomNav() {
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-nav z-50">
-      <div className="grid grid-cols-5 h-16 safe-pb">
+      <div className="grid grid-cols-6 h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = isActive(tab.path);
@@ -27,13 +28,13 @@ export function BottomNav() {
             <Link
               key={tab.path}
               href={tab.path}
-              className={`flex flex-col items-center justify-center gap-1 transition-colors ${
+              className={`flex flex-col items-center justify-center gap-0.5 transition-colors ${
                 active ? 'text-primary' : 'text-muted-foreground'
               }`}
               data-testid={`nav-${tab.name.toLowerCase()}`}
             >
-              <Icon className="w-5 h-5" />
-              <span className="text-[11px] leading-none">{tab.name}</span>
+              <Icon className="w-[18px] h-[18px]" />
+              <span className="text-[9px] leading-none">{tab.name}</span>
             </Link>
           );
         })}
