@@ -132,6 +132,71 @@ export default function Settings() {
         </Card>
 
         <Card className="p-6 border border-border rounded-xl mb-6">
+          <h2 className="text-[18px] font-semibold mb-4">Fuel Gauge Thresholds</h2>
+          <p className="text-[13px] text-muted-foreground mb-4">
+            Controls when the calendar gauge shows Empty / Half / Full on each booking.
+          </p>
+          <div className="mb-3">
+            <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Miles mode (non-NYC)
+            </p>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="fuelGaugeHalfMi">Half threshold ($/mile)</Label>
+                <Input
+                  id="fuelGaugeHalfMi"
+                  type="number"
+                  step="0.5"
+                  value={formData.fuelGaugeHalfMi}
+                  onChange={(e) => setFormData({ ...formData, fuelGaugeHalfMi: parseFloat(e.target.value) })}
+                />
+                <p className="text-[13px] text-muted-foreground mt-1">Half gauge when rate ≥ this — default $3/mi</p>
+              </div>
+              <div>
+                <Label htmlFor="fuelGaugeFullMi">Full threshold ($/mile)</Label>
+                <Input
+                  id="fuelGaugeFullMi"
+                  type="number"
+                  step="0.5"
+                  value={formData.fuelGaugeFullMi}
+                  onChange={(e) => setFormData({ ...formData, fuelGaugeFullMi: parseFloat(e.target.value) })}
+                />
+                <p className="text-[13px] text-muted-foreground mt-1">Full gauge when rate ≥ this — default $8/mi</p>
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-border/50 pt-3">
+            <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Minutes mode (NYC boroughs)
+            </p>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="fuelGaugeHalfMin">Half threshold ($/minute)</Label>
+                <Input
+                  id="fuelGaugeHalfMin"
+                  type="number"
+                  step="0.25"
+                  value={formData.fuelGaugeHalfMin}
+                  onChange={(e) => setFormData({ ...formData, fuelGaugeHalfMin: parseFloat(e.target.value) })}
+                />
+                <p className="text-[13px] text-muted-foreground mt-1">Half gauge when rate ≥ this — default $1.50/min</p>
+              </div>
+              <div>
+                <Label htmlFor="fuelGaugeFullMin">Full threshold ($/minute)</Label>
+                <Input
+                  id="fuelGaugeFullMin"
+                  type="number"
+                  step="0.25"
+                  value={formData.fuelGaugeFullMin}
+                  onChange={(e) => setFormData({ ...formData, fuelGaugeFullMin: parseFloat(e.target.value) })}
+                />
+                <p className="text-[13px] text-muted-foreground mt-1">Full gauge when rate ≥ this — default $4/min</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6 border border-border rounded-xl mb-6">
           <h2 className="text-[18px] font-semibold mb-4">Payroll Settings</h2>
           <div className="space-y-4">
             <div>

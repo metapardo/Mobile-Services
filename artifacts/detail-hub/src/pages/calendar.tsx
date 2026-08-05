@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { format, addDays, addWeeks, subWeeks, startOfWeek, isToday, isSameDay } from 'date-fns';
-import { bookings, clients, packages, employees } from '@/lib/mock-data';
+import { bookings, clients, packages, employees, settings } from '@/lib/mock-data';
 import { Link } from 'wouter';
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { StatusBadge } from '@/components/status-badge';
+import { computeFuelGauge } from '@/lib/fuel-gauge';
+import { FuelGaugeIcon } from '@/components/fuel-gauge-icon';
 
 const HOUR_HEIGHT = 64; // px per hour
 const GRID_START_HOUR = 7; // 7 AM
@@ -202,6 +204,17 @@ export default function Calendar() {
             const totalDuration = pkgs.reduce((sum, p) => sum + p.durationMinutes, 0) || 90;
             const heightPx = Math.max((totalDuration / 60) * HOUR_HEIGHT, 40);
 
+            const gauge = computeFuelGauge(
+              booking, bookings, packages,
+              settings.homeAddress,
+              {
+                fuelGaugeHalfMi:  settings.fuelGaugeHalfMi,
+                fuelGaugeFullMi:  settings.fuelGaugeFullMi,
+                fuelGaugeHalfMin: settings.fuelGaugeHalfMin,
+                fuelGaugeFullMin: settings.fuelGaugeFullMin,
+              },
+            );
+
             return (
               <Link key={booking.id} href={`/booking/${booking.id}`}>
                 <div
@@ -222,7 +235,10 @@ export default function Calendar() {
                       <p className="text-[13px] font-semibold leading-tight truncate" style={{ color: employee?.color }}>
                         {client?.name}
                       </p>
-                      <StatusBadge status={booking.status} />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <FuelGaugeIcon result={gauge} clientName={client?.name} />
+                        <StatusBadge status={booking.status} />
+                      </div>
                     </div>
                     {heightPx >= 50 && (
                       <p className="text-[11px] text-muted-foreground truncate mt-0.5">

@@ -53,6 +53,11 @@ export interface Settings {
   gasThresholdGreen: number;
   gasThresholdAmber: number;
   commissionRate: number;
+  // Fuel Gauge thresholds — configurable in admin settings
+  fuelGaugeHalfMi:  number;   // $/mile  — lower bound of Half band  (default 3)
+  fuelGaugeFullMi:  number;   // $/mile  — lower bound of Full band  (default 8)
+  fuelGaugeHalfMin: number;   // $/min   — lower bound of Half band  (default 1.5)
+  fuelGaugeFullMin: number;   // $/min   — lower bound of Full band  (default 4)
 }
 
 export interface GasMeter {
@@ -473,6 +478,11 @@ export let settings: Settings = {
   gasThresholdGreen: 10,
   gasThresholdAmber: 20,
   commissionRate: 25,
+  // Fuel Gauge defaults
+  fuelGaugeHalfMi:  3,
+  fuelGaugeFullMi:  8,
+  fuelGaugeHalfMin: 1.5,
+  fuelGaugeFullMin: 4,
 };
 
 // In-memory state management

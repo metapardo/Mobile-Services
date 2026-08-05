@@ -1,0 +1,31 @@
+I'm adding a "Fuel Gauge" feature to my mobile service appointment platform prototype — a small gas gauge icon (Empty / Half / Full) shown on each booking in the calendar, indicating whether that booking's price is a good return for the drive needed to reach it. This is a companion to the Appointment Optimizer feature — if that's already implemented, reuse its geocoding, Distance Matrix integration, and address caching rather than rebuilding them.
+
+Before writing anything, look at my existing booking data model, calendar UI, and any distance/geocoding utilities already in the codebase.
+
+Core logic, per booking:
+
+Step 1 — Pick a reference anchor (only ever from that SAME technician's own other bookings that day, never a different technician's):
+- If the technician has no other booking that day: anchor = the business's Home Base Address (a single business-wide setting — add this if it doesn't exist yet).
+- If there's exactly one adjacent booking that day (this is the first or last booking): anchor = that adjacent booking's address.
+- If there are bookings both before and after: anchor = whichever of the two is nearer.
+
+Step 2 — Choose the metric based on where the booking itself is located:
+- If the booking's address is within the 5 NYC boroughs (Manhattan, Brooklyn, Queens, Bronx, Staten Island): use drive TIME in minutes to the anchor. Resolve the borough check locally (a bundled zip-code-to-borough table or a simple lat/long boundary check) — don't make this a live API call on every render.
+- Otherwise: use drive DISTANCE in miles to the anchor.
+
+Step 3 — Compute and bucket:
+
+Fuel Rate = booking's total service price / metric from Step 2
+
+Standard mode (miles): Empty < $3/mi, Half $3–$8/mi, Full ≥ $8/mi
+Borough mode (minutes): Empty < $1.50/min, Half $1.50–$4/min, Full ≥ $4/min
+
+These four threshold values should be configurable in admin settings, not hardcoded — start with the defaults above.
+
+Please:
+- Add a Home Base Address field to business settings if one doesn't already exist.
+- Add the borough-detection lookup (static table or boundary check) as a small local utility, not an external call.
+- Implement the anchor-selection + metric + bucketing logic as a standalone function, testable independently of the UI.
+- Render a gas gauge icon (Empty/Half/Full) on each booking card in the calendar.
+- Make the icon tappable/hoverable to reveal the underlying numbers: price, distance or time used, resulting rate, and which anchor was used — this is what makes the icon trustworthy instead of a mystery number.
+- Handle missing data gracefully: if the address can't be geocoded or the price is $0/missing, show a neutral "unknown" state rather than defaulting to Empty.
