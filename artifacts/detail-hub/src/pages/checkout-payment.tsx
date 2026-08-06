@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { packages, clients } from '@/lib/mock-data';
+import { packages, clients, bookings, updateBooking } from '@/lib/mock-data';
 import { getCart, clearCart } from '@/lib/cart-store';
 import { X, Smartphone, Banknote, CreditCard, Link2, ChevronRight, Check, MoreHorizontal } from 'lucide-react';
 
@@ -52,11 +52,21 @@ export default function CheckoutPayment() {
   const cart = getCart();
   const { total } = computeTotal(cart);
   const client = clients.find(c => c.id === cart.clientId);
+  const linkedBooking = cart.bookingId != null
+    ? bookings.find(b => b.id === cart.bookingId) ?? null
+    : null;
+  const linkedClient = linkedBooking
+    ? clients.find(c => c.id === linkedBooking.clientId) ?? null
+    : null;
 
   const [paid, setPaid] = useState(false);
   const [paidMethod, setPaidMethod] = useState('');
 
   const handlePay = (label: string) => {
+    // Mark the linked booking as completed before clearing the cart
+    if (cart.bookingId != null) {
+      updateBooking(cart.bookingId, { status: 'completed' });
+    }
     setPaidMethod(label);
     setPaid(true);
     setTimeout(() => {
@@ -67,6 +77,8 @@ export default function CheckoutPayment() {
 
   // ── Success screen ─────────────────────────────────────────────────────────
   if (paid) {
+    // Prefer the linked booking's client info if available
+    const displayName = linkedClient?.name ?? client?.name;
     return (
       <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center gap-6 px-8 text-center">
         <div className="w-24 h-24 rounded-full bg-[#1E9E62]/12 flex items-center justify-center mb-2">
@@ -77,8 +89,13 @@ export default function CheckoutPayment() {
         <div>
           <p className="text-[26px] font-bold mb-1">Payment Received</p>
           <p className="text-[17px] text-muted-foreground tabular-nums">${total.toFixed(2)}</p>
-          {client && (
-            <p className="text-[15px] text-muted-foreground mt-1">{client.name}</p>
+          {displayName && (
+            <p className="text-[15px] text-muted-foreground mt-1">{displayName}</p>
+          )}
+          {linkedBooking && (
+            <p className="text-[14px] text-[#1E9E62] font-medium mt-1">
+              Booking {linkedBooking.startTime} marked complete
+            </p>
           )}
           <p className="text-[13px] text-muted-foreground mt-3 capitalize">{paidMethod}</p>
         </div>

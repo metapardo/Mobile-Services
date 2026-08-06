@@ -5,9 +5,12 @@
 
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { packages, clients } from '@/lib/mock-data';
-import { getCart, setCartClient, setCartDiscount, setCartTip } from '@/lib/cart-store';
-import { X, ChevronRight, UserPlus, Percent, Plus, Trash2, HandCoins } from 'lucide-react';
+import { packages, clients, bookings } from '@/lib/mock-data';
+import { getCart, setCartClient, setCartDiscount, setCartTip, setCartBooking } from '@/lib/cart-store';
+import { X, ChevronRight, UserPlus, Percent, Plus, Trash2, HandCoins, CalendarCheck, Check } from 'lucide-react';
+
+// Today's date in YYYY-MM-DD (local time)
+const TODAY = new Date().toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD
 
 export default function CheckoutReview() {
   const [, setLocation] = useLocation();
@@ -32,6 +35,13 @@ export default function CheckoutReview() {
   const [customTipStr, setCustomTipStr] = useState('');
   const [showClientSheet, setShowClientSheet] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
+  const [bookingId, setBookingId] = useState<number | null>(initial.bookingId ?? null);
+  const [showBookingSheet, setShowBookingSheet] = useState(false);
+
+  // Today's bookings that are not already completed/cancelled
+  const todayBookings = bookings.filter(
+    b => b.date === TODAY && b.status !== 'completed' && b.status !== 'cancelled',
+  );
 
   const subtotal = lineItems.reduce((s, i) => {
     const pkg = packages.find(p => p.id === i.packageId);
@@ -52,8 +62,12 @@ export default function CheckoutReview() {
     setCartClient(clientId);
     setCartDiscount(discountPct);
     setCartTip(tip);
+    setCartBooking(bookingId);
     setLocation('/checkout/payment');
   };
+
+  const linkedBooking = bookings.find(b => b.id === bookingId);
+  const linkedClient = linkedBooking ? clients.find(c => c.id === linkedBooking.clientId) : null;
 
   const totalItemCount = lineItems.reduce((s, i) => s + i.qty, 0);
 
@@ -78,7 +92,7 @@ export default function CheckoutReview() {
         {/* ── Customer ── */}
         <button
           onClick={() => setShowClientSheet(true)}
-          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-muted mt-4 mb-4"
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-muted mt-4 mb-2"
         >
           <UserPlus className="w-5 h-5 text-muted-foreground shrink-0" />
           <span className="flex-1 text-left text-[15px]">
@@ -87,6 +101,34 @@ export default function CheckoutReview() {
               : <span className="text-muted-foreground">Add a customer</span>}
           </span>
           <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        </button>
+
+        {/* ── Link to booking ── */}
+        <button
+          onClick={() => setShowBookingSheet(true)}
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-muted mb-4"
+        >
+          <CalendarCheck className="w-5 h-5 text-muted-foreground shrink-0" />
+          <span className="flex-1 text-left text-[15px]">
+            {linkedBooking && linkedClient
+              ? (
+                <span className="font-medium">
+                  {linkedClient.name} · {linkedBooking.startTime}
+                </span>
+              )
+              : <span className="text-muted-foreground">Link to booking (optional)</span>}
+          </span>
+          {bookingId
+            ? (
+              <button
+                onClick={e => { e.stopPropagation(); setBookingId(null); }}
+                className="text-muted-foreground hover:text-destructive transition-colors"
+                aria-label="Remove linked booking"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )
+            : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
         </button>
 
         {/* ── Line items ── */}
@@ -302,6 +344,54 @@ export default function CheckoutReview() {
           Charge ${total.toFixed(2)}
         </button>
       </div>
+
+      {/* ── Booking picker sheet ── */}
+      {showBookingSheet && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+            onClick={() => setShowBookingSheet(false)}
+          />
+          <div className="relative bg-background rounded-t-3xl max-h-[75dvh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border/50 shrink-0">
+              <h2 className="text-[17px] font-semibold">Link to booking</h2>
+              <button
+                onClick={() => setShowBookingSheet(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-muted"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {todayBookings.length === 0 && (
+                <p className="px-5 py-8 text-center text-[14px] text-muted-foreground">
+                  No active bookings for today
+                </p>
+              )}
+              {todayBookings.map(b => {
+                const bc = clients.find(c => c.id === b.clientId);
+                const isSelected = bookingId === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => { setBookingId(b.id); setShowBookingSheet(false); }}
+                    className={`w-full flex items-center gap-3 px-5 py-3.5 hover:bg-muted transition-colors border-b border-border/30 last:border-0 ${isSelected ? 'text-primary' : ''}`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <CalendarCheck className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                      <p className="text-[15px] font-medium truncate">{bc?.name ?? 'Unknown'}</p>
+                      <p className="text-[12px] text-muted-foreground">{b.startTime} · {b.status}</p>
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Client picker sheet ── */}
       {showClientSheet && (

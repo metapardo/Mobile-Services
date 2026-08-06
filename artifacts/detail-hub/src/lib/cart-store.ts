@@ -13,6 +13,7 @@ export interface CartState {
   clientId: number | null;
   discountPercent: number;
   tip: number;
+  bookingId: number | null;
 }
 
 let cart: CartState = {
@@ -20,6 +21,7 @@ let cart: CartState = {
   clientId: null,
   discountPercent: 0,
   tip: 0,
+  bookingId: null,
 };
 
 export function getCart(): CartState {
@@ -55,10 +57,14 @@ export function setCartTip(amount: number): void {
   cart.tip = amount;
 }
 
+export function setCartBooking(bookingId: number | null): void {
+  cart.bookingId = bookingId;
+}
+
 export function replaceCart(items: CartItem[]): void {
   cart.items = items.map(i => ({ ...i }));
 }
 
 export function clearCart(): void {
-  cart = { items: [], clientId: null, discountPercent: 0, tip: 0 };
+  cart = { items: [], clientId: null, discountPercent: 0, tip: 0, bookingId: null };
 }

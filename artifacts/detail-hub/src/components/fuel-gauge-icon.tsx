@@ -173,7 +173,7 @@ export function FuelGaugeIcon({ result, clientName }: FuelGaugeIconProps) {
                 ? ['Anchor type', anchorLabel(result.anchorType)]
                 : null,
             ]
-              .filter(Boolean)
+              .filter((row): row is string[] => row !== null)
               .map(([label, value]) => (
                 <div key={label as string} className="flex items-start justify-between gap-3 text-[14px]">
                   <span className="text-muted-foreground">{label}</span>
