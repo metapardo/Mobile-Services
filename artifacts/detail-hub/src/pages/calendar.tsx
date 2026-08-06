@@ -6,6 +6,7 @@ import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { StatusBadge } from '@/components/status-badge';
 import { computeFuelGauge } from '@/lib/fuel-gauge';
 import { FuelGaugeIcon } from '@/components/fuel-gauge-icon';
+import { PaymentMethodBadge } from '@/components/payment-method-badge';
 
 const HOUR_HEIGHT = 64; // px per hour
 const GRID_START_HOUR = 7; // 7 AM
@@ -237,6 +238,9 @@ export default function Calendar() {
                       </p>
                       <div className="flex items-center gap-1 shrink-0">
                         <FuelGaugeIcon result={gauge} clientName={client?.name} />
+                        {booking.paymentMethod && (
+                          <PaymentMethodBadge method={booking.paymentMethod} size="xs" />
+                        )}
                         <StatusBadge status={booking.status} />
                       </div>
                     </div>

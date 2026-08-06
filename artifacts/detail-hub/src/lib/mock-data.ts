@@ -31,6 +31,8 @@ export interface EmployeeSplit {
   percentage: number;
 }
 
+export type PaymentMethodId = 'cash' | 'zelle' | 'venmo' | 'card' | 'tap';
+
 export interface Booking {
   id: number;
   clientId: number;
@@ -44,6 +46,8 @@ export interface Booking {
   status: BookingStatus;
   notes?: string;
   employeeSplit: EmployeeSplit[];
+  paymentMethod?: PaymentMethodId;
+  paymentNote?: string;
 }
 
 export interface Settings {
@@ -58,6 +62,9 @@ export interface Settings {
   fuelGaugeFullMi:  number;   // $/mile  — lower bound of Full band  (default 8)
   fuelGaugeHalfMin: number;   // $/min   — lower bound of Half band  (default 1.5)
   fuelGaugeFullMin: number;   // $/min   — lower bound of Full band  (default 4)
+  // Payment settings
+  paymentProcessorConnected: boolean;
+  cardReaderPaired: boolean;
 }
 
 export interface GasMeter {
@@ -483,6 +490,9 @@ export let settings: Settings = {
   fuelGaugeFullMi:  8,
   fuelGaugeHalfMin: 1.5,
   fuelGaugeFullMin: 4,
+  // Payment defaults
+  paymentProcessorConnected: false,
+  cardReaderPaired: false,
 };
 
 // In-memory state management

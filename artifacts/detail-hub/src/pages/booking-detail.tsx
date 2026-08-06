@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'wouter';
 import { bookings, clients, packages, employees, updateBooking, deleteBooking, getGasMeter, getWeather, settings, BookingStatus } from '@/lib/mock-data';
 import { ArrowLeft, Trash2, Plus, X, Check } from 'lucide-react';
+import { PaymentMethodBadge } from '@/components/payment-method-badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -285,7 +286,15 @@ export default function BookingDetail() {
           </Card>
 
           <Card className="p-4 border border-border rounded-xl">
-            <h3 className="text-[15px] font-medium mb-3">Payment</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[15px] font-medium">Payment</h3>
+              {booking.paymentMethod && (
+                <PaymentMethodBadge method={booking.paymentMethod} size="sm" />
+              )}
+            </div>
+            {booking.paymentNote && (
+              <p className="text-[12px] text-muted-foreground mb-3 italic">"{booking.paymentNote}"</p>
+            )}
             <div className="space-y-3">
               <div>
                 <Label htmlFor="deposit">Deposit Amount</Label>

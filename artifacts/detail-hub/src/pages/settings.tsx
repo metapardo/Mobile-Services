@@ -196,6 +196,76 @@ export default function Settings() {
           </div>
         </Card>
 
+        {/* Payments */}
+        <Card className="p-6 border border-border rounded-xl mb-6">
+          <h2 className="text-[18px] font-semibold mb-1">Payments</h2>
+          <p className="text-[13px] text-muted-foreground mb-5">
+            Processor connection and card reader pairing.
+          </p>
+
+          {/* Processor status */}
+          <div className="flex items-center justify-between py-3.5 border-b border-border/50">
+            <div className="min-w-0 flex-1 pr-4">
+              <p className="text-[15px] font-medium">Payment Processor</p>
+              <p className="text-[12px] text-muted-foreground">Stripe Connect</p>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className={`text-[12px] font-semibold ${formData.paymentProcessorConnected ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                {formData.paymentProcessorConnected ? 'Connected' : 'Not connected'}
+              </span>
+              <button
+                onClick={() => setFormData(d => ({ ...d, paymentProcessorConnected: !d.paymentProcessorConnected }))}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  formData.paymentProcessorConnected ? 'bg-primary' : 'bg-muted-foreground/30'
+                }`}
+                role="switch"
+                aria-checked={formData.paymentProcessorConnected}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    formData.paymentProcessorConnected ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Card reader pairing */}
+          <div className="flex items-center justify-between py-3.5 border-b border-border/50">
+            <div className="min-w-0 flex-1 pr-4">
+              <p className="text-[15px] font-medium">Card Reader</p>
+              <p className="text-[12px] text-muted-foreground">BBPOS WisePOS E</p>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className={`text-[12px] font-semibold ${formData.cardReaderPaired ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                {formData.cardReaderPaired ? 'Paired' : 'Not paired'}
+              </span>
+              <button
+                onClick={() => setFormData(d => ({ ...d, cardReaderPaired: !d.cardReaderPaired }))}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  formData.cardReaderPaired ? 'bg-primary' : 'bg-muted-foreground/30'
+                }`}
+                role="switch"
+                aria-checked={formData.cardReaderPaired}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    formData.cardReaderPaired ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Future threshold settings placeholder */}
+          <div className="pt-3.5">
+            <p className="text-[13px] font-medium text-muted-foreground">Processing fee thresholds</p>
+            <p className="text-[12px] text-muted-foreground/70 mt-0.5">
+              Auto-surcharge rules and fee visibility — coming soon.
+            </p>
+          </div>
+        </Card>
+
         <Button onClick={handleSave} className="w-full" data-testid="button-save">
           Save Settings
         </Button>
