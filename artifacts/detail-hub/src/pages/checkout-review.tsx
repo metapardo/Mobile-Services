@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { packages, clients } from '@/lib/mock-data';
 import { getCart, setCartClient, setCartDiscount, setCartTip } from '@/lib/cart-store';
-import { X, ChevronRight, UserPlus, Percent, Plus, Trash2 } from 'lucide-react';
+import { X, ChevronRight, UserPlus, Percent, Plus, Trash2, HandCoins } from 'lucide-react';
 
 export default function CheckoutReview() {
   const [, setLocation] = useLocation();
@@ -27,6 +27,9 @@ export default function CheckoutReview() {
   const [discountPct, setDiscountPct] = useState(initial.discountPercent);
   const [tip, setTip] = useState(initial.tip);
   const [showDiscount, setShowDiscount] = useState(initial.discountPercent > 0);
+  const [showTip, setShowTip] = useState(initial.tip > 0);
+  const [tipMode, setTipMode] = useState<'preset' | 'custom'>(initial.tip > 0 ? 'preset' : 'preset');
+  const [customTipStr, setCustomTipStr] = useState('');
   const [showClientSheet, setShowClientSheet] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
 
@@ -157,6 +160,96 @@ export default function CheckoutReview() {
                   −${discountAmt.toFixed(2)}
                 </span>
               )}
+            </div>
+          )}
+
+          {/* Tip */}
+          <button
+            onClick={() => setShowTip(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-muted/50 transition-colors"
+          >
+            <span className="flex items-center gap-2 text-[15px] font-medium">
+              <HandCoins className="w-4 h-4 text-muted-foreground" />
+              Add tip
+            </span>
+            {tip > 0
+              ? <span className="text-[15px] text-primary font-medium">+${tip.toFixed(2)}</span>
+              : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+          </button>
+
+          {showTip && (
+            <div className="px-4 py-3 bg-muted/30 space-y-3">
+              {/* Preset percentage buttons */}
+              <div className="flex gap-2">
+                {[10, 15, 20, 25].map(pct => {
+                  const amt = parseFloat(((subtotal * pct) / 100).toFixed(2));
+                  const isActive = tipMode === 'preset' && tip === amt;
+                  return (
+                    <button
+                      key={pct}
+                      onClick={() => {
+                        setTipMode('preset');
+                        setTip(amt);
+                        setCustomTipStr('');
+                      }}
+                      className={`flex-1 py-2 rounded-xl border text-[13px] font-semibold transition-colors ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-border bg-background hover:bg-muted'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => {
+                    setTipMode('custom');
+                    setTip(0);
+                    setCustomTipStr('');
+                  }}
+                  className={`flex-1 py-2 rounded-xl border text-[13px] font-semibold transition-colors ${
+                    tipMode === 'custom'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-border bg-background hover:bg-muted'
+                  }`}
+                >
+                  Custom
+                </button>
+              </div>
+
+              {/* Custom amount input */}
+              {tipMode === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] text-muted-foreground">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={customTipStr}
+                    onChange={e => {
+                      setCustomTipStr(e.target.value);
+                      const val = parseFloat(e.target.value);
+                      setTip(isNaN(val) || val < 0 ? 0 : parseFloat(val.toFixed(2)));
+                    }}
+                    placeholder="0.00"
+                    className="w-28 px-3 py-2 rounded-xl border border-border bg-background text-[15px] focus:outline-none focus:border-primary tabular-nums"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {/* No tip */}
+              <button
+                onClick={() => {
+                  setTip(0);
+                  setTipMode('preset');
+                  setCustomTipStr('');
+                }}
+                className="text-[13px] text-muted-foreground underline underline-offset-2"
+              >
+                No tip
+              </button>
             </div>
           )}
 
