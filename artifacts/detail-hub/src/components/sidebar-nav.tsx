@@ -1,4 +1,4 @@
-import { Calendar, Users, Users2, BarChart3, Package, Settings } from 'lucide-react';
+import { Calendar, Users, DollarSign, Users2, BarChart3, Package, Settings } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import logoSrc from '@assets/logo_1785854923476.png';
 
@@ -8,6 +8,7 @@ export function SidebarNav() {
   const tabs = [
     { name: 'Calendar',  path: '/calendar',        icon: Calendar    },
     { name: 'Clients',   path: '/clients',          icon: Users       },
+    { name: 'Checkout',  path: '/checkout',         icon: DollarSign  },
     { name: 'Team',      path: '/more/payroll',     icon: Users2      },
     { name: 'Reports',   path: '/more/reporting',   icon: BarChart3   },
     { name: 'Packages',  path: '/more/packages',    icon: Package     },
@@ -35,8 +36,7 @@ export function SidebarNav() {
         {tabs.map((tab, i) => {
           const Icon = tab.icon;
           const active = isActive(tab.path);
-          // subtle divider before Team (index 3)
-          const showDivider = i === 3;
+          const showDivider = i === 3; // divider before Team
           return (
             <div key={tab.path}>
               {showDivider && <div className="h-px bg-white/10 mx-2 my-2" />}

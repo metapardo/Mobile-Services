@@ -1,26 +1,34 @@
-import { Calendar, Users, Users2, BarChart3, Package, Settings } from 'lucide-react';
+import { Calendar, Users, DollarSign, BarChart3, Menu } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 
 export function BottomNav() {
   const [location] = useLocation();
 
   const tabs = [
-    { name: 'Calendar',  path: '/calendar',        icon: Calendar   },
-    { name: 'Clients',   path: '/clients',          icon: Users      },
-    { name: 'Team',      path: '/more/payroll',     icon: Users2     },
-    { name: 'Reports',   path: '/more/reporting',   icon: BarChart3  },
-    { name: 'Packages',  path: '/more/packages',    icon: Package    },
-    { name: 'Settings',  path: '/more/settings',    icon: Settings   },
+    { name: 'Calendar', path: '/calendar',        icon: Calendar     },
+    { name: 'Clients',  path: '/clients',          icon: Users        },
+    { name: 'Checkout', path: '/checkout',         icon: DollarSign   },
+    { name: 'Reports',  path: '/more/reporting',   icon: BarChart3    },
+    { name: 'More',     path: '/more',             icon: Menu         },
   ];
 
   const isActive = (path: string) => {
     if (path === '/calendar') return location === '/' || location === '/calendar';
+    // Checkout tab lights up for /checkout and sub-pages
+    if (path === '/checkout') return location.startsWith('/checkout');
+    // More tab: any /more/* except /more/reporting
+    if (path === '/more') {
+      return (
+        location === '/more' ||
+        (location.startsWith('/more') && !location.startsWith('/more/reporting'))
+      );
+    }
     return location.startsWith(path);
   };
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-nav z-50">
-      <div className="grid grid-cols-6 h-16">
+      <div className="grid grid-cols-5 h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = isActive(tab.path);

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'wouter';
 import { bookings, clients, packages, employees, updateBooking, deleteBooking, getGasMeter, getWeather, settings, BookingStatus } from '@/lib/mock-data';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { ArrowLeft, Trash2, Plus, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -30,7 +30,9 @@ export default function BookingDetail() {
   const [notes, setNotes] = useState(booking?.notes || '');
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>(booking?.employeeIds || []);
   const [employeeSplit, setEmployeeSplit] = useState(booking?.employeeSplit || []);
+  const [selectedPackageIds, setSelectedPackageIds] = useState<number[]>(booking?.packageIds || []);
   const [showGasBreakdown, setShowGasBreakdown] = useState(false);
+  const [showAddService, setShowAddService] = useState(false);
 
   if (!booking) {
     return (
@@ -43,7 +45,7 @@ export default function BookingDetail() {
   }
 
   const client = clients.find(c => c.id === booking.clientId);
-  const pkgs = booking.packageIds.map(id => packages.find(p => p.id === id)!).filter(Boolean);
+  const pkgs = selectedPackageIds.map(id => packages.find(p => p.id === id)!).filter(Boolean);
   const totalPrice = pkgs.reduce((sum, p) => sum + p.price, 0);
   const gasMeter = getGasMeter(address, totalPrice, settings);
   const weather = getWeather(date);
@@ -59,6 +61,7 @@ export default function BookingDetail() {
       date,
       startTime: time,
       address,
+      packageIds: selectedPackageIds,
       depositAmount: parseFloat(deposit) || 0,
       parkingCost: parseFloat(parking) || 0,
       notes,
@@ -81,7 +84,7 @@ export default function BookingDetail() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-background pb-20 md:pb-6">
+    <div className="min-h-[100dvh] bg-background pb-48 md:pb-24">
       <div className="max-w-2xl mx-auto px-4 pt-6">
         <Link href="/calendar" className="inline-flex items-center gap-2 text-muted-foreground mb-6 hover:text-foreground transition-colors" data-testid="link-back">
           <ArrowLeft className="w-4 h-4" />
@@ -141,21 +144,46 @@ export default function BookingDetail() {
           </Card>
 
           <Card className="p-4 border border-border rounded-xl">
-            <h3 className="text-[15px] font-medium mb-3">Services</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[15px] font-medium">Services</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAddService(true)}
+                className="h-8 gap-1 text-primary"
+                data-testid="button-add-service"
+              >
+                <Plus className="w-4 h-4" />
+                Add
+              </Button>
+            </div>
             <div className="space-y-2">
+              {pkgs.length === 0 && (
+                <p className="text-[13px] text-muted-foreground py-1">No services — tap Add to select one.</p>
+              )}
               {pkgs.map(pkg => (
-                <div key={pkg.id} className="flex justify-between items-start">
-                  <div>
-                    <p className="text-[15px]">{pkg.name}</p>
+                <div key={pkg.id} className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[15px] truncate">{pkg.name}</p>
                     <p className="text-[13px] text-muted-foreground">{pkg.durationMinutes} min</p>
                   </div>
-                  <p className="text-[15px] font-medium tabular-nums">${pkg.price}</p>
+                  <p className="text-[15px] font-medium tabular-nums shrink-0">${pkg.price}</p>
+                  <button
+                    onClick={() => setSelectedPackageIds(ids => ids.filter(id => id !== pkg.id))}
+                    className="shrink-0 text-muted-foreground hover:text-destructive transition-colors mt-0.5"
+                    aria-label={`Remove ${pkg.name}`}
+                    data-testid={`remove-service-${pkg.id}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               ))}
-              <div className="pt-2 border-t border-border flex justify-between items-center">
-                <p className="text-[15px] font-medium">Total</p>
-                <p className="text-[18px] font-semibold tabular-nums">${totalPrice.toFixed(2)}</p>
-              </div>
+              {pkgs.length > 0 && (
+                <div className="pt-2 border-t border-border flex justify-between items-center">
+                  <p className="text-[15px] font-medium">Total</p>
+                  <p className="text-[18px] font-semibold tabular-nums">${totalPrice.toFixed(2)}</p>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -293,9 +321,61 @@ export default function BookingDetail() {
             />
           </Card>
 
-          <Button onClick={handleSave} className="w-full" data-testid="button-save">
+        </div>
+
+        {/* ── Add service picker ─────────────────────────────────────────── */}
+        <Dialog open={showAddService} onOpenChange={setShowAddService}>
+          <DialogContent className="max-w-sm max-h-[80dvh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Add Service</DialogTitle>
+            </DialogHeader>
+            <div className="overflow-y-auto -mx-6 px-6 space-y-2 py-2 flex-1">
+              {packages.map(pkg => {
+                const selected = selectedPackageIds.includes(pkg.id);
+                return (
+                  <button
+                    key={pkg.id}
+                    onClick={() => {
+                      setSelectedPackageIds(ids =>
+                        selected ? ids.filter(id => id !== pkg.id) : [...ids, pkg.id]
+                      );
+                    }}
+                    className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                      selected
+                        ? 'border-primary bg-[var(--accent-subtle)]'
+                        : 'border-border hover:bg-muted'
+                    }`}
+                    data-testid={`pick-service-${pkg.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[15px] font-medium truncate">{pkg.name}</p>
+                      <p className="text-[13px] text-muted-foreground">{pkg.durationMinutes} min</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                      <span className="text-[15px] font-medium tabular-nums">${pkg.price}</span>
+                      {selected && <Check className="w-4 h-4 text-primary" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="pt-3 border-t border-border">
+              <Button className="w-full" onClick={() => setShowAddService(false)}>
+                Done · {selectedPackageIds.length} service{selectedPackageIds.length !== 1 ? 's' : ''}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Fixed bottom CTA — matches booking-new layout ── */}
+        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-20 bg-background/95 backdrop-blur-md border-t border-border/40 px-5 py-4">
+          <button
+            onClick={handleSave}
+            className="w-full py-4 rounded-2xl text-[17px] font-semibold gradient-btn text-white transition-all"
+            data-testid="button-save"
+          >
             Save Changes
-          </Button>
+          </button>
         </div>
 
         <Dialog open={showGasBreakdown} onOpenChange={setShowGasBreakdown}>

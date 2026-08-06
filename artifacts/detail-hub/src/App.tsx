@@ -14,6 +14,9 @@ import ClientDetail from '@/pages/client-detail';
 import BookingNew from '@/pages/booking-new';
 import BookingDetail from '@/pages/booking-detail';
 import More from '@/pages/more';
+import Checkout from '@/pages/checkout';
+import CheckoutReview from '@/pages/checkout-review';
+import CheckoutPayment from '@/pages/checkout-payment';
 import Reporting from '@/pages/reporting';
 import Packages from '@/pages/packages';
 import PayrollOverview from '@/pages/payroll-overview';
@@ -35,6 +38,9 @@ function Router() {
       <Route path="/client/:id" component={ClientDetail} />
       <Route path="/booking/new" component={BookingNew} />
       <Route path="/booking/:id" component={BookingDetail} />
+      <Route path="/checkout/payment" component={CheckoutPayment} />
+      <Route path="/checkout/review" component={CheckoutReview} />
+      <Route path="/checkout" component={Checkout} />
       <Route path="/more" component={More} />
       <Route path="/more/reporting" component={Reporting} />
       <Route path="/more/packages" component={Packages} />

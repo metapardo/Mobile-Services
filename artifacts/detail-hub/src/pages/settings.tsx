@@ -196,25 +196,6 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Card className="p-6 border border-border rounded-xl mb-6">
-          <h2 className="text-[18px] font-semibold mb-4">Payroll Settings</h2>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="commissionRate">Commission Rate (%)</Label>
-              <Input
-                id="commissionRate"
-                type="number"
-                value={formData.commissionRate}
-                onChange={(e) => setFormData({ ...formData, commissionRate: parseInt(e.target.value) })}
-                data-testid="input-commission-rate"
-              />
-              <p className="text-[13px] text-muted-foreground mt-1">
-                Commission is calculated as {formData.commissionRate}% of revenue per employee per booking, before tips
-              </p>
-            </div>
-          </div>
-        </Card>
-
         <Button onClick={handleSave} className="w-full" data-testid="button-save">
           Save Settings
         </Button>

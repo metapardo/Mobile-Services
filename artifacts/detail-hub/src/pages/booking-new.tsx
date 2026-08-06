@@ -11,6 +11,8 @@ import {
   Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Zap,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { computeFuelGauge, type FuelGaugeResult } from '@/lib/fuel-gauge';
 import { format, parse } from 'date-fns';
 
 // ─── Bottom sheet wrapper ────────────────────────────────────────────────────
@@ -69,6 +71,140 @@ function fmtTime(t: string) {
   try {
     return format(parse(t, 'HH:mm', new Date()), 'h:mm a');
   } catch { return t; }
+}
+
+// ─── Fuel Gauge inline row ────────────────────────────────────────────────────
+const GAUGE_COLOR: Record<string, string> = {
+  full: '#1E9E62', half: '#D9A404', empty: '#DC2626', unknown: '#9ca3af',
+};
+const GAUGE_NEEDLE: Record<string, [number, number]> = {
+  full: [20, 8], half: [12, 4], empty: [4, 8], unknown: [12, 4],
+};
+const GAUGE_ARC: Record<string, string | null> = {
+  full: 'M2,14 A10,10 0 0 1 22,14',
+  half: 'M2,14 A10,10 0 0 1 12,4',
+  empty: 'M2,14 A10,10 0 0 1 7,5.34',
+  unknown: null,
+};
+
+function GaugeSVGSmall({ level }: { level: string }) {
+  const color = GAUGE_COLOR[level] ?? '#9ca3af';
+  const [nx, ny] = GAUGE_NEEDLE[level] ?? [12, 4];
+  const arc = GAUGE_ARC[level];
+  return (
+    <svg width="28" height="16" viewBox="0 0 24 14" aria-hidden>
+      <path d="M2,14 A10,10 0 0 1 22,14" fill="none" stroke="#d1d5db" strokeWidth="3" strokeLinecap="round" />
+      {arc && <path d={arc} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />}
+      {level !== 'unknown' && (
+        <line x1="12" y1="14" x2={nx} y2={ny} stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+      )}
+      <circle cx="12" cy="14" r="2" fill={color} />
+      {level === 'unknown' && (
+        <text x="12" y="10" textAnchor="middle" fill="#9ca3af" fontSize="7" fontWeight="bold">?</text>
+      )}
+    </svg>
+  );
+}
+
+interface FuelThresholds {
+  fuelGaugeHalfMi: number; fuelGaugeFullMi: number;
+  fuelGaugeHalfMin: number; fuelGaugeFullMin: number;
+}
+
+function FuelGaugeRow({ result, thresholds }: { result: FuelGaugeResult; thresholds: FuelThresholds }) {
+  const color = GAUGE_COLOR[result.level] ?? '#9ca3af';
+  const isKnown = result.level !== 'unknown';
+
+  const levelLabel  = result.level === 'full'  ? 'Great ROI'
+                    : result.level === 'half'  ? 'Fair ROI'
+                    : result.level === 'empty' ? 'Low ROI'
+                    : 'Rate unknown';
+
+  const metricStr = isKnown
+    ? result.metricType === 'miles'
+      ? `${result.metricValue.toFixed(1)} mi · $${result.rate.toFixed(2)}/mi`
+      : `${result.metricValue} min · $${result.rate.toFixed(2)}/min`
+    : 'Add a service to calculate rate';
+
+  const anchorDesc = result.anchorType === 'home'     ? 'from home base'
+                   : result.anchorType === 'adjacent' ? 'from adjacent job'
+                   : 'from nearest job';
+
+  const halfThr = result.metricType === 'miles'
+    ? `$${thresholds.fuelGaugeHalfMi}/mi`
+    : `$${thresholds.fuelGaugeHalfMin}/min`;
+  const fullThr = result.metricType === 'miles'
+    ? `$${thresholds.fuelGaugeFullMi}/mi`
+    : `$${thresholds.fuelGaugeFullMin}/min`;
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl border cursor-default select-none"
+            style={{ borderColor: `${color}55`, background: `${color}0D` }}
+            data-testid="fuel-gauge-row"
+          >
+            <GaugeSVGSmall level={result.level} />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold" style={{ color }}>{levelLabel}</p>
+              <p className="text-[12px] text-muted-foreground truncate">
+                {metricStr}{isKnown && result.anchorAddress ? ` · ${anchorDesc}` : ''}
+              </p>
+            </div>
+            <span className="text-[11px] text-muted-foreground/60 shrink-0 hidden sm:block">hover for details</span>
+          </div>
+        </TooltipTrigger>
+
+        <TooltipContent
+          side="bottom"
+          sideOffset={8}
+          className="!bg-popover !text-popover-foreground border border-border shadow-xl rounded-xl px-4 py-3 w-64 max-w-[90vw] text-left"
+        >
+          {/* Level headline */}
+          <p className="font-semibold text-[13px] mb-2.5" style={{ color }}>
+            {result.level === 'full'  ? '🟢 Full — great ROI'
+           : result.level === 'half'  ? '🟡 Half — acceptable ROI'
+           : result.level === 'empty' ? '🔴 Empty — low ROI'
+           : '⚪ Unknown'}
+          </p>
+
+          {/* Breakdown */}
+          {isKnown && (
+            <div className="space-y-1.5 text-[12px] mb-3">
+              {[
+                ['Booking value', `$${result.bookingPrice.toFixed(2)}`],
+                [result.metricType === 'miles' ? 'Drive distance' : 'Drive time',
+                  result.metricType === 'miles'
+                    ? `${result.metricValue.toFixed(1)} mi`
+                    : `${result.metricValue} min`],
+                ['Rate', `$${result.rate.toFixed(2)}/${result.metricType === 'miles' ? 'mi' : 'min'}`],
+                ['Anchor', result.anchorType === 'home' ? 'Home base'
+                         : result.anchorType === 'adjacent' ? 'Adjacent job'
+                         : 'Nearest job'],
+              ].map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="font-medium tabular-nums">{value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Legend */}
+          <div className="border-t border-border/40 pt-2 space-y-1 text-[11px] text-muted-foreground">
+            <p>🟢 <strong>Full</strong> — rate ≥ {fullThr}</p>
+            <p>🟡 <strong>Half</strong> — rate ≥ {halfThr}</p>
+            <p>🔴 <strong>Empty</strong> — rate &lt; {halfThr}</p>
+            {result.metricType === 'minutes' && (
+              <p className="pt-1 opacity-75">NYC address — using drive time</p>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -135,6 +271,31 @@ export default function BookingNew() {
   const gasMeter = address && date ? getGasMeter(address, totalPrice || 1, settings) : null;
   const isMobile = !setup.isStorefront;
 
+  // Fuel gauge — computed whenever address + packages are ready
+  const fuelGauge = useMemo<FuelGaugeResult | null>(() => {
+    if (!address.trim() || address.length < 5 || selectedPackages.length === 0) return null;
+    const syntheticBooking = {
+      id: -1,
+      clientId: selectedClient ?? -1,
+      packageIds: selectedPackages,
+      employeeIds: selectedEmployees.length > 0 ? selectedEmployees : [employees[0]?.id ?? 1],
+      date: date || format(new Date(), 'yyyy-MM-dd'),
+      startTime: time || '09:00',
+      address,
+      status: 'pending' as const,
+      depositAmount: 0,
+      parkingCost: 0,
+      notes: '',
+      employeeSplit: [],
+    };
+    return computeFuelGauge(syntheticBooking, bookings, packages, settings.homeAddress, {
+      fuelGaugeHalfMi:  settings.fuelGaugeHalfMi,
+      fuelGaugeFullMi:  settings.fuelGaugeFullMi,
+      fuelGaugeHalfMin: settings.fuelGaugeHalfMin,
+      fuelGaugeFullMin: settings.fuelGaugeFullMin,
+    });
+  }, [address, selectedPackages, selectedClient, selectedEmployees, date, time]);
+
   // Formatted display values
   const dateLabel = (() => {
     try { return format(new Date(date + 'T00:00:00'), 'EEE, MMM d'); }
@@ -184,7 +345,7 @@ export default function BookingNew() {
   }, {});
 
   return (
-    <div className="min-h-[100dvh] pb-24 bg-background">
+    <div className="min-h-[100dvh] pb-48 md:pb-24 bg-background">
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md border-b border-border/40 px-4 py-3 flex items-center gap-3">
         <button
@@ -267,31 +428,12 @@ export default function BookingNew() {
           onChange={e => setAddress(e.target.value)}
         />
 
-        {/* Gas meter ROI for mobile businesses */}
-        {isMobile && gasMeter && (
-          <div className="mt-3">
-            <div
-              className="flex items-center gap-3 px-4 py-3 rounded-2xl border cursor-pointer transition-all hover:brightness-95"
-              style={{
-                borderColor: gasMeter.status === 'green' ? '#1E9E62' : gasMeter.status === 'amber' ? '#D9A404' : '#DC2626',
-                background:  gasMeter.status === 'green' ? 'rgba(30,158,98,0.06)' : gasMeter.status === 'amber' ? 'rgba(217,164,4,0.06)' : 'rgba(220,38,38,0.06)',
-              }}
-              onClick={() => setShowGasModal(true)}
-            >
-              <Fuel className="w-5 h-5 shrink-0" style={{ color: gasMeter.status === 'green' ? '#1E9E62' : gasMeter.status === 'amber' ? '#D9A404' : '#DC2626' }} />
-              <div className="flex-1">
-                <p className="text-[13px] font-semibold" style={{ color: gasMeter.status === 'green' ? '#1E9E62' : gasMeter.status === 'amber' ? '#D9A404' : '#DC2626' }}>
-                  Fuel ROI: {(gasMeter.ratio * 100).toFixed(1)}% of job value
-                </p>
-                <p className="text-[12px] text-muted-foreground">{gasMeter.roundTrip} mi · ${gasMeter.gasCost.toFixed(2)} gas cost</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </div>
-          </div>
-        )}
-        {isMobile && !gasMeter && address.trim() === '' && (
+        {/* Fuel Gauge ROI — shown once address + at least one service are ready */}
+        {isMobile && fuelGauge && <FuelGaugeRow result={fuelGauge} thresholds={settings} />}
+        {isMobile && !fuelGauge && (
           <p className="text-[12px] text-muted-foreground mt-2 flex items-center gap-1.5">
-            <Fuel className="w-3 h-3" /> Add address to see fuel ROI
+            <Fuel className="w-3 h-3" />
+            {address.trim() ? 'Add a service to see ROI' : 'Add address + service to see ROI'}
           </p>
         )}
       </Section>
@@ -455,7 +597,7 @@ export default function BookingNew() {
       <div className="h-8" />
 
       {/* ── Bottom CTA ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-10 bg-background/95 backdrop-blur-md border-t border-border/40 px-5 py-4">
+      <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-20 bg-background/95 backdrop-blur-md border-t border-border/40 px-5 py-4">
         <button
           onClick={handleSave}
           disabled={!canSave}

@@ -1,26 +1,20 @@
 import { Link } from 'wouter';
-import { BarChart3, Package, DollarSign, Settings } from 'lucide-react';
+import { BarChart3, Package, Users2, Settings } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
 export default function More() {
   const menuItems = [
     {
-      name: 'Sales Reporting',
-      path: '/more/reporting',
-      icon: BarChart3,
-      description: 'Revenue and performance analytics',
+      name: 'Team',
+      path: '/more/payroll',
+      icon: Users2,
+      description: 'Employee commissions and payouts',
     },
     {
-      name: 'Package Admin',
+      name: 'Packages',
       path: '/more/packages',
       icon: Package,
       description: 'Manage service packages',
-    },
-    {
-      name: 'Payroll',
-      path: '/more/payroll',
-      icon: DollarSign,
-      description: 'Employee commissions and payouts',
     },
     {
       name: 'Settings',
@@ -28,10 +22,16 @@ export default function More() {
       icon: Settings,
       description: 'App configuration',
     },
+    {
+      name: 'Reports',
+      path: '/more/reporting',
+      icon: BarChart3,
+      description: 'Revenue and performance analytics',
+    },
   ];
 
   return (
-    <div className="min-h-[100dvh] bg-background pb-20 md:pb-6">
+    <div className="min-h-[100dvh] bg-background pb-24">
       <div className="max-w-2xl mx-auto px-4 pt-6">
         <h1 className="text-2xl font-semibold mb-6">More</h1>
 
@@ -40,7 +40,10 @@ export default function More() {
             const Icon = item.icon;
             return (
               <Link key={item.path} href={item.path}>
-                <Card className="p-4 border border-border rounded-xl hover:bg-muted transition-colors" data-testid={`link-${item.name.toLowerCase().replace(' ', '-')}`}>
+                <Card
+                  className="p-4 border border-border rounded-xl hover:bg-muted transition-colors"
+                  data-testid={`link-${item.name.toLowerCase().replace(' ', '-')}`}
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                       <Icon className="w-5 h-5 text-primary" />
