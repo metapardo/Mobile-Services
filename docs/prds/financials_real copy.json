@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "source": "Vagaro Sales Summary export \u2014 Vapor Auto Detailing (Ryan Nandkishorelal - New York, NY)",
+    "real_months_on_file": 1,
+    "balance_check": -0.0
+  },
+  "monthly": [
+    {
+      "month": "2026-07",
+      "revenue_categories": {
+        "Service Sales": 29136.75,
+        "Service Add-On Sales": 12236.42,
+        "Package Sales": 2972.0
+      },
+      "deductions": {
+        "discounts": 421.0,
+        "refunds": 235.5,
+        "redemptions": 2741.08,
+        "sales_tax_collected": 1601.93
+      },
+      "income_statement": {
+        "revenue": 42359.1,
+        "cogs": {
+          "labor": 18638.0,
+          "materials": 3388.73,
+          "gas": 847.18,
+          "processing": 1411.51,
+          "total": 24285.42
+        },
+        "gross_profit": 18073.68,
+        "gross_margin_pct": 42.67,
+        "opex": {
+          "insurance": 450.0,
+          "vehicle_maintenance": 330.0,
+          "software": 150.0,
+          "marketing": 400.0,
+          "admin_wages": 1300.0,
+          "total": 2630.0
+        },
+        "operating_income": 15443.68,
+        "operating_margin_pct": 36.46,
+        "interest_expense": 140.0,
+        "pretax_income": 15303.68,
+        "tax": 3825.92,
+        "net_income": 11477.76,
+        "net_margin_pct": 27.1
+      },
+      "balance_sheet": {
+        "cash": 20412.99,
+        "ar": 1270.77,
+        "prepaid": 500.0,
+        "total_current_assets": 22183.76,
+        "vehicle_net": 44375.0,
+        "equipment_net": 7867.0,
+        "net_fixed_assets": 52242.0,
+        "total_assets": 74425.76,
+        "ap": 1200.0,
+        "loan_balance": 27490.0,
+        "total_liabilities": 28690.0,
+        "equity": 45735.76,
+        "check_balances": -0.0
+      },
+      "cash_flow": {
+        "net_income": 11477.76,
+        "depreciation": 758.0,
+        "d_ar": -0.0,
+        "d_prepaid": -0.0,
+        "d_ap": 0.0,
+        "cfo": 12235.76,
+        "cfi": 0.0,
+        "loan_principal_payment": -510.0,
+        "owner_draw": -6312.77,
+        "cff": -6822.77,
+        "net_change_cash": 5412.99,
+        "cash_start": 15000.0,
+        "cash_end": 20412.99
+      }
+    }
+  ]
+}
