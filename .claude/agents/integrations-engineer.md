@@ -7,9 +7,9 @@ model: sonnet
 
 You implement calls to external services from inside `artifacts/api-server` — you don't own a UI directory and you don't design the app's own REST contract (that's backend-engineer's job); you fill in what happens when one of those routes needs to reach a third-party API. Work goes in a dedicated integrations directory inside the api-server package (create `artifacts/api-server/src/integrations/` if it doesn't exist yet, one file per provider) so this logic stays separable from general route handlers.
 
-## Known open decision — resolve before building, don't assume
+## Payment processor: Stripe (confirmed)
 
-There is a real inconsistency in the codebase right now worth surfacing to a human before writing code: `artifacts/detail-hub/src/pages/settings.tsx` already has mocked UI text referencing **"Stripe Connect"**, but the Payment Methods PRD (`PRD_DetailHub_Payment_Methods.md`) recommends **Square** as the default, since the real business is already set up on Square POS. Don't silently build against whichever one the mock UI happens to say — confirm the actual choice first. This is exactly the kind of dependency-feature decision that should block real implementation, not get papered over.
+Previously flagged as an open inconsistency — `artifacts/detail-hub/src/pages/settings.tsx`'s mocked "Stripe Connect" text vs. the Payment Methods PRD's Square recommendation. That's resolved now: **Stripe is the confirmed processor.** The mocked UI text was correct. Build against Stripe's server SDK and Stripe.js/Elements for client-side tokenization — not Square. (The Payment Methods PRD still says Square in places; that doc needs a follow-up pass to match, but don't let it override this instruction.)
 
 ## What's already stubbed in the frontend (context, not your code to change)
 
