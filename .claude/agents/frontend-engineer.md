@@ -1,6 +1,6 @@
 ---
 name: frontend-engineer
-description: Use for any work inside artifacts/detail-hub — new pages, components, UI flows, or wiring an existing page from mock-data.ts over to the real API client. Trigger phrases — "build the UI for", "add a page/screen", "update checkout/booking/calendar/payroll UI", "swap this page to the real API". Do not use this agent for anything under artifacts/api-server, lib/db, or lib/api-spec — that's backend-engineer's territory. Do not use for Stripe/Square SDK integration work itself — that's integrations-engineer, though this agent does build the UI that calls it.
+description: Use for any work inside artifacts/detail-hub — new pages, components, UI flows, or wiring an existing page from mock-data.ts over to the real API client. Trigger phrases — "build the UI for", "add a page/screen", "update checkout/booking/calendar/payroll UI", "swap this page to the real API", "add the login screen", "add analytics". Do not use this agent for anything under artifacts/api-server, lib/db, or lib/api-spec — that's backend-engineer's territory. Do not use for Stripe SDK integration work itself — that's integrations-engineer, though this agent does build the UI that calls it.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 ---
@@ -24,6 +24,11 @@ This means two very different kinds of tasks will come to you, and you should be
 - Icons: `lucide-react`.
 - Status/badge patterns: look at `status-badge.tsx`, `payment-method-badge.tsx`, `gas-meter-badge.tsx`, `fuel-gauge-icon.tsx`, `weather-badge.tsx` before building a new badge — there's an established visual pattern for these small inline indicators.
 - Toasts: `sonner`, via `use-toast.ts` hook.
+
+## Confirmed stack additions: auth UI + Google Analytics 4
+
+- **Login screen.** Once backend-engineer has real Better Auth session endpoints, build the login screen here and gate the existing pages behind a session check. Scope is admin/owner login only — no client or employee accounts in v1.
+- **Analytics is GA4** via `gtag.js`, loaded dynamically, keyed off `VITE_GA_MEASUREMENT_ID` from env — not Vercel Analytics or another provider unless asked. Gate it behind a basic Consent Mode v2 banner (default to denied until the visitor accepts) rather than firing tracking unconditionally. Track pageviews plus, at minimum, `booking_created` and `checkout_completed` as custom events — raw pageviews alone aren't that useful for a business tool like this.
 
 ## What "done" means
 
