@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Admin/owner authentication and platform-invite-gated signup
 paths:
   /healthz:
     get:
@@ -24,6 +26,131 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/signup:
+    post:
+      operationId: signup
+      tags: [auth]
+      summary: Platform-invite-gated admin/owner signup
+      description: >-
+        Creates a new admin/owner user account together with a brand-new organization.
+        This app is invite-only at the platform level (not open signup): the request
+        must carry a live, unused, unexpired `inviteToken` issued out-of-band, or no
+        user or organization is created. On success the invite token is permanently
+        consumed (single-use). This endpoint does not sign the caller in — it only
+        provisions the account; a separate sign-in step (not yet implemented) is
+        required afterward.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "201":
+          description: Account and organization created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupResult"
+        "400":
+          description: >-
+            Invalid request body; invalid/expired/already-used invite token; or the
+            organization slug/name is already taken (`error` carries a machine-readable
+            code, e.g. `invalid_invite_token`, `ORGANIZATION_SLUG_ALREADY_TAKEN`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >-
+            Account or organization creation failed, e.g. the email is already
+            registered (`error` carries a machine-readable code, e.g.
+            `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Admin/owner sign-in
+      description: >-
+        Signs in an existing admin/owner user with email + password. On success, sets a
+        session cookie on the response (`Set-Cookie`, `httpOnly`) — the browser stores
+        and resends it automatically on subsequent same-origin/allowed-cross-origin
+        requests; callers don't read or manage it directly. The response body also
+        echoes the raw session `token` for non-cookie clients (e.g. a future
+        React Native/Expo client using `Authorization: Bearer <token>` instead of
+        cookies — see `lib/api-client-react`'s `setAuthTokenGetter`).
+
+        If this user belongs to exactly one organization (the expected case for v1 —
+        one admin/owner per organization, no multi-org membership yet), that
+        organization is automatically set as the session's active organization, so the
+        immediately-following `GET /auth/session` reports a usable `organizationId`
+        without a separate "pick your organization" step. If the user belongs to zero
+        or more than one organization, no active organization is set and
+        `organizationId` comes back `null` — see `GET /auth/session` for how that state
+        is surfaced.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed in; session cookie set on the response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResult"
+        "400":
+          description: Invalid request body (`error` e.g. `invalid_request`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: >-
+            Invalid email or password (`error` is `INVALID_EMAIL_OR_PASSWORD`; the
+            response deliberately does not distinguish "no such user" from "wrong
+            password").
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/session:
+    get:
+      operationId: getAuthSession
+      tags: [auth]
+      summary: Check the current session
+      description: >-
+        Reads the session cookie (if any) from the request and reports whether it's
+        valid, and — if valid — whether it has an active organization. Always responds
+        `200`; "not signed in" is a normal, expected response shape here, not an error
+        (distinct from endpoints that require auth and should 401 instead). Three
+        possible states, distinguished so the frontend can render the right thing
+        (redirect to login vs. "sign-in is fine, but your account isn't in an
+        organization yet — contact support" — the latter should be rare in v1, since
+        `POST /auth/login` auto-sets the active organization for the expected
+        exactly-one-organization case, but isn't impossible, e.g. an organization that
+        was deleted out from under an existing session):
+          1. No valid session at all: `{ "authenticated": false }`.
+          2. Valid session, active organization set: `{ "authenticated": true, "user":
+             {...}, "organizationId": "<id>" }`.
+          3. Valid session, no active organization: `{ "authenticated": true, "user":
+             {...}, "organizationId": null }`.
+      responses:
+        "200":
+          description: >-
+            Session status. Always 200 — see the state breakdown above; check
+            `authenticated` (and `organizationId`, when `authenticated` is true) rather
+            than the HTTP status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResult"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +160,163 @@ components:
           type: string
       required:
         - status
+    SignupRequest:
+      type: object
+      description: >-
+        Body for the platform-invite-gated admin/owner signup endpoint. Creates one
+        user and one brand-new organization together.
+      properties:
+        inviteToken:
+          type: string
+          minLength: 1
+          description: Platform invite token issued out-of-band. Single-use.
+        name:
+          type: string
+          minLength: 1
+          description: The admin/owner user's display name.
+        email:
+          type: string
+          format: email
+          description: The admin/owner user's login email.
+        password:
+          type: string
+          minLength: 8
+          description: The admin/owner user's password (min length matches Better Auth's default).
+        organizationName:
+          type: string
+          minLength: 1
+          description: Display name of the new organization.
+        organizationSlug:
+          type: string
+          pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+          description: URL-safe unique slug for the new organization (lowercase, hyphen-separated).
+      required:
+        - inviteToken
+        - name
+        - email
+        - password
+        - organizationName
+        - organizationSlug
+    AuthUser:
+      type: object
+      description: >-
+        The authenticated admin/owner user, as returned by every auth endpoint that
+        includes a user (signup, login, session-check) — one shape shared across all
+        three so the frontend has a single `AuthUser` type to work with.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        emailVerified:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - emailVerified
+        - createdAt
+    SignupOrganization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - slug
+        - createdAt
+    SignupResult:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        organization:
+          $ref: "#/components/schemas/SignupOrganization"
+      required:
+        - user
+        - organization
+    LoginRequest:
+      type: object
+      description: Body for admin/owner sign-in.
+      properties:
+        email:
+          type: string
+          format: email
+          description: The admin/owner user's login email.
+        password:
+          type: string
+          minLength: 1
+          description: The admin/owner user's password.
+      required:
+        - email
+        - password
+    LoginResult:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        token:
+          type: string
+          description: >-
+            The raw session token, for non-cookie clients (bearer-token auth). Browser
+            clients don't need this — the session cookie is set on the response
+            automatically and is what the browser actually uses.
+        organizationId:
+          type: string
+          nullable: true
+          description: >-
+            The organization automatically set as this session's active organization
+            (see the `/auth/login` description for when that happens), or `null` if it
+            wasn't — mirrors `SessionResult.organizationId` so the frontend doesn't have
+            to make a separate `GET /auth/session` call immediately after login just to
+            learn this.
+      required:
+        - user
+        - token
+        - organizationId
+    SessionResult:
+      type: object
+      description: >-
+        Discriminated on `authenticated`: when `false`, `user`/`organizationId` are
+        absent (not merely null) — the frontend should check `authenticated` first.
+      properties:
+        authenticated:
+          type: boolean
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        organizationId:
+          type: string
+          nullable: true
+          description: >-
+            Only present when `authenticated` is true. `null` means the session is
+            valid but has no active organization set (see `/auth/session`'s
+            description for when this can happen) — distinct from `authenticated:
+            false`, which means there's no valid session at all.
+      required:
+        - authenticated
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code.
+        message:
+          type: string
+          description: Human-readable detail, when available.
+      required:
+        - error
 

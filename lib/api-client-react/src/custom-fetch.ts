@@ -360,7 +360,21 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Default to `credentials: "include"` rather than the Fetch spec's own default
+  // (`"same-origin"`). Web consumers of this client (currently just `detail-hub`) talk
+  // to the API server on a different origin in both dev (different Vite/Express ports)
+  // and prod (frontend on Vercel, API on its own host) — with the spec default, the
+  // browser silently drops any `Set-Cookie` from a successful login/signup response and
+  // silently omits the cookie on every request after, even though the server's CORS
+  // (`credentials: true` + explicit origin allowlist) and Better Auth `trustedOrigins`
+  // are both already configured to allow exactly this. That failure mode is silent (the
+  // HTTP response still looks like a 200 success) and easy to miss without specifically
+  // testing "does the session survive a page refresh", so it's fixed here once, at the
+  // single fetch call site every generated hook funnels through, rather than requiring
+  // every call site to remember to pass `{ request: { credentials: 'include' } }`
+  // individually. An explicit `credentials` in `init` (per-call override via the second
+  // `customFetch` argument) still wins — this only supplies the default.
+  const response = await fetch(input, { credentials: 'include', ...init, method, headers });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

@@ -57,6 +57,16 @@ export default defineConfig({
       prettier: true,
       override: {
         zod: {
+          // Pinned explicitly rather than left on 'auto': the workspace's resolved
+          // `zod` dependency (see pnpm-workspace.yaml catalog) is `^3.25.76`, and the
+          // generated code imports the bare `zod` package specifier (v3 API surface,
+          // e.g. `zod.string().email()`), not the `zod/v4` compat subpath some other
+          // files in this repo opt into individually. 'auto' detection is unreliable
+          // here because these packages declare `"zod": "catalog:"` in package.json
+          // (a pnpm catalog reference, not a real semver string), which orval's
+          // auto-detection can't resolve to a version — leaving it on 'auto' produced
+          // Zod-4-only syntax (`zod.email()`) against a v3 runtime and failed to compile.
+          version: 3,
           coerce: {
             query: ['boolean', 'number', 'string'],
             param: ['boolean', 'number', 'string'],

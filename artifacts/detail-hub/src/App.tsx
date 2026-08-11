@@ -5,7 +5,10 @@ import NotFound from '@/pages/not-found';
 import { Route, Switch, Router as WouterRouter, Redirect } from 'wouter';
 import { BottomNav } from '@/components/bottom-nav';
 import { SidebarNav } from '@/components/sidebar-nav';
+import { AuthGate } from '@/components/auth-gate';
 
+import Login from '@/pages/login';
+import Signup from '@/pages/signup';
 import Home from '@/pages/home';
 import Calendar from '@/pages/calendar';
 
@@ -95,11 +98,21 @@ function App() {
         <GradientBackground />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <Switch>
-            <Route path="/">
-              <Redirect to="/calendar" />
-            </Route>
+            {/* `/login` and `/signup` are the only routes that must stay ungated —
+                everything else (including `/`) renders behind `AuthGate` below. */}
+            <Route path="/login" component={Login} />
+            <Route path="/signup" component={Signup} />
             <Route>
-              <AppShell />
+              <AuthGate>
+                <Switch>
+                  <Route path="/">
+                    <Redirect to="/calendar" />
+                  </Route>
+                  <Route>
+                    <AppShell />
+                  </Route>
+                </Switch>
+              </AuthGate>
             </Route>
           </Switch>
         </WouterRouter>

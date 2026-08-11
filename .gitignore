@@ -48,3 +48,5 @@ Thumbs.db
 .cache/
 .local/
 prd-work/
+.vercel
+.env*
