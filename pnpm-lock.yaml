@@ -227,6 +227,10 @@ importers:
         version: 3.1.0
 
   artifacts/detail-hub:
+    dependencies:
+      '@workspace/api-server':
+        specifier: workspace:*
+        version: link:../api-server
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0

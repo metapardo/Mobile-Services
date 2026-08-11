@@ -86,7 +86,7 @@ router.post("/auth/signup", async (req, res) => {
   }
   const { inviteToken, name, email, password, organizationName, organizationSlug } = parsed.data;
 
-  const claimedToken = await claimPlatformInviteToken(inviteToken);
+  const claimedToken = await claimPlatformInviteToken(inviteToken, email);
   if (!claimedToken) {
     res.status(400).json({
       error: "invalid_invite_token",

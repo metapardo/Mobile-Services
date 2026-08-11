@@ -16,16 +16,17 @@ import { z } from "zod/v4";
  * Named `platform_invite_tokens`, deliberately distinct from `invitation`, so the two
  * don't get confused later.
  *
- * `email` is nullable/optional: a token can be scoped to a specific invitee email (not
- * enforced at insert time — enforcing "the signup email must match" is a call site
- * decision, not a schema constraint) or left open or  as a general-purpose bearer token.
- * Left unconstrained here rather than silently deciding which policy applies — flagged
- * per standing instructions.
+ * `email` is nullable/optional: a token can be scoped to a specific invitee email, or left
+ * `null` as a general-purpose bearer token usable by anyone who has it. Not a DB
+ * constraint (nothing stops inserting any email here) — enforcement of "the signup email
+ * must match a set `email`" happens at consumption time, in `claimPlatformInviteToken`.
  *
  * Consumption is done via `claimPlatformInviteToken` in `../platform-invite.ts`, which
- * performs a single conditional `UPDATE ... WHERE used = false ... RETURNING` rather
- * than a separate validate-then-update, specifically so concurrent requests racing on
- * the same token can't both succeed. See that file for the full reasoning.
+ * performs a single conditional `UPDATE ... WHERE used = false AND expires_at > now() AND
+ * (email IS NULL OR lower(email) = lower($signupEmail)) ... RETURNING` rather than a
+ * separate validate-then-update, specifically so concurrent requests racing on the same
+ * token can't both succeed. See that file for the full reasoning, including why the email
+ * check is folded into the same atomic statement rather than checked separately.
  */
 export const platformInviteTokensTable = pgTable(
   "platform_invite_tokens",
