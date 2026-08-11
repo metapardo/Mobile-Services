@@ -8,8 +8,8 @@ import {
   sessionTable,
   claimPlatformInviteToken,
   releasePlatformInviteToken,
+  eq,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import {
   SignupBody,
   SignupResponse,
