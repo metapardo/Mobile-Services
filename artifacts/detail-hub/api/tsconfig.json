@@ -1,0 +1,80 @@
+// Scoped tsconfig for `api/` only — DO NOT delete or fold back into the parent
+// `detail-hub/tsconfig.json`. Vercel's Node.js function builder (`@vercel/node`)
+// compiles `api/[...path].ts` by resolving the *nearest* tsconfig.json to that file
+// (TypeScript's `findConfigFile`, walking up from the entrypoint's directory), and it
+// forces `noEmit: false` to actually emit JS for the deployed function.
+//
+// The parent tsconfig sets `noEmit: true` + `allowImportingTsExtensions: true` (both
+// correct there — Vite bundles `src/`, `tsc` only type-checks it). But
+// `allowImportingTsExtensions` requires `noEmit`/`emitDeclarationOnly` to be set, so
+// once Vercel forces `noEmit: false`, that combination throws TS5096 and the build
+// fails with "Emit skipped". This file exists so the function compiles under
+// emit-compatible settings without touching the parent config's `src/` behavior.
+// The parent tsconfig's `include` still covers `api/**/*` for `pnpm run typecheck`,
+// so this file is type-checked twice (locally in noEmit mode, and by Vercel for real
+// emit) — that's intentional, not redundant. Confirmed via `@vercel/node`'s actual
+// installed source (`node_modules/@vercel/node/dist/index.js` in a global `vercel`
+// CLI install) — this isn't a guess.
+//
+// IMPORTANT: `module` and `target` below are set explicitly, NOT left to inherit from
+// `tsconfig.base.json`'s `extends`. Vercel's builder reads this file's raw JSON
+// *before* resolving `extends` to decide which compiler options to force a default
+// for — it only skips forcing its own default when it sees the key already set in
+// this file's own (unmerged) `compilerOptions`:
+//   - `module` undefined here → forced to `NodeNext` (+ `moduleResolution: NodeNext`,
+//     `strict: false`), which rejects the extension-less relative imports used
+//     throughout `api-server/src/**` (that source is written/typechecked assuming
+//     `moduleResolution: bundler`, matching its own tsconfig). So `module` must be
+//     set here explicitly.
+//   - `target` undefined here → forced to `ES2021` regardless of the base config's
+//     `es2022`. Set explicitly so it actually matches what `api-server`'s own
+//     typecheck uses.
+//   - `esModuleInterop` is deliberately set to `false` (not left unset, which Vercel's
+//     builder would force to `true`) to match `api-server`'s own tsconfig, which
+//     doesn't set it (defaults to `false` there). Leaving it forced to `true` made
+//     `pino-http`'s default import type as non-callable in `api-server/src/app.ts`
+//     ("This expression is not callable") during a real Vercel deploy attempt.
+//
+// KNOWN REMAINING BLOCKER (as of this writing, NOT fixed by this file — needs a
+// change in `artifacts/api-server`, out of `detail-hub`'s scope):
+// `api-server/src/app.ts` still fails to compile under Vercel's builder with
+// `Property 'use' does not exist on type 'Express'` and a handful of TS7006
+// implicit-any errors, even though `pnpm --filter @workspace/api-server typecheck`
+// and `pnpm --filter @workspace/detail-hub typecheck` both pass cleanly. Root cause,
+// confirmed by direct inspection of `@vercel/node`'s bundled source plus a controlled
+// local repro (not a guess): Vercel's `@vercel/node` builds a `ts.LanguageService`
+// whose host implements `fileExists`/`readFile`/`directoryExists` but NOT `realpath`.
+// Without `realpath`, TypeScript resolves modules through pnpm's symlinks as-is,
+// without dereferencing them to the real content-addressable store path. `express`
+// ships no types of its own; `api-server`'s `@types/express` devDependency pulls in
+// `@types/express-serve-static-core` (where `Express`/`Application` are actually
+// declared) as its own nested dependency, which pnpm places only inside
+// `.pnpm/@types+express@5.0.6/node_modules/@types/` — a directory that's a sibling of
+// `@types/express` in the *real* store, but is NOT an ancestor of the *symlinked*
+// path `api-server/node_modules/@types/express` that `app.ts`'s import resolves
+// through. Walking up from the symlink (not the realpath) never finds it, so
+// `core.Express` resolves to an empty type, and `Express`/`Application` end up with 0
+// members — hence "Property 'use' does not exist". Confirmed by temporarily adding a
+// direct `api-server/node_modules/@types/express-serve-static-core` symlink (matching
+// what pnpm would create if it were an explicit devDependency of `api-server`) and
+// re-running the same repro: 0 diagnostics, 71 members found, `.use` present.
+// The fix belongs in `artifacts/api-server/package.json`: add
+// `"@types/express-serve-static-core": "^5.1.2"` (matching the version already
+// resolved in the lockfile) as a direct devDependency, so pnpm symlinks it at
+// `api-server/node_modules/@types/express-serve-static-core` directly (one hop, no
+// deep `.pnpm` traversal needed). That's an `api-server` change — ask
+// backend-engineer, don't add it here.
+{
+  "extends": "../../../tsconfig.base.json",
+  "include": ["**/*"],
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "esnext",
+    "target": "es2022",
+    "lib": ["esnext"],
+    "resolveJsonModule": true,
+    "moduleResolution": "bundler",
+    "esModuleInterop": false,
+    "types": ["node"]
+  }
+}
