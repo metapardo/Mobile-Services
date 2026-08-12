@@ -170,6 +170,9 @@ importers:
 
   artifacts/api-server:
     dependencies:
+      '@better-auth/core':
+        specifier: 1.6.26
+        version: 1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2)
       '@opentelemetry/semantic-conventions':
         specifier: ^1.39.0
         version: 1.43.0
@@ -182,6 +185,9 @@ importers:
       better-auth:
         specifier: ^1.6.26
         version: 1.6.26(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/pg@8.20.0)(kysely@0.29.4)(pg@8.22.0))(pg@8.22.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      better-call:
+        specifier: ^1.3.7
+        version: 1.3.7(zod@4.4.3)
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7

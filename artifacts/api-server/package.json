@@ -13,6 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@better-auth/core": "1.6.26",
+    "better-call": "^1.3.7",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "better-auth": "^1.6.26",

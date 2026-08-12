@@ -16,65 +16,121 @@
 // installed source (`node_modules/@vercel/node/dist/index.js` in a global `vercel`
 // CLI install) — this isn't a guess.
 //
-// IMPORTANT: `module` and `target` below are set explicitly, NOT left to inherit from
-// `tsconfig.base.json`'s `extends`. Vercel's builder reads this file's raw JSON
-// *before* resolving `extends` to decide which compiler options to force a default
-// for — it only skips forcing its own default when it sees the key already set in
-// this file's own (unmerged) `compilerOptions`:
+// IMPORTANT: every `compilerOptions` key below is set explicitly, NOT left to inherit
+// from `tsconfig.base.json` via `extends`. `extends` is still present (harmless, and
+// kept in case some future, not-yet-discovered option depends on it), but nothing in
+// this file's actual compilation behavior should rely on it — someone should be able
+// to delete the `extends` line entirely and get identical results.
+//
+// Why: Vercel's builder reads this file's raw, UNMERGED JSON *before* resolving
+// `extends`, to decide which compiler options to force its own default for. It only
+// skips forcing a default when it sees the key already present in this file's own
+// `compilerOptions` — it does not care what `extends` would otherwise resolve to. This
+// has bitten us three separate times now, each time for a different key that was only
+// present via `extends`:
 //   - `module` undefined here → forced to `NodeNext` (+ `moduleResolution: NodeNext`,
 //     `strict: false`), which rejects the extension-less relative imports used
 //     throughout `api-server/src/**` (that source is written/typechecked assuming
-//     `moduleResolution: bundler`, matching its own tsconfig). So `module` must be
-//     set here explicitly.
+//     `moduleResolution: bundler`, matching its own tsconfig).
 //   - `target` undefined here → forced to `ES2021` regardless of the base config's
-//     `es2022`. Set explicitly so it actually matches what `api-server`'s own
-//     typecheck uses.
-//   - `esModuleInterop` is deliberately set to `false` (not left unset, which Vercel's
-//     builder would force to `true`) to match `api-server`'s own tsconfig, which
-//     doesn't set it (defaults to `false` there). Leaving it forced to `true` made
-//     `pino-http`'s default import type as non-callable in `api-server/src/app.ts`
-//     ("This expression is not callable") during a real Vercel deploy attempt.
+//     `es2022`.
+//   - `esModuleInterop` left unset → forced to `true`, which made `pino-http`'s
+//     default import type as non-callable in `api-server/src/app.ts` ("This
+//     expression is not callable"). Set to `false` here (not left unset) to match
+//     `api-server`'s own tsconfig, which doesn't set it either (defaults to `false`).
+//   - `useUnknownInCatchVariables` left unset (only present via `extends` from
+//     `tsconfig.base.json`) → forced to `false`, so `err` in `catch (err) { if (err
+//     instanceof APIError) ... }` blocks in `api-server/src/routes/auth.ts` stayed
+//     `any` pre-narrowing instead of `unknown`, and TS18046 fired on every property
+//     access even behind the `instanceof` guard. Set to `true` here explicitly to
+//     match `tsconfig.base.json` (and what `api-server`'s own typecheck actually
+//     uses, since `api-server/tsconfig.json` doesn't override it either).
 //
-// KNOWN REMAINING BLOCKER (as of this writing, NOT fixed by this file — needs a
-// change in `artifacts/api-server`, out of `detail-hub`'s scope):
-// `api-server/src/app.ts` still fails to compile under Vercel's builder with
-// `Property 'use' does not exist on type 'Express'` and a handful of TS7006
-// implicit-any errors, even though `pnpm --filter @workspace/api-server typecheck`
-// and `pnpm --filter @workspace/detail-hub typecheck` both pass cleanly. Root cause,
-// confirmed by direct inspection of `@vercel/node`'s bundled source plus a controlled
-// local repro (not a guess): Vercel's `@vercel/node` builds a `ts.LanguageService`
-// whose host implements `fileExists`/`readFile`/`directoryExists` but NOT `realpath`.
-// Without `realpath`, TypeScript resolves modules through pnpm's symlinks as-is,
-// without dereferencing them to the real content-addressable store path. `express`
-// ships no types of its own; `api-server`'s `@types/express` devDependency pulls in
-// `@types/express-serve-static-core` (where `Express`/`Application` are actually
-// declared) as its own nested dependency, which pnpm places only inside
-// `.pnpm/@types+express@5.0.6/node_modules/@types/` — a directory that's a sibling of
-// `@types/express` in the *real* store, but is NOT an ancestor of the *symlinked*
-// path `api-server/node_modules/@types/express` that `app.ts`'s import resolves
-// through. Walking up from the symlink (not the realpath) never finds it, so
-// `core.Express` resolves to an empty type, and `Express`/`Application` end up with 0
-// members — hence "Property 'use' does not exist". Confirmed by temporarily adding a
-// direct `api-server/node_modules/@types/express-serve-static-core` symlink (matching
-// what pnpm would create if it were an explicit devDependency of `api-server`) and
-// re-running the same repro: 0 diagnostics, 71 members found, `.use` present.
-// The fix belongs in `artifacts/api-server/package.json`: add
-// `"@types/express-serve-static-core": "^5.1.2"` (matching the version already
-// resolved in the lockfile) as a direct devDependency, so pnpm symlinks it at
-// `api-server/node_modules/@types/express-serve-static-core` directly (one hop, no
-// deep `.pnpm` traversal needed). That's an `api-server` change — ask
-// backend-engineer, don't add it here.
+// Every other key below is copied from `tsconfig.base.json` (or, where
+// `api-server/tsconfig.json` overrides a base value — e.g. `types` — matched to what
+// `api-server`'s own effective/resolved tsconfig actually uses, not blindly copied
+// from the base) for the same reason: so there's nothing left, of any kind, that
+// Vercel's raw-JSON-peek could still silently default. If a future deploy surfaces
+// yet another key in this family, the fix is to add it here explicitly, matching
+// `api-server`'s effective config for that key — not to guess further ahead of time.
+//
+// PREVIOUSLY-FIXED BLOCKER (kept here for history, not still open): an earlier deploy
+// attempt failed under Vercel's builder with `Property 'use' does not exist on type
+// 'Express'` from `api-server/src/app.ts`, root-caused to `@vercel/node`'s
+// `ts.LanguageService` host not implementing `realpath`, so `@types/express`'s nested
+// `@types/express-serve-static-core` dependency (living only inside `.pnpm/...`, not
+// as an ancestor of the symlinked `node_modules/@types/express` path) never resolved.
+// Fixed on the `api-server` side by promoting `@types/express-serve-static-core` to a
+// direct devDependency of `api-server` (see `artifacts/api-server/package.json` and
+// commit `a9bd208`) — not something this file could fix. Not this file's concern
+// going forward; noted only so the symptom is recognizable if it ever regresses.
+//
+// KNOWN REMAINING BLOCKER (as of this writing, NOT fixable from this file — needs a
+// change in `artifacts/api-server`, out of `detail-hub`'s scope): a real Vercel deploy
+// still fails with `'err' is of type 'unknown'` (TS18046) at every
+// `if (err instanceof APIError) { ... }` block in `api-server/src/routes/auth.ts`,
+// even with every `compilerOptions` key above made fully explicit (confirmed via a
+// standalone reproduction: constructing the exact same `ts.LanguageService` +
+// `ts.CompilerOptions` that `@vercel/node`'s builder constructs from this file,
+// `service.getSemanticDiagnostics()` on `auth.ts` reproduces all 12 diagnostics
+// deterministically, at the exact reported lines, with this file's options as-is) and
+// even though `pnpm run typecheck` (real `tsc`, not `@vercel/node`'s LanguageService)
+// passes clean. So this is NOT a config-completeness problem — it's the *exact same*
+// root cause as the `Property 'use' does not exist` blocker above, just hitting a
+// different package this time: `@vercel/node`'s `ts.LanguageService` host has no
+// `realpath`, so it resolves imports through pnpm's symlinks without dereferencing
+// them. `better-auth/dist/api/index.d.mts` imports `APIError` from `@better-auth/core`
+// (a package-boundary crossing, not a same-package relative import) — `@better-auth/core`
+// lives only inside `better-auth`'s own resolved `.pnpm/.../node_modules/@better-auth/core`
+// (itself another symlink, one level down from the `better-auth` symlink), and is NOT a
+// direct dependency of `api-server`, so it's not hoisted to
+// `api-server/node_modules/@better-auth/core`. Without `realpath`, the non-dereferenced
+// symlink chain never resolves `@better-auth/core`'s types, `APIError`'s type collapses
+// to an unresolvable/`any`-like type, `err instanceof APIError` stops narrowing, and
+// `err` stays `unknown` at every access afterward. Confirmed directly: temporarily
+// symlinking `artifacts/api-server/node_modules/@better-auth/core` to
+// `@better-auth+core@1.6.26_.../node_modules/@better-auth/core` (matching what pnpm
+// would create for a direct dependency) made the same reproduction script report 0
+// diagnostics. The fix belongs in `artifacts/api-server/package.json`: add
+// `"@better-auth/core": "1.6.26"` (matching the version already resolved in the
+// lockfile) as a direct dependency, mirroring the `@types/express-serve-static-core`
+// fix above — ask backend-engineer, don't add it here.
 {
   "extends": "../../../tsconfig.base.json",
   "include": ["**/*"],
   "compilerOptions": {
-    "noEmit": false,
+    // --- From tsconfig.base.json, copied verbatim (api-server doesn't override these) ---
+    "incremental": true,
+    "isolatedModules": true,
+    "lib": ["es2022"],
     "module": "esnext",
-    "target": "es2022",
-    "lib": ["esnext"],
-    "resolveJsonModule": true,
     "moduleResolution": "bundler",
-    "esModuleInterop": false,
-    "types": ["node"]
+    "noEmitOnError": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": false,
+    "noImplicitReturns": true,
+    "noUnusedLocals": false,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "useUnknownInCatchVariables": true,
+    "alwaysStrict": true,
+    "skipLibCheck": true,
+    "target": "es2022",
+    "customConditions": ["workspace"],
+
+    // --- From api-server/tsconfig.json's own override of the base value ---
+    "types": ["node"],
+
+    // --- Local to this file: emit-related and Vercel-forced-default-avoidance,
+    // not present in either base or api-server (api-server doesn't need these
+    // since it's compiled by its own build.mjs/esbuild, not tsc via a
+    // discovered-nearest-tsconfig.json the way @vercel/node compiles this file) ---
+    "noEmit": false,
+    "resolveJsonModule": true,
+    "esModuleInterop": false
   }
 }
