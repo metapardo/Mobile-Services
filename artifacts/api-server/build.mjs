@@ -83,7 +83,18 @@ async function buildAll() {
       "@swc/*",
       "@aws-sdk/*",
       "@azure/*",
-      "@opentelemetry/*",
+      // NOT externalized (unlike most of this list): `@sentry/node` (added for backend
+      // error reporting — see `src/lib/sentry.ts`) has a real, load-bearing runtime
+      // dependency on `@opentelemetry/api` (its event-capture/flush path imports it
+      // even with tracing disabled). Externalizing it, as this list did until this
+      // package accounted for its own package.json dependencies for esbuild to bundle
+      // it: it also isn't resolvable from `dist/`'s location under pnpm's isolated
+      // node_modules layout (it's nested inside `@sentry/node`'s own node_modules, not
+      // hoisted to this package's top-level node_modules), producing a real runtime
+      // `ERR_MODULE_NOT_FOUND: @opentelemetry/api` crash — confirmed by actually
+      // running the built `dist/index.mjs` locally. It's pure JS with no native
+      // bindings, so bundling it (esbuild did so with no warnings) is safe, unlike the
+      // genuinely-native packages this list exists to protect.
       "@google-cloud/*",
       "@google/*",
       "googleapis",

@@ -19,6 +19,7 @@ import {
 } from "@workspace/api-zod";
 import { auth } from "../lib/auth";
 import { logger } from "../lib/logger";
+import { captureAndFlush } from "../lib/sentry";
 import { toFetchHeaders, forwardSetCookies } from "../lib/http-bridge";
 
 const router: IRouter = Router();
@@ -171,6 +172,11 @@ router.post("/auth/signup", async (req, res) => {
     }
 
     logger.error({ err }, "signup: unexpected failure");
+    // Genuinely unexpected — as opposed to the `APIError` branch above, which is
+    // Better Auth rejecting an expected/validated case (duplicate email, taken slug,
+    // etc.) and deliberately NOT reported (see `captureAndFlush`/`lib/sentry.ts` and
+    // this file's other catch blocks for the same "expected vs. unexpected" split).
+    await captureAndFlush(err);
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -291,6 +297,10 @@ router.post("/auth/login", async (req, res) => {
       return;
     }
     logger.error({ err }, "login: unexpected failure");
+    // Same principle as signup above: an `APIError` (wrong password, etc.) is expected
+    // and handled in the branch above without reaching here — only a genuinely
+    // unexpected exception lands in this fallback, which is worth reporting.
+    await captureAndFlush(err);
     res.status(500).json({ error: "internal_error" });
   }
 });
@@ -345,6 +355,8 @@ router.get("/auth/session", async (req, res) => {
       return;
     }
     logger.error({ err }, "session: unexpected failure");
+    // Same principle as the other two routes' fallbacks above.
+    await captureAndFlush(err);
     res.status(500).json({ error: "internal_error" });
   }
 });
