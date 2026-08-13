@@ -1,8 +1,10 @@
-import { Calendar, Users, DollarSign, Users2, BarChart3, Package, Settings } from 'lucide-react';
+import { Calendar, Users, DollarSign, Users2, BarChart3, Package, Settings, LogOut, Loader2 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
+import { useLogout } from '@/hooks/use-logout';
 
 export function SidebarNav() {
   const [location] = useLocation();
+  const logoutMutation = useLogout();
 
   const tabs = [
     { name: 'Calendar',  path: '/calendar',        icon: Calendar    },
@@ -47,6 +49,23 @@ export function SidebarNav() {
           );
         })}
       </nav>
+
+      <div className="p-3 border-t border-white/10">
+        <button
+          type="button"
+          onClick={() => logoutMutation.mutate()}
+          disabled={logoutMutation.isPending}
+          className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-foreground hover:bg-muted transition-colors disabled:opacity-60"
+          data-testid="button-logout"
+        >
+          {logoutMutation.isPending ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <LogOut className="w-5 h-5" />
+          )}
+          <span className="text-[15px]">{logoutMutation.isPending ? 'Logging out…' : 'Log Out'}</span>
+        </button>
+      </div>
     </aside>
   );
 }
