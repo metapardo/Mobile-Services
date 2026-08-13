@@ -96,6 +96,10 @@ export interface SessionResult {
   organizationId?: string | null;
 }
 
+export interface LogoutResult {
+  success: boolean;
+}
+
 export interface ErrorResponse {
   /** Machine-readable error code. */
   error: string;

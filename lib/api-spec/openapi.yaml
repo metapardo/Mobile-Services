@@ -120,6 +120,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Sign out the current session
+      description: >-
+        Reads the session cookie (if any) from the request and invalidates that session
+        server-side (the underlying `session` table row is deleted, not merely
+        expired/left dangling), then sets an expired `Set-Cookie` on the response so the
+        browser drops it too. Always responds `200`, including when the request carried
+        no session or an already-invalid one — "nothing to log out of" is a normal,
+        expected outcome here, not an error (same convention as `GET /auth/session`
+        always responding `200` for "not signed in").
+      responses:
+        "200":
+          description: >-
+            Session invalidated (or there was none to invalidate) and the session cookie
+            was cleared on the response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutResult"
   /auth/session:
     get:
       operationId: getAuthSession
@@ -308,6 +330,13 @@ components:
             false`, which means there's no valid session at all.
       required:
         - authenticated
+    LogoutResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
     ErrorResponse:
       type: object
       properties:

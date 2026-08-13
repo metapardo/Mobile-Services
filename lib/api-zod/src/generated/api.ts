@@ -82,6 +82,15 @@ export const LoginResponse = zod.object({
 
 
 /**
+ * Reads the session cookie (if any) from the request and invalidates that session server-side (the underlying `session` table row is deleted, not merely expired/left dangling), then sets an expired `Set-Cookie` on the response so the browser drops it too. Always responds `200`, including when the request carried no session or an already-invalid one — "nothing to log out of" is a normal, expected outcome here, not an error (same convention as `GET /auth/session` always responding `200` for "not signed in").
+ * @summary Sign out the current session
+ */
+export const LogoutResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
  * Reads the session cookie (if any) from the request and reports whether it's valid, and — if valid — whether it has an active organization. Always responds `200`; "not signed in" is a normal, expected response shape here, not an error (distinct from endpoints that require auth and should 401 instead). Three possible states, distinguished so the frontend can render the right thing (redirect to login vs. "sign-in is fine, but your account isn't in an organization yet — contact support" — the latter should be rare in v1, since `POST /auth/login` auto-sets the active organization for the expected exactly-one-organization case, but isn't impossible, e.g. an organization that was deleted out from under an existing session):
  *   1. No valid session at all: `{ "authenticated": false }`.
  *   2. Valid session, active organization set: `{ "authenticated": true, "user":

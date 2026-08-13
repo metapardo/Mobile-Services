@@ -11,6 +11,7 @@ export * from './errorResponse';
 export * from './healthStatus';
 export * from './loginRequest';
 export * from './loginResult';
+export * from './logoutResult';
 export * from './sessionResult';
 export * from './signupOrganization';
 export * from './signupRequest';

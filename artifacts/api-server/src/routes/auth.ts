@@ -16,6 +16,7 @@ import {
   LoginBody,
   LoginResponse,
   GetAuthSessionResponse,
+  LogoutResponse,
 } from "@workspace/api-zod";
 import { auth } from "../lib/auth";
 import { logger } from "../lib/logger";
@@ -356,6 +357,72 @@ router.get("/auth/session", async (req, res) => {
     }
     logger.error({ err }, "session: unexpected failure");
     // Same principle as the other two routes' fallbacks above.
+    await captureAndFlush(err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/**
+ * POST /auth/logout — sign out the current session.
+ *
+ * Calls `auth.api.signOut` directly (not a mounted `auth.handler`, same reasoning as
+ * every other route in this file). Verified against the installed
+ * `better-auth@1.6.26` package rather than assumed:
+ *
+ *   - `auth.api.signOut` is a real, exported endpoint (`dist/api/routes/sign-out.mjs`,
+ *     `operationId: "signOut"`, `method: "POST"`, `requireHeaders: true`) — its handler
+ *     reads the signed session-token cookie off the incoming request headers, and if
+ *     present calls `ctx.context.internalAdapter.deleteSession(sessionCookieToken)`
+ *     before calling `deleteSessionCookie(ctx)`.
+ *   - `internalAdapter.deleteSession` (`dist/db/internal-adapter.mjs`) is a genuine
+ *     server-side invalidation, not just a client-side cookie clear: this app has no
+ *     `secondaryStorage` configured (see `lib/auth.ts`), so `databaseStoresSessions` is
+ *     true and it runs `deleteWithHooks([{ field: "token", value: token }], "session")`
+ *     — a real `DELETE` against the `session` table row, keyed by the token from the
+ *     cookie. A stale cookie replayed after this can't be revived from the DB side.
+ *   - `deleteSessionCookie` (`dist/cookies/index.mjs`) expires the session-token and
+ *     session-data cookies (`maxAge: 0`, same name/attributes as when they were set) —
+ *     this is what shows up as the outgoing `Set-Cookie` this route forwards.
+ *
+ * `returnHeaders: true` for the same reason as login/session above: the expired
+ * `Set-Cookie` Better Auth computes needs to actually reach the browser via
+ * `forwardSetCookies`, or the client keeps sending a cookie the server has already
+ * deleted server-side (harmless — `GET /auth/session` would just report
+ * `authenticated: false` for it — but leaves a needlessly stale cookie in the browser).
+ *
+ * No session/cookie at all, or an already-invalid one, is a normal "nothing to log out
+ * of" outcome, not an error: `signOut`'s handler simply no-ops the delete (the
+ * `if (sessionCookieToken)` guard) and still returns `{ success: true }` — this route
+ * mirrors that by always responding 200, matching `GET /auth/session`'s "not signed in
+ * is a valid answer" convention. That means the only way into this route's catch block
+ * is a genuinely unexpected failure (e.g. the DB delete itself throwing), which is why
+ * — unlike the `APIError` branches in the other routes above — there's no
+ * "expected Better Auth rejection" case to special-case here.
+ */
+router.post("/auth/logout", async (req, res) => {
+  try {
+    const { headers, response } = await auth.api.signOut({
+      headers: toFetchHeaders(req.headers),
+      returnHeaders: true,
+    });
+
+    forwardSetCookies(res, headers);
+
+    const data = LogoutResponse.parse({ success: response.success });
+    res.status(200).json(data);
+  } catch (err) {
+    if (err instanceof APIError) {
+      logger.warn({ err }, "logout: Better Auth rejected the request");
+      res.status(typeof err.statusCode === "number" ? err.statusCode : 400).json({
+        error: err.body?.code ?? "logout_failed",
+        message: err.body?.message ?? "Logout failed.",
+      });
+      return;
+    }
+    logger.error({ err }, "logout: unexpected failure");
+    // Same principle as the other routes' fallbacks above — a genuinely unexpected
+    // exception, since "no session to log out of" never reaches this branch (see the
+    // handler comment above).
     await captureAndFlush(err);
     res.status(500).json({ error: "internal_error" });
   }
