@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-import logoSrc from '@assets/logo_1785854923476.png';
 
 /**
  * Shared full-screen background (gradient orbs) + centered glass-card shell used by
@@ -41,15 +40,7 @@ export function AuthShell({
       >
         <div className="glass rounded-3xl px-8 py-10 sm:px-10 sm:py-12 flex flex-col items-center w-full max-w-[420px]">
           {showLogo && (
-            <>
-              <img
-                src={logoSrc}
-                alt="DetailHub logo"
-                className="w-20 h-20 mb-3 object-contain"
-                data-testid="img-logo"
-              />
-              <h1 className="text-3xl font-bold mb-8 tracking-tight text-foreground">DetailHub</h1>
-            </>
+            <h1 className="text-3xl font-bold mb-8 tracking-tight text-foreground">RareAir</h1>
           )}
           {children}
         </div>
