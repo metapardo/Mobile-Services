@@ -50,3 +50,9 @@ Thumbs.db
 prd-work/
 .vercel
 .env*
+
+# Raw, uncurated design-asset dumps — contains personal/unrelated photos and
+# other businesses' branding (see git history around the signup-page redesign).
+# Curated, cleared assets get copied out of here into a real src/assets
+# subfolder and committed individually instead.
+artifacts/detail-hub/src/assets/LP\ images/

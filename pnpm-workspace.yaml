@@ -161,3 +161,24 @@ overrides:
 
 allowBuilds:
   esbuild: true
+
+# better-auth pulls in zod@4 transitively. @hookform/resolvers only declares zod as an
+# OPTIONAL peer (^3.23.8), not a real dependency, so `overrides` (which only rewrites
+# existing dependency-graph edges) can't target it — there's no edge to rewrite.
+# Instead, with autoInstallPeers/strict-peer-dependencies both off, pnpm falls back to
+# resolving that unmet peer from its shared virtual-store hoist
+# (node_modules/.pnpm/node_modules/zod), which whichever zod major happens to land
+# there last (in practice: zod@4, since better-auth pulls it in) — even though
+# @hookform/resolvers wants v3. The two zod majors have incompatible internal type
+# shapes (ZodObject vs $ZodTypeInternals), so every zodResolver(...) call in
+# detail-hub fails to typecheck when v4 wins that shared hoist.
+#
+# packageExtensions is pnpm's sanctioned mechanism for patching an under-declared
+# manifest: this makes pnpm treat @hookform/resolvers as if it had a real, explicit
+# `zod` dependency at the workspace's pinned version, giving it its own resolution
+# instead of falling through to the shared hoist. better-auth's own zod@4 usage is
+# untouched — this only patches @hookform/resolvers's own dependency edge.
+packageExtensions:
+  "@hookform/resolvers":
+    dependencies:
+      zod: ^3.25.76
