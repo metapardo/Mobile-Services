@@ -12,6 +12,10 @@ tags:
     description: Health operations
   - name: auth
     description: Admin/owner authentication and platform-invite-gated signup
+  - name: access-requests
+    description: >-
+      Public "request access" lead capture for visitors without a platform invite
+      token
 paths:
   /healthz:
     get:
@@ -173,6 +177,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionResult"
+  /access-requests:
+    post:
+      operationId: requestAccess
+      tags: [access-requests]
+      summary: Submit a public "request access" lead
+      description: >-
+        Public, unauthenticated endpoint for the marketing/landing page's "request
+        access" form — for visitors who don't have a platform invite token yet (see
+        `POST /auth/signup`). Records interest for an operator to follow up on
+        out-of-band (e.g. by issuing a real invite token); does not create a user,
+        organization, or invite token itself, and does not require or check one.
+
+        Resubmitting the same email while a prior submission is still `pending`
+        updates that existing request's timestamp rather than creating a duplicate row.
+        Once a request has moved to `invited` or `declined`, resubmitting the same
+        email creates a new `pending` row instead of touching the resolved one.
+
+        Carries a hidden honeypot field (`honeypot`) for spam filtering: real users
+        never populate it (it should be rendered visually hidden and excluded from tab
+        order in the form), so a non-empty value is assumed to be a bot. Submissions
+        with a non-empty `honeypot` are silently accepted (always `200`, never a
+        distinguishing error) and discarded without being recorded — this is
+        deliberate, so an automated submitter has no signal to adapt to.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestAccessRequest"
+      responses:
+        "200":
+          description: >-
+            Acknowledged. Returned both for a genuinely recorded/updated request and
+            for a silently-discarded honeypot-triggered submission — the response body
+            deliberately does not distinguish the two (see the honeypot description
+            above).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestAccessResult"
+        "400":
+          description: Invalid request body, e.g. malformed email (`error` e.g. `invalid_request`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -331,6 +381,37 @@ components:
       required:
         - authenticated
     LogoutResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
+    RequestAccessRequest:
+      type: object
+      description: >-
+        Body for the public "request access" lead-capture endpoint. Submitted from a
+        marketing/landing page form by visitors without a platform invite token.
+      properties:
+        email:
+          type: string
+          format: email
+          description: The requester's email address, for an operator to follow up on.
+        businessName:
+          type: string
+          nullable: true
+          description: The requester's business name, if they gave one. Optional.
+        honeypot:
+          type: string
+          description: >-
+            Anti-spam honeypot field. Must be rendered visually hidden and left out of
+            tab order in the form so real users never populate it — any non-empty value
+            is treated as a bot and the submission is silently discarded (still
+            responds `200`, see this operation's description). Omit or send empty for
+            a real submission.
+      required:
+        - email
+    RequestAccessResult:
       type: object
       properties:
         success:

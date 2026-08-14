@@ -100,6 +100,22 @@ export interface LogoutResult {
   success: boolean;
 }
 
+/**
+ * Body for the public "request access" lead-capture endpoint. Submitted from a marketing/landing page form by visitors without a platform invite token.
+ */
+export interface RequestAccessRequest {
+  /** The requester's email address, for an operator to follow up on. */
+  email: string;
+  /** The requester's business name, if they gave one. Optional. */
+  businessName?: string | null;
+  /** Anti-spam honeypot field. Must be rendered visually hidden and left out of tab order in the form so real users never populate it — any non-empty value is treated as a bot and the submission is silently discarded (still responds `200`, see this operation's description). Omit or send empty for a real submission. */
+  honeypot?: string;
+}
+
+export interface RequestAccessResult {
+  success: boolean;
+}
+
 export interface ErrorResponse {
   /** Machine-readable error code. */
   error: string;

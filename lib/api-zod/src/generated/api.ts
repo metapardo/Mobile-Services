@@ -112,3 +112,20 @@ export const GetAuthSessionResponse = zod.object({
 }).describe('Discriminated on `authenticated`: when `false`, `user`\/`organizationId` are absent (not merely null) — the frontend should check `authenticated` first.')
 
 
+/**
+ * Public, unauthenticated endpoint for the marketing/landing page's "request access" form — for visitors who don't have a platform invite token yet (see `POST /auth/signup`). Records interest for an operator to follow up on out-of-band (e.g. by issuing a real invite token); does not create a user, organization, or invite token itself, and does not require or check one.
+ * Resubmitting the same email while a prior submission is still `pending` updates that existing request's timestamp rather than creating a duplicate row. Once a request has moved to `invited` or `declined`, resubmitting the same email creates a new `pending` row instead of touching the resolved one.
+ * Carries a hidden honeypot field (`honeypot`) for spam filtering: real users never populate it (it should be rendered visually hidden and excluded from tab order in the form), so a non-empty value is assumed to be a bot. Submissions with a non-empty `honeypot` are silently accepted (always `200`, never a distinguishing error) and discarded without being recorded — this is deliberate, so an automated submitter has no signal to adapt to.
+ * @summary Submit a public "request access" lead
+ */
+export const RequestAccessBody = zod.object({
+  "email": zod.string().email().describe('The requester\'s email address, for an operator to follow up on.'),
+  "businessName": zod.string().nullish().describe('The requester\'s business name, if they gave one. Optional.'),
+  "honeypot": zod.string().optional().describe('Anti-spam honeypot field. Must be rendered visually hidden and left out of tab order in the form so real users never populate it — any non-empty value is treated as a bot and the submission is silently discarded (still responds `200`, see this operation\'s description). Omit or send empty for a real submission.')
+}).describe('Body for the public \"request access\" lead-capture endpoint. Submitted from a marketing\/landing page form by visitors without a platform invite token.')
+
+export const RequestAccessResponse = zod.object({
+  "success": zod.boolean()
+})
+
+

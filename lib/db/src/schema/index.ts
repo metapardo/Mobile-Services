@@ -34,6 +34,11 @@ export * from "./auth-invitation";
 // design: tokens are consumed before any organization exists.
 export * from "./platform-invite-tokens";
 
+// Public "request access" lead capture from the marketing landing page — upstream of
+// platform-invite-tokens above (a visitor lands here before they ever have a token).
+// Also no `organizationId`/RLS, same reasoning: no organization exists yet.
+export * from "./access-requests";
+
 // Shared row-level-security helper used by every business-owned table below.
 export * from "./rls";
 
