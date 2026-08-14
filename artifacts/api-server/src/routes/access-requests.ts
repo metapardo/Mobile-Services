@@ -3,6 +3,7 @@ import { upsertAccessRequest } from "@workspace/db";
 import { RequestAccessBody, RequestAccessResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { captureAndFlush } from "../lib/sentry";
+import { notifyAccessRequest } from "../integrations/resend";
 
 const router: IRouter = Router();
 
@@ -51,7 +52,19 @@ router.post("/access-requests", async (req, res) => {
   }
 
   try {
-    await upsertAccessRequest(email, businessName ?? null);
+    const row = await upsertAccessRequest(email, businessName ?? null);
+
+    // Own local try/catch, on top of `notifyAccessRequest`'s own internal one — see
+    // that function's doc comment in `../integrations/resend.ts`. Belt-and-suspenders
+    // deliberately: `row` has already committed by this point, so nothing below this
+    // line may ever affect the `200` response, even if `notifyAccessRequest`'s own
+    // error handling somehow regresses later.
+    try {
+      await notifyAccessRequest(row);
+    } catch (err) {
+      logger.error({ err }, "access-requests: notifyAccessRequest threw unexpectedly");
+      await captureAndFlush(err);
+    }
 
     const data = RequestAccessResponse.parse({ success: true });
     res.status(200).json(data);
