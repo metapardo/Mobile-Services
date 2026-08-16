@@ -296,6 +296,19 @@
     opacity: 1;
     transform: translateY(0);
   }
+
+  /* ── Wordmark-echoing gradient headline text ── */
+  /* Approximates the multi-stop gradient in the RareAirv2.png wordmark
+     (blue -> navy -> coral -> teal) as a CSS text gradient so a large
+     headline can share the wordmark's identity without upscaling the
+     222x48 source raster past its native resolution. */
+  .wordmark-gradient-text {
+    background: linear-gradient(100deg, #3b5bdb 0%, #1b2a6b 32%, #ff7a4d 62%, #4fc3bd 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
 }
 
 @layer utilities {

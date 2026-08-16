@@ -1,6 +1,7 @@
 import { Calendar, Users, DollarSign, Users2, BarChart3, Package, Settings, LogOut, Loader2 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useLogout } from '@/hooks/use-logout';
+import rareAirLockup from '@/assets/lockup.png';
 
 export function SidebarNav() {
   const [location] = useLocation();
@@ -24,7 +25,7 @@ export function SidebarNav() {
   return (
     <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 glass-nav border-r border-white/10 flex-col">
       <div className="p-6 flex items-center gap-3">
-        <h1 className="text-xl font-bold">RareAir</h1>
+        <img src={rareAirLockup} alt="Rare Air" className="h-9 w-auto" data-testid="img-sidebar-logo" />
       </div>
 
       <nav className="flex-1 px-3 space-y-0.5">
