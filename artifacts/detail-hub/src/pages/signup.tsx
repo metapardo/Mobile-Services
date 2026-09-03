@@ -271,6 +271,50 @@ const faqs = [
   },
 ];
 
+// Same feature set is listed on every pricing card (see `Pricing` below) —
+// tiers differ only in which of these are lit up vs. dimmed, never in which
+// rows exist, so someone can compare tiers at a glance rather than parsing
+// two different lists.
+const pricingFeatures: { label: string; starter: boolean }[] = [
+  { label: 'Live route intelligence & forecasting', starter: true },
+  { label: 'Business assessment & margin insights', starter: true },
+  { label: 'Fuel Gauge cost check on every appointment', starter: false },
+  { label: 'Email support', starter: true },
+  { label: 'Priority support & onboarding', starter: false },
+];
+
+interface PricingTier {
+  key: 'starter' | 'premium';
+  name: string;
+  badge: string;
+  price: string;
+  priceSuffix?: string;
+  priceNote?: string;
+  description: string;
+  featured: boolean;
+}
+
+const pricingTiers: PricingTier[] = [
+  {
+    key: 'starter',
+    name: 'Starter',
+    badge: 'FREE TRIAL',
+    price: 'Free',
+    priceNote: 'for your first 14 days',
+    description: 'Try Rare Aer with real appointments — no card required.',
+    featured: false,
+  },
+  {
+    key: 'premium',
+    name: 'Premium',
+    badge: 'MOST POPULAR',
+    price: '$25',
+    priceSuffix: '/month',
+    description: 'Everything you need to run your route like a business.',
+    featured: true,
+  },
+];
+
 const flowSteps: { label: string; copy: string; icon: IconType }[] = [
   { label: 'Sign up', copy: 'Tell us what you do and where you roll.', icon: UserRound },
   { label: 'Create account', copy: 'Set your hours, radius, and real costs.', icon: ShieldCheck },
@@ -952,6 +996,79 @@ function FAQ() {
 }
 
 /**
+ * Card layout borrowed from the infranex.framer.ai pricing pattern: eyebrow +
+ * pill badge on one row, a big price, a one-line description, then a full
+ * shared feature checklist — every card lists the same rows, but rows that
+ * tier doesn't include stay dimmed rather than being omitted, so the two
+ * cards stay visually comparable at a glance. Both CTAs are soft
+ * top-of-funnel actions (`scrollToAccess`, same as the Hero/header buttons)
+ * — this is a pre-launch, invite-only site with no real billing anywhere in
+ * this codebase, so neither button implies an actual purchase.
+ */
+function Pricing() {
+  return (
+    <section className="section">
+      <div className="container-wide">
+        <Reveal className="section-heading">
+          <div>
+            <div className="eyebrow">07 / Simple pricing</div>
+            <h2 className="section-title">
+              Priced like a tool,
+              <br />
+              not a toy.
+            </h2>
+          </div>
+          <p className="section-intro">
+            Start free and see the route pay for itself. Upgrade when you&rsquo;re ready to run every job through it.
+          </p>
+        </Reveal>
+        <RevealGroup className="pricing-grid" data-testid="pricing-cards">
+          {pricingTiers.map((tier) => (
+            <RevealItem
+              key={tier.key}
+              className={`pricing-card glass${tier.featured ? ' pricing-card-featured' : ''}`}
+              data-testid={`card-pricing-${tier.key}`}
+            >
+              <div className="pricing-card-head">
+                <span className="eyebrow">{tier.name}</span>
+                <span className="pricing-badge">{tier.badge}</span>
+              </div>
+              <div className="pricing-price">
+                <span className="pricing-price-value">{tier.price}</span>
+                {tier.priceSuffix && <span className="pricing-price-suffix">{tier.priceSuffix}</span>}
+              </div>
+              {tier.priceNote && <p className="pricing-price-note">{tier.priceNote}</p>}
+              <p className="pricing-description">{tier.description}</p>
+              <ul className="pricing-features">
+                {pricingFeatures.map((feature) => {
+                  const included = tier.key === 'starter' ? feature.starter : true;
+                  return (
+                    <li
+                      key={feature.label}
+                      className={included ? 'pricing-feature-included' : 'pricing-feature-excluded'}
+                    >
+                      <Check size={16} />
+                      <span>{feature.label}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <button
+                className="button-primary button-full"
+                onClick={scrollToAccess}
+                data-testid={`button-pricing-${tier.key}`}
+              >
+                Get Started <ArrowUpRight size={15} />
+              </button>
+            </RevealItem>
+          ))}
+        </RevealGroup>
+      </div>
+    </section>
+  );
+}
+
+/**
  * The real no-token / rejected-token path: a real lead-capture form, wired to
  * the real `useRequestAccess` mutation — restyled to this design's
  * `.field-group`/`.access-form` markup instead of shadcn `Form`/`FormField`.
@@ -1255,7 +1372,7 @@ function GatedSignupPanel({ inviteToken, onInviteRejected }: { inviteToken: stri
 }
 
 /**
- * "07 / First flight" section shell — the copy column adapts to whether a
+ * "08 / First flight" section shell — the copy column adapts to whether a
  * valid invite token is in play, but the actual form rendered as `children`
  * is decided by `Signup()` below using the exact same state machine the
  * previous version of this page used.
@@ -1266,7 +1383,7 @@ function AccessSection({ gated, children }: { gated: boolean; children: ReactNod
       <div className="container-wide">
         <div className="access-panel glass">
           <Reveal className="access-copy">
-            <div className="eyebrow">07 / {gated ? "You're invited" : 'First flight'}</div>
+            <div className="eyebrow">08 / {gated ? "You're invited" : 'First flight'}</div>
             <h2 data-testid="text-access-headline">{gated ? 'Set up your business.' : 'Make your next mile count.'}</h2>
             <p data-testid="text-access-subhead">
               {gated
@@ -1381,6 +1498,7 @@ export default function Signup() {
       <Story />
       <Compare />
       <FAQ />
+      <Pricing />
       <AccessSection gated={showGatedSignup}>
         {showGatedSignup && inviteToken ? (
           <GatedSignupPanel

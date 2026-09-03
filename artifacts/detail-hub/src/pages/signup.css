@@ -113,6 +113,7 @@
 .site-shell .button-primary:disabled { opacity:.6; cursor:not-allowed; transform:none; }
 .site-shell .button-ghost { color:hsl(var(--foreground)); border-color:rgba(151,203,232,.25); background:rgba(255,255,255,.03); }
 .site-shell .button-ghost:hover { transform:translateY(-3px); border-color:rgba(151,203,232,.6); background:rgba(255,255,255,.08); }
+.site-shell .button-full { width:100%; }
 .site-shell .reveal { animation:site-shell-rise-in .8s cubic-bezier(.2,.75,.2,1) both; }
 .site-shell .reveal-delay-1 { animation-delay:.1s; }
 .site-shell .reveal-delay-2 { animation-delay:.2s; }
@@ -290,6 +291,33 @@
 .site-shell .faq-question.open svg{transform:rotate(180deg)}
 .site-shell .faq-answer{color:hsl(var(--muted-foreground));font-size:.88rem;line-height:1.6;max-width:600px;padding:0 35px 21px 0}
 
+/*
+ * Pricing (07 / Simple pricing) — layout borrowed from the infranex.framer.ai
+ * pricing pattern: eyebrow + pill badge row, big price, one-line description,
+ * then a shared feature checklist where every card lists the same rows and
+ * unincluded rows just dim rather than disappear, so the two tiers stay
+ * comparable at a glance. Cards reuse `.glass` for background/border and
+ * `.button-primary`/`.button-full` for the CTA — no new color tokens.
+ */
+.site-shell .pricing-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}
+.site-shell .pricing-card{display:flex;flex-direction:column;padding:36px;border-radius:22px}
+.site-shell .pricing-card-featured{border-color:hsl(var(--primary))}
+.site-shell .pricing-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.site-shell .pricing-badge{color:hsl(var(--muted-foreground));font-family:var(--app-font-mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid rgba(141,200,228,.3);border-radius:999px;padding:5px 11px;white-space:nowrap}
+.site-shell .pricing-card-featured .pricing-badge{color:hsl(var(--primary));border-color:hsl(var(--primary))}
+.site-shell .pricing-price{display:flex;align-items:baseline;gap:6px;margin-top:24px}
+.site-shell .pricing-price-value{font-size:3rem;letter-spacing:-.06em;line-height:1}
+.site-shell .pricing-price-suffix{color:hsl(var(--muted-foreground));font-size:.9rem}
+.site-shell .pricing-price-note{color:hsl(var(--muted-foreground));font-size:.78rem;margin:6px 0 0}
+.site-shell .pricing-description{color:hsl(var(--muted-foreground));font-size:.88rem;line-height:1.55;margin:14px 0 0}
+.site-shell .pricing-features{display:grid;gap:13px;margin:28px 0 32px;padding:20px 0 0;border-top:1px solid rgba(132,194,222,.17);list-style:none}
+.site-shell .pricing-feature-included,.site-shell .pricing-feature-excluded{display:flex;align-items:flex-start;gap:10px;font-size:.85rem;line-height:1.4}
+.site-shell .pricing-feature-included{color:hsl(var(--foreground))}
+.site-shell .pricing-feature-included svg{color:hsl(var(--primary));flex:0 0 auto;margin-top:1px}
+.site-shell .pricing-feature-excluded{color:hsl(var(--muted-foreground));opacity:.4}
+.site-shell .pricing-feature-excluded svg{color:hsl(var(--muted-foreground));flex:0 0 auto;margin-top:1px}
+.site-shell .pricing-card .button-full{margin-top:auto}
+
 .site-shell .access-section{padding-top:55px}
 .site-shell .access-panel{display:grid;grid-template-columns:.8fr 1.2fr;gap:40px;padding:46px;border-radius:28px;position:relative;overflow:hidden}
 .site-shell .access-panel::after{content:"";position:absolute;inset:auto -100px -180px auto;width:450px;height:450px;border-radius:50%;background:rgba(71,197,255,.11);filter:blur(4px)}
@@ -347,7 +375,9 @@
   .site-shell .hero{min-height:740px}
   .site-shell .hero-content{padding-top:155px}
   .site-shell .hero-footer{margin-top:80px}
-  .site-shell .section-heading,.site-shell .chaos-layout,.site-shell .story-grid,.site-shell .compare-grid,.site-shell .faq-grid,.site-shell .access-panel{grid-template-columns:1fr;display:grid;gap:32px}
+  .site-shell .section-heading,.site-shell .chaos-layout,.site-shell .story-grid,.site-shell .compare-grid,.site-shell .faq-grid,.site-shell .access-panel,.site-shell .pricing-grid{grid-template-columns:1fr;display:grid;gap:32px}
+  .site-shell .pricing-grid{gap:20px}
+  .site-shell .pricing-card{padding:28px 24px}
   .site-shell .section-heading{align-items:start;margin-bottom:34px}
   .site-shell .chaos-layout{gap:40px}
   .site-shell .workflow-board{min-height:780px}
