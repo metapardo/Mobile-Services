@@ -246,7 +246,7 @@ function lenisScrollToHash(hash: string) {
 }
 
 const navItems = [
-  { label: 'Why Rare Aer', href: '#why' },
+  { label: 'Why Mobull', href: '#why' },
   { label: 'How it works', href: '#workflow' },
   { label: 'For your business', href: '#features' },
   { label: 'FAQ', href: '#faq' },
@@ -254,20 +254,20 @@ const navItems = [
 
 const faqs = [
   {
-    q: 'What kind of businesses is Rare Aer built for?',
-    a: 'Rare Aer is for owners who take the work to the customer: detailers, pressure washing crews, mobile groomers, repair teams, and any operator who wins the day from behind a wheel.',
+    q: 'What kind of businesses is Mobull built for?',
+    a: 'Mobull is for owners who take the work to the customer: detailers, pressure washing crews, mobile groomers, repair teams, and any operator who wins the day from behind a wheel.',
   },
   {
-    q: 'Is Rare Aer a calendar or a payment tool?',
+    q: 'Is Mobull a calendar or a payment tool?',
     a: 'It connects both — then adds the missing layer. You can see the route, the time between stops, your expected take-home, and the follow-up that turns a one-off job into a repeatable book.',
   },
   {
     q: 'How does the business assessment work?',
-    a: 'Give us a few details about your average ticket, drive time, and weekly capacity. Rare Aer turns those inputs into a plain-language view of where your margin is hiding — and where it is leaking.',
+    a: 'Give us a few details about your average ticket, drive time, and weekly capacity. Mobull turns those inputs into a plain-language view of where your margin is hiding — and where it is leaking.',
   },
   {
     q: 'When can I start using it?',
-    a: 'Rare Aer is opening in small waves in 2026. Request access and we will follow up with the right early-access path for your business.',
+    a: 'Mobull is opening in small waves in 2026. Request access and we will follow up with the right early-access path for your business.',
   },
 ];
 
@@ -300,14 +300,14 @@ const pricingTiers: PricingTier[] = [
     badge: 'FREE TRIAL',
     price: 'Free',
     priceNote: 'for your first 14 days',
-    description: 'Try Rare Aer with real appointments — no card required.',
+    description: 'Try Mobull with real appointments — no card required.',
     featured: false,
   },
   {
     key: 'premium',
     name: 'Premium',
     badge: 'MOST POPULAR',
-    price: '$25',
+    price: '$40',
     priceSuffix: '/month',
     description: 'Everything you need to run your route like a business.',
     featured: true,
@@ -370,9 +370,9 @@ function Logo() {
       data-testid="link-brand"
     >
       <span className="brand-mark">
-        <img src={rareAerMark} alt="Rare Aer logo mark" data-testid="img-logo" />
+        <img src={rareAerMark} alt="Mobull logo mark" data-testid="img-logo" />
       </span>
-      <span>rare aer</span>
+      <span>mobull</span>
     </a>
   );
 }
@@ -501,7 +501,7 @@ function ChaosSection() {
               <span style={{ color: 'hsl(var(--primary))' }}>More knowing.</span>
             </h2>
             <p className="section-intro">
-              Texts in one hand. A calendar in the other. A payment notification you hope is right. Rare Aer gives
+              Texts in one hand. A calendar in the other. A payment notification you hope is right. Mobull gives
               all of it one clear point of view.
             </p>
           </Reveal>
@@ -709,7 +709,7 @@ const bentoCards: BentoCardData[] = [
         </div>
         <h3>The best route is the one that pays you twice.</h3>
         <p>
-          Rare Aer weighs location, job length, travel, and your actual overhead — then shows the route that makes
+          Mobull weighs location, job length, travel, and your actual overhead — then shows the route that makes
           the day make sense.
         </p>
         <div className="metric-display">
@@ -925,14 +925,14 @@ function Compare() {
           <div className="eyebrow">05 / The difference</div>
           <h2 className="section-title">Your business is not a group chat.</h2>
           <p className="compare-note">
-            You already have tools. Rare Aer is the connective tissue that helps them tell the same story.
+            You already have tools. Mobull is the connective tissue that helps them tell the same story.
           </p>
         </div>
         <RevealGroup className="compare-table" data-testid="comparison-table">
           <RevealItem className="compare-row header">
             <div>What you need to know</div>
             <div>Today</div>
-            <div>Rare Aer</div>
+            <div>Mobull</div>
           </RevealItem>
           {[
             ['Is this job worth the drive?', 'Maybe', 'Clear'],
@@ -1116,7 +1116,7 @@ function RequestAccessPanel({ noticeText, tokenRejected }: { noticeText: string;
           <CheckCircle2 size={27} />
         </div>
         <h3>You&rsquo;re on the radar.</h3>
-        <p>Thanks for your interest in Rare Aer. We&rsquo;ll email {submittedEmail ?? 'you'} if a spot opens up.</p>
+        <p>Thanks for your interest in Mobull. We&rsquo;ll email {submittedEmail ?? 'you'} if a spot opens up.</p>
         <p className="form-login-link">
           Already have an account?{' '}
           <Link href="/login" data-testid="link-login">
@@ -1387,12 +1387,12 @@ function AccessSection({ gated, children }: { gated: boolean; children: ReactNod
             <p data-testid="text-access-subhead">
               {gated
                 ? "You're one step from your first route — create your account and business below."
-                : "Rare Aer is invite-only while we build with owners who know the road. Tell us what you're building and we'll save you a seat."}
+                : "Mobull is invite-only while we build with owners who know the road. Tell us what you're building and we'll save you a seat."}
             </p>
             <img
               className="invite-image"
               src={inviteReferenceImage}
-              alt="Rare Aer early access invitation reference"
+              alt="Mobull early access invitation reference"
               data-testid="img-invite-reference"
             />
           </Reveal>
@@ -1408,7 +1408,7 @@ function Footer() {
     <footer className="footer">
       <div className="container-wide footer-row">
         <Logo />
-        <span className="footer-note">© 2026 Rare Aer · Know before you go.</span>
+        <span className="footer-note">© 2026 Mobull · Know before you go.</span>
         <div className="footer-links">
           <a
             href="#why"
@@ -1418,7 +1418,7 @@ function Footer() {
             }}
             data-testid="link-footer-why"
           >
-            Why Rare Aer
+            Why Mobull
           </a>
           <a
             href="#faq"
@@ -1516,7 +1516,7 @@ export default function Signup() {
             noticeText={
               inviteRejected
                 ? "That invite link didn't work — it may be expired or already used. Request a new one below and we'll follow up."
-                : "Rare Aer is invite-only right now. Request access below and we'll follow up if a spot opens up."
+                : "Mobull is invite-only right now. Request access below and we'll follow up if a spot opens up."
             }
           />
         )}
