@@ -1,69 +1,99 @@
-import { useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Redirect, useLocation, Link, useSearch } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { motion } from 'framer-motion';
-import { Loader2, Eye, EyeOff, CheckCircle2, AlertTriangle } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  BarChart3,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  CircleDollarSign,
+  CloudLightning,
+  CreditCard,
+  Eye,
+  EyeOff,
+  Gauge,
+  Loader2,
+  Menu,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  X,
+  Zap,
+} from 'lucide-react';
 import { useSignup, useRequestAccess, getGetAuthSessionQueryKey } from '@workspace/api-client-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { LandingPhotoScroll, type PhotoTile } from '@/components/landing-photo-scroll';
 import { useToast } from '@/hooks/use-toast';
 import { useSession } from '@/hooks/use-session';
 import { useQueryClient } from '@tanstack/react-query';
-import rareAirLockup from '@/assets/lockup.png';
+import rareAerMark from '@/assets/rare-aer-mark.png';
+import inviteReferenceImage from '@/assets/info_1788377152751.png';
+import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
+import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
+import './signup.css';
 
-import foamWashFerrariSquare from '@/assets/landing-photos/foam-wash-ferrari-square.jpg';
-import foamWashFerrariVertical from '@/assets/landing-photos/foam-wash-ferrari-vertical.jpg';
-import foamWashBmwSquare from '@/assets/landing-photos/foam-wash-bmw-square.jpg';
-import foamWashBmwVertical from '@/assets/landing-photos/foam-wash-bmw-vertical.jpg';
-import foamWashCitySquare from '@/assets/landing-photos/foam-wash-city-square.jpg';
-import foamWashCityVertical from '@/assets/landing-photos/foam-wash-city-vertical.jpg';
-import foamWashPorscheSquare from '@/assets/landing-photos/foam-wash-porsche-square.jpg';
-import foamWashPorscheVertical from '@/assets/landing-photos/foam-wash-porsche-vertical.jpg';
-import finishedDetailCoachSquare from '@/assets/landing-photos/finished-detail-coach-square.jpg';
-import finishedDetailCoachVertical from '@/assets/landing-photos/finished-detail-coach-vertical.jpg';
-import carshowBugattiSquare from '@/assets/landing-photos/carshow-bugatti-square.jpg';
-import carshowBugattiVertical from '@/assets/landing-photos/carshow-bugatti-vertical.jpg';
-import carshowPorscheSquare from '@/assets/landing-photos/carshow-porsche-square.jpg';
-import carshowPorscheVertical from '@/assets/landing-photos/carshow-porsche-vertical.jpg';
-import barberingVanInteriorSquare from '@/assets/landing-photos/barbering-van-interior-square.jpg';
-import barberingVanInteriorVertical from '@/assets/landing-photos/barbering-van-interior-vertical.jpg';
-import barberingVanExteriorSquare from '@/assets/landing-photos/barbering-van-exterior-square.jpg';
-import barberingVanExteriorVertical from '@/assets/landing-photos/barbering-van-exterior-vertical.jpg';
+// ─────────────────────────────────────────────────────────────────────────
+// This page is a full port of the `Rare-Aer-Marketing-Site` one-pager design
+// (see `Rare-Aer-Marketing-Site/artifacts/rare-aer/src/App.tsx`) — visual
+// structure and section content only, not that project's app shell
+// (its own QueryClientProvider/Router/Toaster are not brought in; `detail-hub`
+// already provides all of that at its own root in `App.tsx`).
+//
+// The one functional carry-over from the real, previous `/signup` page is
+// everything in the access-section state machine at the bottom of this file:
+// the no-token/rejected-token → real lead-capture `RequestAccessPanel` vs.
+// valid-`?invite=`-token → real account-creation `GatedSignupPanel` branch,
+// the already-authenticated → redirect-to-`/` check, and the invite-rejection
+// fallback + URL-clearing behavior. All of that is real, backend-wired logic
+// (`useRequestAccess`/`useSignup` from `@workspace/api-client-react`) restyled
+// to fit this design's `.access-panel.glass` / `.field-group` / `.access-form`
+// hand-styled markup instead of the shadcn `Form`/`FormField` components used
+// elsewhere in this app — this section intentionally does not use shadcn.
+// ─────────────────────────────────────────────────────────────────────────
 
-// Two even columns (9 tiles each) built from square + vertical-rectangle crops
-// of all 9 approved source photos — each photo contributes one tile to each
-// column (its square crop in one, its vertical crop in the other), so no
-// photo repeats within a column and every column shows all 9 photos once per
-// loop. See `LandingPhotoScroll` for the height/duration math that keeps the
-// loop seamless with this tile count.
-const LANDING_PHOTO_COLUMNS: [PhotoTile[], PhotoTile[]] = [
-  [
-    { src: foamWashFerrariSquare, shape: 'square' },
-    { src: foamWashBmwVertical, shape: 'vertical' },
-    { src: foamWashCitySquare, shape: 'square' },
-    { src: foamWashPorscheVertical, shape: 'vertical' },
-    { src: finishedDetailCoachSquare, shape: 'square' },
-    { src: carshowBugattiVertical, shape: 'vertical' },
-    { src: carshowPorscheSquare, shape: 'square' },
-    { src: barberingVanInteriorVertical, shape: 'vertical' },
-    { src: barberingVanExteriorSquare, shape: 'square' },
-  ],
-  [
-    { src: foamWashFerrariVertical, shape: 'vertical' },
-    { src: foamWashBmwSquare, shape: 'square' },
-    { src: foamWashCityVertical, shape: 'vertical' },
-    { src: foamWashPorscheSquare, shape: 'square' },
-    { src: finishedDetailCoachVertical, shape: 'vertical' },
-    { src: carshowBugattiSquare, shape: 'square' },
-    { src: carshowPorscheVertical, shape: 'vertical' },
-    { src: barberingVanInteriorSquare, shape: 'square' },
-    { src: barberingVanExteriorVertical, shape: 'vertical' },
-  ],
+type IconType = typeof CalendarDays;
+
+const navItems = [
+  { label: 'Why Rare Aer', href: '#why' },
+  { label: 'How it works', href: '#workflow' },
+  { label: 'For your business', href: '#features' },
+  { label: 'FAQ', href: '#faq' },
 ];
+
+const faqs = [
+  {
+    q: 'What kind of businesses is Rare Aer built for?',
+    a: 'Rare Aer is for owners who take the work to the customer: detailers, pressure washing crews, mobile groomers, repair teams, and any operator who wins the day from behind a wheel.',
+  },
+  {
+    q: 'Is Rare Aer a calendar or a payment tool?',
+    a: 'It connects both — then adds the missing layer. You can see the route, the time between stops, your expected take-home, and the follow-up that turns a one-off job into a repeatable book.',
+  },
+  {
+    q: 'How does the business assessment work?',
+    a: 'Give us a few details about your average ticket, drive time, and weekly capacity. Rare Aer turns those inputs into a plain-language view of where your margin is hiding — and where it is leaking.',
+  },
+  {
+    q: 'When can I start using it?',
+    a: 'Rare Aer is opening in small waves in 2026. Request access and we will follow up with the right early-access path for your business.',
+  },
+];
+
+const flowSteps: { label: string; copy: string; icon: IconType }[] = [
+  { label: 'Sign up', copy: 'Tell us what you do and where you roll.', icon: UserRound },
+  { label: 'Create account', copy: 'Set your hours, radius, and real costs.', icon: ShieldCheck },
+  { label: 'Create an appointment', copy: 'Turn an inquiry into a route-ready job.', icon: CalendarDays },
+  { label: 'Business assessment', copy: 'See the dollars before you say yes.', icon: BarChart3 },
+  { label: 'Take payment', copy: 'Close the loop and tee up the next one.', icon: CreditCard },
+];
+
+function scrollToAccess() {
+  document.getElementById('access')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 const signupSchema = z.object({
   name: z.string().min(1, 'Your name is required'),
@@ -97,74 +127,471 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-/**
- * Shared split-screen shell for every state this page can render (request
- * access / gated signup / request-access confirmation) — logo + adaptive
- * top-right label, eyebrow/headline/copy, the state-specific CTA area passed
- * in as `children`, then the fixed footer divider + feature labels, all on
- * the left; the auto-scrolling job-photo collage on the right.
- */
-function SignupLayout({ topRightLabel, children }: { topRightLabel: string; children: React.ReactNode }) {
+function Logo() {
   return (
-    <div className="min-h-dvh lg:h-dvh grid lg:grid-cols-2 bg-background overflow-hidden">
-      <div className="relative flex flex-col px-6 sm:px-12 lg:px-16 py-8">
-        <div className="flex items-center justify-between max-w-[480px]">
-          <img src={rareAirLockup} alt="Rare Air" className="h-10 w-auto" data-testid="img-logo" />
-          <span className="text-[11px] font-semibold tracking-[0.15em] text-muted-foreground uppercase" data-testid="text-top-label">
-            {topRightLabel}
-          </span>
-        </div>
-
-        <div className="flex-1 flex flex-col max-w-[480px] py-10">
-          <div className="flex-1 flex flex-col justify-center">
-            <p className="text-[12px] font-semibold tracking-[0.15em] text-primary uppercase mb-4" data-testid="text-eyebrow">
-              Smarter scheduling for the road
-            </p>
-            <h1
-              className="wordmark-gradient-text text-5xl sm:text-6xl font-bold tracking-tight mb-5"
-              data-testid="text-headline"
-            >
-              Rare Air
-            </h1>
-            <p className="text-[15px] leading-relaxed text-muted-foreground mb-8" data-testid="text-subhead">
-              Tells you if a job's worth taking before you drive, then helps you schedule smarter and see exactly
-              where your money's going.
-            </p>
-
-            <div className="w-full">{children}</div>
-          </div>
-
-          <div className="mt-auto pt-10">
-            <div className="h-px bg-border/60 mb-5" />
-
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              {['Know before you go', 'Schedule smarter', 'Track every dollar'].map((label) => (
-                <span
-                  key={label}
-                  className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative overflow-hidden">
-        <LandingPhotoScroll tiles={LANDING_PHOTO_COLUMNS} />
-      </div>
-    </div>
+    <a className="brand" href="#top" data-testid="link-brand">
+      <span className="brand-mark">
+        <img src={rareAerMark} alt="Rare Aer logo mark" data-testid="img-logo" />
+      </span>
+      <span>rare aer</span>
+    </a>
   );
 }
 
-/** The new no-token / rejected-token path: a real lead-capture form instead of a dead end. */
-function RequestAccessForm({ noticeText, tokenRejected }: { noticeText: string; tokenRejected: boolean }) {
+function Header({ open, setOpen }: { open: boolean; setOpen: (value: boolean) => void }) {
+  const go = (href: string) => {
+    setOpen(false);
+    document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' });
+  };
+  return (
+    <header className="topbar">
+      <div className="container-wide nav-row">
+        <Logo />
+        <nav className="nav-links" aria-label="Main navigation">
+          {navItems.map((item) => (
+            <a key={item.href} href={item.href} data-testid={`link-nav-${item.label.toLowerCase().replaceAll(' ', '-')}`}>
+              {item.label}
+            </a>
+          ))}
+        </nav>
+        <div className="nav-actions">
+          <Link href="/login" className="button-ghost nav-cta" data-testid="link-login-nav">
+            Log in
+          </Link>
+          <button className="button-primary nav-cta" onClick={scrollToAccess} data-testid="button-nav-request">
+            Request access <ArrowUpRight size={14} />
+          </button>
+        </div>
+        <button
+          className="menu-toggle"
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          onClick={() => setOpen(!open)}
+          data-testid="button-mobile-menu"
+        >
+          {open ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </div>
+      {open && (
+        <nav className="mobile-nav" aria-label="Mobile navigation">
+          {navItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={() => go(item.href)}
+              data-testid={`link-mobile-${item.label.toLowerCase().replaceAll(' ', '-')}`}
+            >
+              {item.label}
+            </a>
+          ))}
+          <Link href="/login" onClick={() => setOpen(false)} data-testid="link-login-mobile">
+            Log in
+          </Link>
+          <button className="button-primary" onClick={scrollToAccess} data-testid="button-mobile-request">
+            Request early access <ArrowUpRight size={15} />
+          </button>
+        </nav>
+      )}
+    </header>
+  );
+}
+
+/**
+ * The two pre-transcoded, web-ready cloud videos (H.264 + VP9, no audio) take
+ * the place of the source design's static storm-hero image, layered under the
+ * same `.hero-image` positioning/opacity/drift treatment.
+ */
+function Hero() {
+  return (
+    <section className="hero" id="top">
+      <video
+        className="hero-image"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        aria-hidden="true"
+        data-testid="video-storm-hero"
+      >
+        <source src={blueCloudsWebm} type="video/webm" />
+        <source src={blueCloudsMp4} type="video/mp4" />
+      </video>
+      <div className="container-wide hero-content">
+        <h1 className="text-foreground">
+          Smarter <em>by design.</em>
+          <br />
+          Simplified by AI.
+        </h1>
+        <p className="hero-copy reveal reveal-delay-2">
+          Assess your appointments&rsquo; ROI and book only the appointments that matter.
+        </p>
+        <div className="hero-actions reveal reveal-delay-3">
+          <button className="button-ghost" onClick={scrollToAccess} data-testid="button-hero-access">
+            Get Started Now <ArrowUpRight size={16} />
+          </button>
+        </div>
+        <div className="hero-footer reveal reveal-delay-3">
+          <p className="hero-caption">
+            The weather changes.
+            <br />
+            <strong>Your margin shouldn&rsquo;t.</strong>
+          </p>
+          <span className="scroll-cue">Scroll to forecast</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ChaosSection() {
+  return (
+    <section className="section" id="why">
+      <div className="container-wide chaos-layout">
+        <div>
+          <div className="eyebrow">01 / Get your day back</div>
+          <h2 className="section-title">
+            Less juggling.
+            <br />
+            <span style={{ color: 'hsl(var(--primary))' }}>More knowing.</span>
+          </h2>
+          <p className="section-intro">
+            Texts in one hand. A calendar in the other. A payment notification you hope is right. Rare Aer gives all
+            of it one clear point of view.
+          </p>
+          <div className="feature-list">
+            <div className="feature-line">
+              <CalendarDays className="feature-icon" size={21} />
+              <div>
+                <h3>One live route</h3>
+                <p>Your appointments, travel gaps, and capacity in the same picture.</p>
+              </div>
+            </div>
+            <div className="feature-line">
+              <Gauge className="feature-icon" size={21} />
+              <div>
+                <h3>A yes/no on every job</h3>
+                <p>Know what a booking is worth after fuel, time, and the trip home.</p>
+              </div>
+            </div>
+            <div className="feature-line">
+              <CircleDollarSign className="feature-icon" size={21} />
+              <div>
+                <h3>Every dollar accounted for</h3>
+                <p>Track deposits, balances, and next-job opportunities without spreadsheet archaeology.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard glass grid-lines" data-testid="card-route-dashboard">
+          <div className="dash-top">
+            <span className="dash-title">Tuesday / route forecast</span>
+            <span className="dash-date">OCT 14 · LIVE</span>
+          </div>
+          <div className="dash-main">
+            <div className="dash-card dash-card-wide">
+              <span className="dash-label">Projected take-home</span>
+              <div className="dash-big">$684.20</div>
+              <span className="dash-positive">↑ 12.8% vs. your usual Tuesday</span>
+              <div className="mini-bars" aria-label="Weekly projected revenue bars">
+                {[45, 65, 52, 79, 100, 71, 58].map((height, index) => (
+                  <span key={index} style={{ height: `${height}%` }} />
+                ))}
+              </div>
+              <span className="dash-label">
+                Mon&nbsp;&nbsp;&nbsp; Tue&nbsp;&nbsp;&nbsp; Wed&nbsp;&nbsp;&nbsp; Thu&nbsp;&nbsp;&nbsp; Fri&nbsp;&nbsp;&nbsp;
+                Sat&nbsp;&nbsp;&nbsp; Sun
+              </span>
+            </div>
+            <div className="dash-card">
+              <span className="dash-label">Route health</span>
+              <div className="dash-big">
+                92<span style={{ fontSize: '.9rem' }}>/100</span>
+              </div>
+              <span className="dash-positive">Clean route</span>
+            </div>
+            <div className="dash-card">
+              <span className="dash-label">Booked</span>
+              <div className="dash-big">
+                4<span style={{ fontSize: '.9rem' }}> stops</span>
+              </div>
+              <span className="dash-positive">1 opening left</span>
+            </div>
+          </div>
+          <div className="route-list">
+            {[
+              ['08:30', 'Luna Detail Co.', 'PAID'],
+              ['11:15', 'Moss + Mane Grooming', 'DUE'],
+              ['14:00', 'Cedarline Wash', 'QUOTE'],
+            ].map(([time, name, tag], index) => (
+              <div key={name}>
+                <div className="route-row">
+                  <span className="route-time">{time}</span>
+                  <span>{name}</span>
+                  <span className="route-tag">{tag}</span>
+                </div>
+                {index < 2 && <div className="route-line" />}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Workflow() {
+  return (
+    <section className="section workflow-section" id="workflow">
+      <div className="container-wide">
+        <div className="section-heading">
+          <div>
+            <div className="eyebrow">02 / From inquiry to income</div>
+            <h2 className="section-title">
+              The whole route,
+              <br />
+              connected.
+            </h2>
+          </div>
+          <p className="section-intro">
+            No more handoffs between five tabs. Each step adds context to the next, so your business gets smarter
+            with every booking.
+          </p>
+        </div>
+        <div className="workflow-board glass grid-lines" data-testid="workflow-board">
+          <div className="workflow-head">
+            <span className="mono muted" style={{ fontSize: '.68rem' }}>
+              RA / OPERATING SYSTEM
+            </span>
+            <p>Built for the moment a customer says &ldquo;what about Thursday?&rdquo;</p>
+          </div>
+          <div className="workflow-track">
+            <svg className="journey-connectors" viewBox="0 0 1100 500" preserveAspectRatio="none" aria-hidden="true">
+              <path className="journey-path-shadow" d="M 198 130 C 265 130, 255 300, 336 300" />
+              <path className="journey-path-shadow" d="M 430 382 C 505 382, 470 192, 556 192" />
+              <path className="journey-path-shadow" d="M 650 192 C 730 192, 700 397, 775 397" />
+              <path className="journey-path-shadow" d="M 869 397 C 935 397, 885 130, 996 130" />
+              <path className="journey-path" d="M 198 130 C 265 130, 255 300, 336 300" />
+              <path className="journey-path" d="M 430 382 C 505 382, 470 192, 556 192" />
+              <path className="journey-path" d="M 650 192 C 730 192, 700 397, 775 397" />
+              <path className="journey-path" d="M 869 397 C 935 397, 885 130, 996 130" />
+            </svg>
+            {flowSteps.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <div className={`flow-node flow-node-${index + 1}`} key={step.label} data-testid={`workflow-step-${index + 1}`}>
+                  <div className="flow-node-top">
+                    <span className="flow-number">0{index + 1}</span>
+                    <span className="flow-status">{index === 4 ? 'Complete' : 'Milestone'}</span>
+                  </div>
+                  <Icon className="flow-icon" size={20} />
+                  <div>
+                    <h3>{step.label}</h3>
+                    <p>{step.copy}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureBento() {
+  return (
+    <section className="section" id="features">
+      <div className="container-wide">
+        <div className="section-heading">
+          <div>
+            <div className="eyebrow">03 / Built for the road</div>
+            <h2 className="section-title">
+              A clearer read
+              <br />
+              on your work.
+            </h2>
+          </div>
+          <p className="section-intro">
+            Not more software to babysit. Just the signal you need to make a good call, then keep moving.
+          </p>
+        </div>
+        <div className="feature-bento">
+          <article className="bento-card bento-tall glass" data-testid="card-feature-forecast">
+            <CloudLightning size={22} style={{ color: 'hsl(var(--primary))' }} />
+            <div className="eyebrow" style={{ marginTop: 28 }}>
+              Route intelligence
+            </div>
+            <h3>The best route is the one that pays you twice.</h3>
+            <p>
+              Rare Aer weighs location, job length, travel, and your actual overhead — then shows the route that
+              makes the day make sense.
+            </p>
+            <div className="metric-display">
+              <strong>+21%</strong>
+              <span>route margin in a typical first month</span>
+            </div>
+          </article>
+          <article className="bento-card bento-accent" data-testid="card-feature-assessment">
+            <Sparkles size={22} />
+            <div className="eyebrow" style={{ marginTop: 28 }}>
+              Business assessment
+            </div>
+            <h3>Turn your gut feeling into a number.</h3>
+            <p>Answer a few real questions. Get an honest view of the jobs, zones, and hours worth protecting.</p>
+          </article>
+          <article className="bento-card bento-small glass" data-testid="card-feature-followups">
+            <Zap size={22} style={{ color: 'hsl(var(--accent))' }} />
+            <div className="eyebrow" style={{ marginTop: 28 }}>
+              Repeatable by design
+            </div>
+            <h3>One job should not be the end of the story.</h3>
+            <p>Keep the next visit visible while the current one is still fresh.</p>
+            <div className="inline-stat">
+              <div>
+                <strong>6</strong>
+                <span>follow-ups queued</span>
+              </div>
+              <div>
+                <strong>3</strong>
+                <span>routes ready</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Story() {
+  return (
+    <section className="section story-section">
+      <div className="container-wide story-grid">
+        <div>
+          <div className="eyebrow">04 / In the field</div>
+          <blockquote className="story-quote">
+            &ldquo;I stopped asking <span>&lsquo;can I fit it in?&rsquo;</span> and started asking &lsquo;does it
+            pay?&rsquo;&rdquo;
+          </blockquote>
+          <div className="story-byline">
+            <div className="avatar">JM</div>
+            <div>
+              <strong>Jules Moreno</strong>
+              <small>Owner, Northline Mobile Detail · Phoenix, AZ</small>
+            </div>
+          </div>
+        </div>
+        <div className="story-proof">
+          <div className="proof-card glass">
+            <strong>5.3 hrs</strong>
+            <span>saved per week in back-and-forth</span>
+          </div>
+          <div className="proof-card glass">
+            <strong>$412</strong>
+            <span>recovered from forgotten balances</span>
+          </div>
+          <div className="proof-card glass">
+            <strong>8 jobs</strong>
+            <span>added without adding a workday</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Compare() {
+  return (
+    <section className="section">
+      <div className="container-wide compare-grid">
+        <div>
+          <div className="eyebrow">05 / The difference</div>
+          <h2 className="section-title">Your business is not a group chat.</h2>
+          <p className="compare-note">
+            You already have tools. Rare Aer is the connective tissue that helps them tell the same story.
+          </p>
+        </div>
+        <div className="compare-table" data-testid="comparison-table">
+          <div className="compare-row header">
+            <div>What you need to know</div>
+            <div>Today</div>
+            <div>Rare Aer</div>
+          </div>
+          {[
+            ['Is this job worth the drive?', 'Maybe', 'Clear'],
+            ['What did I actually make?', 'Somewhere', 'Tracked'],
+            ['When should I follow up?', 'Remember', 'Queued'],
+            ['Can I do one more stop?', 'Guess', 'Forecast'],
+          ].map(([label, oldValue, newValue]) => (
+            <div className="compare-row" key={label}>
+              <div>{label}</div>
+              <div className="no">{oldValue}</div>
+              <div className="yes">
+                <Check size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                {newValue}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FAQ() {
+  const [open, setOpen] = useState<number | null>(0);
+  return (
+    <section className="section" id="faq">
+      <div className="container-wide faq-grid">
+        <div>
+          <div className="eyebrow">06 / Good questions</div>
+          <h2 className="section-title">
+            No fog.
+            <br />
+            No fine print.
+          </h2>
+          <p className="compare-note">Still curious? That is a healthy operating instinct. Here is the short version.</p>
+        </div>
+        <div className="faq-list">
+          {faqs.map((faq, index) => (
+            <div className="faq-item" key={faq.q}>
+              <button
+                className={`faq-question ${open === index ? 'open' : ''}`}
+                onClick={() => setOpen(open === index ? null : index)}
+                aria-expanded={open === index}
+                data-testid={`button-faq-${index + 1}`}
+              >
+                <span>{faq.q}</span>
+                <ChevronDown size={18} />
+              </button>
+              {open === index && (
+                <div className="faq-answer" data-testid={`text-faq-answer-${index + 1}`}>
+                  {faq.a}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The real no-token / rejected-token path: a real lead-capture form, wired to
+ * the real `useRequestAccess` mutation — restyled to this design's
+ * `.field-group`/`.access-form` markup instead of shadcn `Form`/`FormField`.
+ */
+function RequestAccessPanel({ noticeText, tokenRejected }: { noticeText: string; tokenRejected: boolean }) {
   const { toast } = useToast();
   const [submitted, setSubmitted] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
 
-  const form = useForm<RequestAccessFormValues>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<RequestAccessFormValues>({
     resolver: zodResolver(requestAccessSchema),
     defaultValues: { email: '', businessName: '', honeypot: '' },
   });
@@ -194,144 +621,113 @@ function RequestAccessForm({ noticeText, tokenRejected }: { noticeText: string; 
 
   if (submitted) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: 'easeOut' }}
-        className="flex flex-col items-start gap-3 py-2"
-        data-testid="status-request-access-success"
-      >
-        <div className="w-11 h-11 rounded-full gradient-btn flex items-center justify-center shrink-0">
-          <CheckCircle2 className="w-6 h-6 text-white" />
+      <div className="success-state" data-testid="status-request-access-success">
+        <div className="success-icon">
+          <CheckCircle2 size={27} />
         </div>
-        <h2 className="text-[26px] font-semibold tracking-tight text-foreground">Request received</h2>
-        <p className="text-[13px] text-muted-foreground max-w-[360px]">
-          Thanks for your interest in Rare Air. We'll email {submittedEmail ?? 'you'} if a spot opens up.
-        </p>
-        <p className="text-[13px] text-muted-foreground pt-2">
+        <h3>You&rsquo;re on the radar.</h3>
+        <p>Thanks for your interest in Rare Aer. We&rsquo;ll email {submittedEmail ?? 'you'} if a spot opens up.</p>
+        <p className="form-login-link">
           Already have an account?{' '}
-          <Link href="/login" className="text-primary font-medium" data-testid="link-login">
+          <Link href="/login" data-testid="link-login">
             Log in
           </Link>
         </p>
-      </motion.div>
+      </div>
     );
   }
 
   return (
-    <div>
+    <form className="access-form" onSubmit={handleSubmit(onSubmit)} data-testid="form-request-access">
       {tokenRejected ? (
-        <div
-          className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 mb-4"
-          data-testid="text-request-access-notice"
-        >
-          <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-          <p className="text-[13px] text-foreground">{noticeText}</p>
+        <div className="form-notice rejected" data-testid="text-request-access-notice">
+          <AlertTriangle size={16} />
+          <p>{noticeText}</p>
         </div>
       ) : (
-        <p className="text-[13px] text-muted-foreground mb-4" data-testid="text-request-access-notice">
+        <p className="form-notice" data-testid="text-request-access-notice">
           {noticeText}
         </p>
       )}
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="w-full space-y-4" data-testid="form-request-access">
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email</FormLabel>
-                <FormControl>
-                  <Input
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@business.com"
-                    className="h-11 focus-visible:ring-2 focus-visible:ring-offset-0"
-                    data-testid="input-request-email"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
-          <FormField
-            control={form.control}
-            name="businessName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Business name</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Acme Detailing (optional)"
-                    className="h-11 focus-visible:ring-2 focus-visible:ring-offset-0"
-                    data-testid="input-request-business-name"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>Optional — helps us prioritize.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+      <div className="field-group">
+        <label htmlFor="request-email">Work email</label>
+        <input
+          id="request-email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@yourbusiness.com"
+          data-testid="input-request-email"
+          {...register('email')}
+        />
+        {errors.email && <span className="field-error">{errors.email.message}</span>}
+      </div>
 
-          {/* Honeypot: visually hidden and out of tab order, never seen by real
-              visitors. Positioned off-screen (not display:none — some bots
-              specifically skip display:none fields) so it still exists in the
-              DOM for less careful automated submitters to fill in. */}
-          <div className="absolute -left-[9999px] top-auto w-px h-px overflow-hidden" aria-hidden="true">
-            <FormField
-              control={form.control}
-              name="honeypot"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Company website</FormLabel>
-                  <FormControl>
-                    <Input tabIndex={-1} autoComplete="off" data-testid="input-honeypot" {...field} />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-          </div>
+      <div className="field-group">
+        <label htmlFor="request-business-name">Business name</label>
+        <input
+          id="request-business-name"
+          placeholder="Northline Mobile Detail (optional)"
+          data-testid="input-request-business-name"
+          {...register('businessName')}
+        />
+      </div>
 
-          <Button
-            type="submit"
-            size="lg"
-            className="min-h-[48px] w-full gradient-btn mt-2"
-            disabled={requestAccessMutation.isPending}
-            data-testid="button-request-access"
-          >
-            {requestAccessMutation.isPending ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
-              </>
-            ) : (
-              'Request Access'
-            )}
-          </Button>
+      {/* Honeypot: visually hidden and out of tab order, never seen by real
+          visitors. Positioned off-screen (not display:none — some bots
+          specifically skip display:none fields) so it still exists in the
+          DOM for less careful automated submitters to fill in. */}
+      <div className="field-group field-group-honeypot" aria-hidden="true">
+        <label htmlFor="request-honeypot">Company website</label>
+        <input id="request-honeypot" tabIndex={-1} autoComplete="off" data-testid="input-honeypot" {...register('honeypot')} />
+      </div>
 
-          <p className="text-[13px] text-muted-foreground pt-2">
-            Already have an account?{' '}
-            <Link href="/login" className="text-primary font-medium" data-testid="link-login">
-              Log in
-            </Link>
-          </p>
-        </form>
-      </Form>
-    </div>
+      <button
+        className="button-primary form-submit"
+        type="submit"
+        disabled={requestAccessMutation.isPending}
+        data-testid="button-request-access"
+      >
+        {requestAccessMutation.isPending ? (
+          <>
+            <Loader2 className="animate-spin" size={16} /> Submitting…
+          </>
+        ) : (
+          <>
+            Request access <Send size={15} />
+          </>
+        )}
+      </button>
+      <p className="form-fineprint">No sales sequence. No credit card. Just a thoughtful follow-up from a human.</p>
+      <p className="form-login-link">
+        Already have an account?{' '}
+        <Link href="/login" data-testid="link-login">
+          Log in
+        </Link>
+      </p>
+    </form>
   );
 }
 
-/** The real gated account-creation form, shown whenever an `?invite=` token is present. */
-function GatedSignupForm({ inviteToken, onInviteRejected }: { inviteToken: string; onInviteRejected: () => void }) {
+/**
+ * The real gated account-creation form, shown whenever an `?invite=` token is
+ * present — wired to the real `useSignup` mutation, restyled to this design's
+ * markup. Token validity can only be discovered at submit time (single-use
+ * atomic claim on the backend, by design) — see `onInviteRejected`.
+ */
+function GatedSignupPanel({ inviteToken, onInviteRejected }: { inviteToken: string; onInviteRejected: () => void }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showPassword, setShowPassword] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
 
-  const form = useForm<SignupFormValues>({
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+  } = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: { name: '', email: '', password: '', organizationName: '', organizationSlug: '' },
   });
@@ -368,160 +764,174 @@ function GatedSignupForm({ inviteToken, onInviteRejected }: { inviteToken: strin
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="w-full space-y-4" data-testid="form-signup">
-        <FormField
-          control={form.control}
-          name="organizationName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Business name</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="Acme Detailing"
-                  className="h-11 focus-visible:ring-2 focus-visible:ring-offset-0"
-                  data-testid="input-organization-name"
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    if (!slugTouched) {
-                      form.setValue('organizationSlug', slugify(e.target.value), { shouldValidate: true });
-                    }
-                  }}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+    <form className="access-form" onSubmit={handleSubmit(onSubmit)} data-testid="form-signup">
+      <div className="field-group">
+        <label htmlFor="organization-name">Business name</label>
+        <input
+          id="organization-name"
+          placeholder="Northline Mobile Detail"
+          data-testid="input-organization-name"
+          {...register('organizationName')}
+          onChange={(e) => {
+            setValue('organizationName', e.target.value, { shouldValidate: true });
+            if (!slugTouched) {
+              setValue('organizationSlug', slugify(e.target.value), { shouldValidate: true });
+            }
+          }}
         />
+        {errors.organizationName && <span className="field-error">{errors.organizationName.message}</span>}
+      </div>
 
-        <FormField
-          control={form.control}
-          name="organizationSlug"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Business URL</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="acme-detailing"
-                  className="h-11 focus-visible:ring-2 focus-visible:ring-offset-0"
-                  data-testid="input-organization-slug"
-                  {...field}
-                  onChange={(e) => {
-                    setSlugTouched(true);
-                    field.onChange(slugify(e.target.value));
-                  }}
-                />
-              </FormControl>
-              <FormDescription>Lowercase letters, numbers, and hyphens only.</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
+      <div className="field-group">
+        <label htmlFor="organization-slug">Business URL</label>
+        <input
+          id="organization-slug"
+          placeholder="northline-mobile-detail"
+          data-testid="input-organization-slug"
+          {...register('organizationSlug')}
+          onChange={(e) => {
+            setSlugTouched(true);
+            setValue('organizationSlug', slugify(e.target.value), { shouldValidate: true });
+          }}
         />
-
-        <div className="flex items-center gap-3 pt-1 pb-1">
-          <span className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase whitespace-nowrap">
-            About you
+        {errors.organizationSlug ? (
+          <span className="field-error">{errors.organizationSlug.message}</span>
+        ) : (
+          <span className="field-error" style={{ color: 'hsl(var(--muted-foreground))' }}>
+            Lowercase letters, numbers, and hyphens only.
           </span>
-          <div className="h-px flex-1 bg-border/60" />
+        )}
+      </div>
+
+      <div className="field-group">
+        <label htmlFor="signup-name">Your name</label>
+        <input id="signup-name" placeholder="Jordan Smith" data-testid="input-name" {...register('name')} />
+        {errors.name && <span className="field-error">{errors.name.message}</span>}
+      </div>
+
+      <div className="field-group">
+        <label htmlFor="signup-email">Email</label>
+        <input
+          id="signup-email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@yourbusiness.com"
+          data-testid="input-email"
+          {...register('email')}
+        />
+        {errors.email && <span className="field-error">{errors.email.message}</span>}
+      </div>
+
+      <div className="field-group">
+        <label htmlFor="signup-password">Password</label>
+        <div style={{ position: 'relative' }}>
+          <input
+            id="signup-password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder="At least 8 characters"
+            data-testid="input-password"
+            style={{ paddingRight: 42 }}
+            {...register('password')}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            style={{
+              position: 'absolute',
+              right: 4,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'transparent',
+              border: 0,
+              padding: 8,
+              color: 'hsl(var(--muted-foreground))',
+              display: 'grid',
+              placeItems: 'center',
+            }}
+            tabIndex={-1}
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         </div>
+        {errors.password && <span className="field-error">{errors.password.message}</span>}
+      </div>
 
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Your name</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="Jordan Smith"
-                  className="h-11 focus-visible:ring-2 focus-visible:ring-offset-0"
-                  data-testid="input-name"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      <button className="button-primary form-submit" type="submit" disabled={signupMutation.isPending} data-testid="button-signup">
+        {signupMutation.isPending ? (
+          <>
+            <Loader2 className="animate-spin" size={16} /> Creating account…
+          </>
+        ) : (
+          <>
+            Create account <Send size={15} />
+          </>
+        )}
+      </button>
 
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@business.com"
-                  className="h-11 focus-visible:ring-2 focus-visible:ring-offset-0"
-                  data-testid="input-email"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      <p className="form-login-link">
+        Already have an account?{' '}
+        <Link href="/login" data-testid="link-login">
+          Log in
+        </Link>
+      </p>
+    </form>
+  );
+}
 
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="new-password"
-                    placeholder="At least 8 characters"
-                    data-testid="input-password"
-                    className="h-11 pr-10 focus-visible:ring-2 focus-visible:ring-offset-0"
-                    {...field}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-0 top-0 h-11 w-11 flex items-center justify-center text-muted-foreground"
-                    tabIndex={-1}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+/**
+ * "07 / First flight" section shell — the copy column adapts to whether a
+ * valid invite token is in play, but the actual form rendered as `children`
+ * is decided by `Signup()` below using the exact same state machine the
+ * previous version of this page used.
+ */
+function AccessSection({ gated, children }: { gated: boolean; children: ReactNode }) {
+  return (
+    <section className="section access-section" id="access">
+      <div className="container-wide">
+        <div className="access-panel glass">
+          <div className="access-copy">
+            <div className="eyebrow">07 / {gated ? "You're invited" : 'First flight'}</div>
+            <h2 data-testid="text-access-headline">{gated ? 'Set up your business.' : 'Make your next mile count.'}</h2>
+            <p data-testid="text-access-subhead">
+              {gated
+                ? "You're one step from your first route — create your account and business below."
+                : "Rare Aer is invite-only while we build with owners who know the road. Tell us what you're building and we'll save you a seat."}
+            </p>
+            <img
+              className="invite-image"
+              src={inviteReferenceImage}
+              alt="Rare Aer early access invitation reference"
+              data-testid="img-invite-reference"
+            />
+          </div>
+          {children}
+        </div>
+      </div>
+    </section>
+  );
+}
 
-        <Button
-          type="submit"
-          size="lg"
-          className="min-h-[48px] w-full gradient-btn mt-2"
-          disabled={signupMutation.isPending}
-          data-testid="button-signup"
-        >
-          {signupMutation.isPending ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" /> Creating account…
-            </>
-          ) : (
-            'Create Account'
-          )}
-        </Button>
-
-        <p className="text-[13px] text-muted-foreground pt-2">
-          Already have an account?{' '}
-          <Link href="/login" className="text-primary font-medium" data-testid="link-login">
-            Log in
-          </Link>
-        </p>
-      </form>
-    </Form>
+function Footer() {
+  return (
+    <footer className="footer">
+      <div className="container-wide footer-row">
+        <Logo />
+        <span className="footer-note">© 2026 Rare Aer · Know before you go.</span>
+        <div className="footer-links">
+          <a href="#why" data-testid="link-footer-why">
+            Why Rare Aer
+          </a>
+          <a href="#faq" data-testid="link-footer-faq">
+            FAQ
+          </a>
+          <a href="#top" className="back-top" data-testid="link-back-top">
+            Back to top <ArrowUpRight size={12} />
+          </a>
+        </div>
+      </div>
+    </footer>
   );
 }
 
@@ -529,8 +939,23 @@ export default function Signup() {
   const search = useSearch();
   const [, setLocation] = useLocation();
   const [inviteRejected, setInviteRejected] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const inviteToken = new URLSearchParams(search).get('invite');
+
+  // The source marketing design relies on a global `html { scroll-behavior:
+  // smooth }` for its plain `<a href="#section">` nav/footer links. That rule
+  // is intentionally not in the scoped `signup.css` (a bare `html` selector
+  // can't be scoped to `.site-shell` and would leak to every other route), so
+  // it's applied here instead, directly on `document.documentElement`, only
+  // while this page is mounted, and reverted on unmount.
+  useEffect(() => {
+    const previous = document.documentElement.style.scrollBehavior;
+    document.documentElement.style.scrollBehavior = 'smooth';
+    return () => {
+      document.documentElement.style.scrollBehavior = previous;
+    };
+  }, []);
 
   const { data: session, isPending: sessionPending } = useSession();
 
@@ -544,36 +969,43 @@ export default function Signup() {
   // design, to stay race-safe on single-use tokens). So "invalid, expired, or
   // used" can only ever be discovered when the gated form below is actually
   // submitted and the API rejects it (`onInviteRejected` from
-  // `GatedSignupForm`) — never pre-validated on load.
+  // `GatedSignupPanel`) — never pre-validated on load.
   const showGatedSignup = Boolean(inviteToken) && !inviteRejected;
 
-  if (showGatedSignup && inviteToken) {
-    return (
-      <SignupLayout topRightLabel="You're Invited — 2026">
-        <GatedSignupForm
-          inviteToken={inviteToken}
-          onInviteRejected={() => {
-            setInviteRejected(true);
-            // The token turned out invalid/expired/used — drop it from the
-            // URL rather than leaving a stale `?invite=` hanging around
-            // once we've fallen back to the request-access form.
-            setLocation('/signup', { replace: true });
-          }}
-        />
-      </SignupLayout>
-    );
-  }
-
   return (
-    <SignupLayout topRightLabel="Early Access — 2026">
-      <RequestAccessForm
-        tokenRejected={inviteRejected}
-        noticeText={
-          inviteRejected
-            ? "That invite link didn't work — it may be expired or already used. Request a new one below and we'll follow up."
-            : "Rare Air is invite-only right now. Request access below and we'll follow up if a spot opens up."
-        }
-      />
-    </SignupLayout>
+    <div className="site-shell">
+      <Header open={menuOpen} setOpen={setMenuOpen} />
+      <Hero />
+      <ChaosSection />
+      <Workflow />
+      <FeatureBento />
+      <Story />
+      <Compare />
+      <FAQ />
+      <AccessSection gated={showGatedSignup}>
+        {showGatedSignup && inviteToken ? (
+          <GatedSignupPanel
+            inviteToken={inviteToken}
+            onInviteRejected={() => {
+              setInviteRejected(true);
+              // The token turned out invalid/expired/used — drop it from the
+              // URL rather than leaving a stale `?invite=` hanging around
+              // once we've fallen back to the request-access form.
+              setLocation('/signup', { replace: true });
+            }}
+          />
+        ) : (
+          <RequestAccessPanel
+            tokenRejected={inviteRejected}
+            noticeText={
+              inviteRejected
+                ? "That invite link didn't work — it may be expired or already used. Request a new one below and we'll follow up."
+                : "Rare Aer is invite-only right now. Request access below and we'll follow up if a spot opens up."
+            }
+          />
+        )}
+      </AccessSection>
+      <Footer />
+    </div>
   );
 }
