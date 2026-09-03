@@ -1,8 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Redirect, useLocation, Link, useSearch } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import Lenis from 'lenis';
+import {
+  motion,
+  useReducedMotion,
+  useScroll,
+  useTransform,
+  type Variants,
+} from 'framer-motion';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -57,6 +65,186 @@ import './signup.css';
 
 type IconType = typeof CalendarDays;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Motion helpers (scroll-reveal-on-view)
+//
+// Reverse-engineered from the Framer-template lineage this page's marketing
+// design already shares: elements fade from dim to full brightness with a
+// slight upward settle as they cross into the viewport, playing once and
+// never replaying on scroll-up-then-down. `Reveal` handles a single block;
+// `RevealGroup`/`RevealItem` handle a parent whose children should stagger
+// in one after another (each ~0.08s after the previous).
+//
+// `prefers-reduced-motion` short-circuits both to plain, un-animated markup
+// — content just renders at full opacity/position, matching the intent of
+// this file's own `@media(prefers-reduced-motion:reduce)` rule in
+// `signup.css`.
+// ─────────────────────────────────────────────────────────────────────────
+
+const REVEAL_EASE: [number, number, number, number] = [0.2, 0.75, 0.2, 1];
+const REVEAL_VIEWPORT = { once: true, margin: '-100px' } as const;
+
+interface RevealBaseProps {
+  children: ReactNode;
+  className?: string;
+  'data-testid'?: string;
+}
+
+function Reveal({
+  children,
+  className,
+  delay = 0,
+  y = 24,
+  scale,
+  duration = 0.6,
+  ...rest
+}: RevealBaseProps & {
+  delay?: number;
+  y?: number;
+  scale?: number;
+  duration?: number;
+}) {
+  const prefersReducedMotion = useReducedMotion();
+
+  if (prefersReducedMotion) {
+    return (
+      <div className={className} {...rest}>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      className={className}
+      initial={{ opacity: 0, y, ...(scale ? { scale } : {}) }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      viewport={REVEAL_VIEWPORT}
+      transition={{ duration, delay, ease: REVEAL_EASE }}
+      {...rest}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+const staggerContainerVariants: Variants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+
+const staggerItemVariants: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: REVEAL_EASE } },
+};
+
+/** Parent for a staggered group — see `RevealItem` for its children. */
+function RevealGroup({ children, className, ...rest }: RevealBaseProps) {
+  const prefersReducedMotion = useReducedMotion();
+
+  if (prefersReducedMotion) {
+    return (
+      <div className={className} {...rest}>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      className={className}
+      initial="hidden"
+      whileInView="visible"
+      viewport={REVEAL_VIEWPORT}
+      variants={staggerContainerVariants}
+      {...rest}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/** One staggered child of `RevealGroup` — inherits "hidden"/"visible" from its parent. */
+function RevealItem({ children, className, ...rest }: RevealBaseProps) {
+  const prefersReducedMotion = useReducedMotion();
+
+  if (prefersReducedMotion) {
+    return (
+      <div className={className} {...rest}>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <motion.div className={className} variants={staggerItemVariants} {...rest}>
+      {children}
+    </motion.div>
+  );
+}
+
+/** Matches `signup.css`'s `@media(min-width:821px)` desktop threshold. */
+const DESKTOP_BREAKPOINT_PX = 821;
+
+function useIsDesktopViewport(breakpoint: number): boolean | null {
+  const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const mql = window.matchMedia(`(min-width: ${breakpoint}px)`);
+    // Belt-and-suspenders: some resize paths (programmatic viewport changes,
+    // certain browser automation/emulation tools) don't reliably fire a
+    // MediaQueryList's `change` event even though `.matches` itself is
+    // already current — a plain `resize` listener catches those too.
+    const onChange = () => setIsDesktop(window.innerWidth >= breakpoint);
+    onChange();
+    mql.addEventListener('change', onChange);
+    window.addEventListener('resize', onChange);
+    return () => {
+      mql.removeEventListener('change', onChange);
+      window.removeEventListener('resize', onChange);
+    };
+  }, [breakpoint]);
+
+  return isDesktop;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Lenis smooth scroll
+//
+// Scoped exactly like the page's dark theme / the prior scroll-behavior
+// effect: initialized in a `useEffect` on `Signup()` mount, destroyed on
+// unmount, never touched globally (no app-root/`main.tsx` changes) — other
+// routes (`/calendar`, `/clients`, `/checkout`, etc.) keep native scroll.
+//
+// `activeLenis` is a module-level singleton rather than context/props
+// because only one `Signup()` is ever mounted at a time (same pattern this
+// file already uses for `scrollToAccess()` being a plain module function
+// callable from `Header`/`Footer` without prop-drilling). It's set/cleared
+// by `Signup()`'s Lenis effect below.
+// ─────────────────────────────────────────────────────────────────────────
+
+let activeLenis: Lenis | null = null;
+
+function lenisScrollToHash(hash: string) {
+  const target = document.querySelector(hash) as HTMLElement | null;
+  if (!target) return;
+  if (activeLenis) {
+    // Lenis caches document height at mount and via its own ResizeObserver,
+    // but this page's tall pinned `FeatureBento` runway (~260vh) can settle
+    // into its final layout after that initial measurement, leaving Lenis's
+    // cached scroll limit shorter than the page actually is — any target
+    // below that stale limit (e.g. #faq, the footer) then silently fails to
+    // scroll at all. Forcing a resize immediately before every programmatic
+    // scroll keeps this correct regardless of timing.
+    activeLenis.resize();
+    activeLenis.scrollTo(target, { offset: 0 });
+  } else {
+    // Lenis hasn't mounted yet (or already unmounted) — fall back to native
+    // smooth scroll rather than doing nothing.
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 const navItems = [
   { label: 'Why Rare Aer', href: '#why' },
   { label: 'How it works', href: '#workflow' },
@@ -86,13 +274,13 @@ const faqs = [
 const flowSteps: { label: string; copy: string; icon: IconType }[] = [
   { label: 'Sign up', copy: 'Tell us what you do and where you roll.', icon: UserRound },
   { label: 'Create account', copy: 'Set your hours, radius, and real costs.', icon: ShieldCheck },
-  { label: 'Create an appointment', copy: 'Turn an inquiry into a route-ready job.', icon: CalendarDays },
-  { label: 'Business assessment', copy: 'See the dollars before you say yes.', icon: BarChart3 },
+  { label: 'Book an Appointment', copy: 'Aer will recommend a time that makes sense for your business.', icon: CalendarDays },
+  { label: 'Fuel Gauge', copy: 'See if the appointment is worth the trip.', icon: BarChart3 },
   { label: 'Take payment', copy: 'Close the loop and tee up the next one.', icon: CreditCard },
 ];
 
 function scrollToAccess() {
-  document.getElementById('access')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  lenisScrollToHash('#access');
 }
 
 const signupSchema = z.object({
@@ -129,7 +317,15 @@ function slugify(value: string): string {
 
 function Logo() {
   return (
-    <a className="brand" href="#top" data-testid="link-brand">
+    <a
+      className="brand"
+      href="#top"
+      onClick={(e) => {
+        e.preventDefault();
+        lenisScrollToHash('#top');
+      }}
+      data-testid="link-brand"
+    >
       <span className="brand-mark">
         <img src={rareAerMark} alt="Rare Aer logo mark" data-testid="img-logo" />
       </span>
@@ -139,9 +335,10 @@ function Logo() {
 }
 
 function Header({ open, setOpen }: { open: boolean; setOpen: (value: boolean) => void }) {
-  const go = (href: string) => {
+  const go = (e: ReactMouseEvent, href: string) => {
+    e.preventDefault();
     setOpen(false);
-    document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' });
+    lenisScrollToHash(href);
   };
   return (
     <header className="topbar">
@@ -149,7 +346,12 @@ function Header({ open, setOpen }: { open: boolean; setOpen: (value: boolean) =>
         <Logo />
         <nav className="nav-links" aria-label="Main navigation">
           {navItems.map((item) => (
-            <a key={item.href} href={item.href} data-testid={`link-nav-${item.label.toLowerCase().replaceAll(' ', '-')}`}>
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={(e) => go(e, item.href)}
+              data-testid={`link-nav-${item.label.toLowerCase().replaceAll(' ', '-')}`}
+            >
               {item.label}
             </a>
           ))}
@@ -177,7 +379,7 @@ function Header({ open, setOpen }: { open: boolean; setOpen: (value: boolean) =>
             <a
               key={item.href}
               href={item.href}
-              onClick={() => go(item.href)}
+              onClick={(e) => go(e, item.href)}
               data-testid={`link-mobile-${item.label.toLowerCase().replaceAll(' ', '-')}`}
             >
               {item.label}
@@ -218,12 +420,12 @@ function Hero() {
       </video>
       <div className="container-wide hero-content">
         <h1 className="text-foreground">
-          Smarter <em>by design.</em>
+          Super Charge
           <br />
-          Simplified by AI.
+          <em>your mobile business.</em>
         </h1>
         <p className="hero-copy reveal reveal-delay-2">
-          Assess your appointments&rsquo; ROI and book only the appointments that matter.
+          Gas, time, drive, know the real cost before you book.
         </p>
         <div className="hero-actions reveal reveal-delay-3">
           <button className="button-ghost" onClick={scrollToAccess} data-testid="button-hero-access">
@@ -248,92 +450,96 @@ function ChaosSection() {
     <section className="section" id="why">
       <div className="container-wide chaos-layout">
         <div>
-          <div className="eyebrow">01 / Get your day back</div>
-          <h2 className="section-title">
-            Less juggling.
-            <br />
-            <span style={{ color: 'hsl(var(--primary))' }}>More knowing.</span>
-          </h2>
-          <p className="section-intro">
-            Texts in one hand. A calendar in the other. A payment notification you hope is right. Rare Aer gives all
-            of it one clear point of view.
-          </p>
-          <div className="feature-list">
-            <div className="feature-line">
+          <Reveal>
+            <div className="eyebrow">01 / Get your day back</div>
+            <h2 className="section-title">
+              Less juggling.
+              <br />
+              <span style={{ color: 'hsl(var(--primary))' }}>More knowing.</span>
+            </h2>
+            <p className="section-intro">
+              Texts in one hand. A calendar in the other. A payment notification you hope is right. Rare Aer gives
+              all of it one clear point of view.
+            </p>
+          </Reveal>
+          <RevealGroup className="feature-list">
+            <RevealItem className="feature-line">
               <CalendarDays className="feature-icon" size={21} />
               <div>
                 <h3>One live route</h3>
                 <p>Your appointments, travel gaps, and capacity in the same picture.</p>
               </div>
-            </div>
-            <div className="feature-line">
+            </RevealItem>
+            <RevealItem className="feature-line">
               <Gauge className="feature-icon" size={21} />
               <div>
                 <h3>A yes/no on every job</h3>
                 <p>Know what a booking is worth after fuel, time, and the trip home.</p>
               </div>
-            </div>
-            <div className="feature-line">
+            </RevealItem>
+            <RevealItem className="feature-line">
               <CircleDollarSign className="feature-icon" size={21} />
               <div>
                 <h3>Every dollar accounted for</h3>
                 <p>Track deposits, balances, and next-job opportunities without spreadsheet archaeology.</p>
               </div>
-            </div>
-          </div>
+            </RevealItem>
+          </RevealGroup>
         </div>
-        <div className="dashboard glass grid-lines" data-testid="card-route-dashboard">
-          <div className="dash-top">
-            <span className="dash-title">Tuesday / route forecast</span>
-            <span className="dash-date">OCT 14 · LIVE</span>
-          </div>
-          <div className="dash-main">
-            <div className="dash-card dash-card-wide">
-              <span className="dash-label">Projected take-home</span>
-              <div className="dash-big">$684.20</div>
-              <span className="dash-positive">↑ 12.8% vs. your usual Tuesday</span>
-              <div className="mini-bars" aria-label="Weekly projected revenue bars">
-                {[45, 65, 52, 79, 100, 71, 58].map((height, index) => (
-                  <span key={index} style={{ height: `${height}%` }} />
-                ))}
-              </div>
-              <span className="dash-label">
-                Mon&nbsp;&nbsp;&nbsp; Tue&nbsp;&nbsp;&nbsp; Wed&nbsp;&nbsp;&nbsp; Thu&nbsp;&nbsp;&nbsp; Fri&nbsp;&nbsp;&nbsp;
-                Sat&nbsp;&nbsp;&nbsp; Sun
-              </span>
+        <Reveal scale={0.96} delay={0.1}>
+          <div className="dashboard glass grid-lines" data-testid="card-route-dashboard">
+            <div className="dash-top">
+              <span className="dash-title">Tuesday / route forecast</span>
+              <span className="dash-date">OCT 14 · LIVE</span>
             </div>
-            <div className="dash-card">
-              <span className="dash-label">Route health</span>
-              <div className="dash-big">
-                92<span style={{ fontSize: '.9rem' }}>/100</span>
-              </div>
-              <span className="dash-positive">Clean route</span>
-            </div>
-            <div className="dash-card">
-              <span className="dash-label">Booked</span>
-              <div className="dash-big">
-                4<span style={{ fontSize: '.9rem' }}> stops</span>
-              </div>
-              <span className="dash-positive">1 opening left</span>
-            </div>
-          </div>
-          <div className="route-list">
-            {[
-              ['08:30', 'Luna Detail Co.', 'PAID'],
-              ['11:15', 'Moss + Mane Grooming', 'DUE'],
-              ['14:00', 'Cedarline Wash', 'QUOTE'],
-            ].map(([time, name, tag], index) => (
-              <div key={name}>
-                <div className="route-row">
-                  <span className="route-time">{time}</span>
-                  <span>{name}</span>
-                  <span className="route-tag">{tag}</span>
+            <div className="dash-main">
+              <div className="dash-card dash-card-wide">
+                <span className="dash-label">Projected take-home</span>
+                <div className="dash-big">$684.20</div>
+                <span className="dash-positive">↑ 12.8% vs. your usual Tuesday</span>
+                <div className="mini-bars" aria-label="Weekly projected revenue bars">
+                  {[45, 65, 52, 79, 100, 71, 58].map((height, index) => (
+                    <span key={index} style={{ height: `${height}%` }} />
+                  ))}
                 </div>
-                {index < 2 && <div className="route-line" />}
+                <span className="dash-label">
+                  Mon&nbsp;&nbsp;&nbsp; Tue&nbsp;&nbsp;&nbsp; Wed&nbsp;&nbsp;&nbsp; Thu&nbsp;&nbsp;&nbsp;
+                  Fri&nbsp;&nbsp;&nbsp; Sat&nbsp;&nbsp;&nbsp; Sun
+                </span>
               </div>
-            ))}
+              <div className="dash-card">
+                <span className="dash-label">Route health</span>
+                <div className="dash-big">
+                  92<span style={{ fontSize: '.9rem' }}>/100</span>
+                </div>
+                <span className="dash-positive">Clean route</span>
+              </div>
+              <div className="dash-card">
+                <span className="dash-label">Booked</span>
+                <div className="dash-big">
+                  4<span style={{ fontSize: '.9rem' }}> stops</span>
+                </div>
+                <span className="dash-positive">1 opening left</span>
+              </div>
+            </div>
+            <div className="route-list">
+              {[
+                ['08:30', 'Sarah Chen', 'PAID'],
+                ['11:15', 'Marcus Webb', 'DUE'],
+                ['14:00', 'Priya Patel', 'QUOTE'],
+              ].map(([time, name, tag], index) => (
+                <div key={name}>
+                  <div className="route-row">
+                    <span className="route-time">{time}</span>
+                    <span>{name}</span>
+                    <span className="route-tag">{tag}</span>
+                  </div>
+                  {index < 2 && <div className="route-line" />}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -343,7 +549,7 @@ function Workflow() {
   return (
     <section className="section workflow-section" id="workflow">
       <div className="container-wide">
-        <div className="section-heading">
+        <Reveal className="section-heading">
           <div>
             <div className="eyebrow">02 / From inquiry to income</div>
             <h2 className="section-title">
@@ -356,7 +562,7 @@ function Workflow() {
             No more handoffs between five tabs. Each step adds context to the next, so your business gets smarter
             with every booking.
           </p>
-        </div>
+        </Reveal>
         <div className="workflow-board glass grid-lines" data-testid="workflow-board">
           <div className="workflow-head">
             <span className="mono muted" style={{ fontSize: '.68rem' }}>
@@ -364,45 +570,255 @@ function Workflow() {
             </span>
             <p>Built for the moment a customer says &ldquo;what about Thursday?&rdquo;</p>
           </div>
-          <div className="workflow-track">
-            <svg className="journey-connectors" viewBox="0 0 1100 500" preserveAspectRatio="none" aria-hidden="true">
-              <path className="journey-path-shadow" d="M 198 130 C 265 130, 255 300, 336 300" />
-              <path className="journey-path-shadow" d="M 430 382 C 505 382, 470 192, 556 192" />
-              <path className="journey-path-shadow" d="M 650 192 C 730 192, 700 397, 775 397" />
-              <path className="journey-path-shadow" d="M 869 397 C 935 397, 885 130, 996 130" />
-              <path className="journey-path" d="M 198 130 C 265 130, 255 300, 336 300" />
-              <path className="journey-path" d="M 430 382 C 505 382, 470 192, 556 192" />
-              <path className="journey-path" d="M 650 192 C 730 192, 700 397, 775 397" />
-              <path className="journey-path" d="M 869 397 C 935 397, 885 130, 996 130" />
-            </svg>
+          <RevealGroup className="workflow-track">
+            <WorkflowConnectors />
             {flowSteps.map((step, index) => {
               const Icon = step.icon;
               return (
-                <div className={`flow-node flow-node-${index + 1}`} key={step.label} data-testid={`workflow-step-${index + 1}`}>
-                  <div className="flow-node-top">
-                    <span className="flow-number">0{index + 1}</span>
-                    <span className="flow-status">{index === 4 ? 'Complete' : 'Milestone'}</span>
+                <RevealItem className={`flow-node-${index + 1}`} key={step.label}>
+                  <div className="flow-node" data-testid={`workflow-step-${index + 1}`}>
+                    <div className="flow-node-top">
+                      <span className="flow-number">0{index + 1}</span>
+                      <span className="flow-status">{index === 4 ? 'Complete' : 'Milestone'}</span>
+                    </div>
+                    <Icon className="flow-icon" size={20} />
+                    <div>
+                      <h3>{step.label}</h3>
+                      <p>{step.copy}</p>
+                    </div>
                   </div>
-                  <Icon className="flow-icon" size={20} />
-                  <div>
-                    <h3>{step.label}</h3>
-                    <p>{step.copy}</p>
-                  </div>
-                </div>
+                </RevealItem>
               );
             })}
-          </div>
+          </RevealGroup>
         </div>
       </div>
     </section>
   );
 }
 
+const journeyPaths = [
+  { id: 'journey-path-1', d: 'M 198 130 C 265 130, 255 300, 336 300' },
+  { id: 'journey-path-2', d: 'M 430 382 C 505 382, 470 192, 556 192' },
+  { id: 'journey-path-3', d: 'M 650 192 C 730 192, 700 397, 775 397' },
+  { id: 'journey-path-4', d: 'M 869 397 C 935 397, 885 130, 996 130' },
+];
+
+/**
+ * The static hairline connectors between `flow-node`s (`journey-path` /
+ * `journey-path-shadow`, unchanged) plus a traveling shimmer dot per path —
+ * a small glow-filled `<circle>` moved along the exact same path geometry
+ * via native SVG `<animateMotion>` + `<mpath>`. This is purely declarative
+ * SVG (no rAF/JS loop), which matters since 4 of these run at once — and it
+ * stays perfectly locked to the bezier curve since it rides the same `d`
+ * the visible line is drawn from (`<mpath>` referencing the path's `id`).
+ * Staggered `begin` times (0s/0.6s/1.2s/1.8s) keep the four dots from
+ * pulsing in visual sync, matching the organic, non-mechanical feel of the
+ * reference site's connector shimmer.
+ */
+function WorkflowConnectors() {
+  const prefersReducedMotion = useReducedMotion();
+
+  return (
+    <svg className="journey-connectors" viewBox="0 0 1100 500" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <radialGradient id="journey-shimmer-gradient" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#f2ffff" stopOpacity="1" />
+          <stop offset="55%" stopColor="#70e5ff" stopOpacity=".95" />
+          <stop offset="100%" stopColor="#24bdff" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      {journeyPaths.map((path) => (
+        <path key={`${path.id}-shadow`} className="journey-path-shadow" d={path.d} />
+      ))}
+      {journeyPaths.map((path) => (
+        <path key={path.id} id={path.id} className="journey-path" d={path.d} />
+      ))}
+      {!prefersReducedMotion &&
+        journeyPaths.map((path, index) => (
+          <circle key={`${path.id}-shimmer`} className="journey-shimmer" r="5" fill="url(#journey-shimmer-gradient)">
+            <animateMotion dur="3.4s" begin={`${index * 0.6}s`} repeatCount="indefinite">
+              <mpath href={`#${path.id}`} xlinkHref={`#${path.id}`} />
+            </animateMotion>
+          </circle>
+        ))}
+    </svg>
+  );
+}
+
+interface BentoCardData {
+  key: string;
+  className: string;
+  testId: string;
+  content: ReactNode;
+}
+
+const bentoCards: BentoCardData[] = [
+  {
+    key: 'forecast',
+    className: 'bento-card bento-tall glass',
+    testId: 'card-feature-forecast',
+    content: (
+      <>
+        <CloudLightning size={22} style={{ color: 'hsl(var(--primary))' }} />
+        <div className="eyebrow" style={{ marginTop: 28 }}>
+          Route intelligence
+        </div>
+        <h3>The best route is the one that pays you twice.</h3>
+        <p>
+          Rare Aer weighs location, job length, travel, and your actual overhead — then shows the route that makes
+          the day make sense.
+        </p>
+        <div className="metric-display">
+          <strong>+21%</strong>
+          <span>route margin in a typical first month</span>
+        </div>
+      </>
+    ),
+  },
+  {
+    key: 'assessment',
+    className: 'bento-card bento-accent',
+    testId: 'card-feature-assessment',
+    content: (
+      <>
+        <Sparkles size={22} />
+        <div className="eyebrow" style={{ marginTop: 28 }}>
+          Business assessment
+        </div>
+        <h3>Turn your gut feeling into a number.</h3>
+        <p>Answer a few real questions. Get an honest view of the jobs, zones, and hours worth protecting.</p>
+      </>
+    ),
+  },
+  {
+    key: 'followups',
+    className: 'bento-card bento-small glass',
+    testId: 'card-feature-followups',
+    content: (
+      <>
+        <Zap size={22} style={{ color: 'hsl(var(--accent))' }} />
+        <div className="eyebrow" style={{ marginTop: 28 }}>
+          Repeatable by design
+        </div>
+        <h3>One job should not be the end of the story.</h3>
+        <p>Keep the next visit visible while the current one is still fresh.</p>
+        <div className="inline-stat">
+          <div>
+            <strong>6</strong>
+            <span>follow-ups queued</span>
+          </div>
+          <div>
+            <strong>3</strong>
+            <span>routes ready</span>
+          </div>
+        </div>
+      </>
+    ),
+  },
+];
+
+/** Default rendering — the original static stacked/grid bento layout, just with a staggered fade-up reveal added. */
+function FeatureBentoStatic() {
+  const prefersReducedMotion = useReducedMotion();
+
+  if (prefersReducedMotion) {
+    return (
+      <div className="feature-bento">
+        {bentoCards.map((card) => (
+          <article key={card.key} className={card.className} data-testid={card.testId}>
+            {card.content}
+          </article>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      className="feature-bento"
+      initial="hidden"
+      whileInView="visible"
+      viewport={REVEAL_VIEWPORT}
+      variants={staggerContainerVariants}
+    >
+      {bentoCards.map((card) => (
+        <motion.article key={card.key} className={card.className} data-testid={card.testId} variants={staggerItemVariants}>
+          {card.content}
+        </motion.article>
+      ))}
+    </motion.div>
+  );
+}
+
+/**
+ * Desktop-only pinned horizontal-scroll variant: a tall scroll runway pins
+ * a `position: sticky` viewport while the card track's `x` is driven by
+ * vertical scroll progress (`useScroll` scoped to the runway via `ref` +
+ * `useTransform`) — real vertical scroll input mapped to horizontal
+ * translation, not actual horizontal scrolling. Only ever mounted when
+ * `FeatureBento` has confirmed both a desktop-width viewport and no
+ * `prefers-reduced-motion` preference (see `FeatureBento` below) — a
+ * constantly scroll-linked full-bleed effect is exactly the kind of thing
+ * that should never reach a touch/mobile viewport or an accessibility
+ * preference asking for less motion.
+ */
+function FeatureBentoPinned() {
+  const runwayRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [translateDistance, setTranslateDistance] = useState(0);
+
+  const { scrollYProgress } = useScroll({
+    target: runwayRef,
+    offset: ['start start', 'end end'],
+  });
+
+  useEffect(() => {
+    function measure() {
+      if (!trackRef.current || !runwayRef.current) return;
+      const trackWidth = trackRef.current.scrollWidth;
+      const viewportWidth = runwayRef.current.offsetWidth;
+      setTranslateDistance(Math.max(trackWidth - viewportWidth, 0));
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  const x = useTransform(scrollYProgress, [0, 1], [0, -translateDistance]);
+
+  return (
+    <div ref={runwayRef} className="feature-bento-runway">
+      <div className="feature-bento-sticky">
+        <motion.div ref={trackRef} className="feature-bento-track" style={{ x }}>
+          {bentoCards.map((card, index) => (
+            <motion.article
+              key={card.key}
+              className={card.className}
+              data-testid={card.testId}
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={REVEAL_VIEWPORT}
+              transition={{ duration: 0.6, delay: index * 0.08, ease: REVEAL_EASE }}
+            >
+              {card.content}
+            </motion.article>
+          ))}
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
 function FeatureBento() {
+  const prefersReducedMotion = useReducedMotion();
+  const isDesktop = useIsDesktopViewport(DESKTOP_BREAKPOINT_PX);
+  const usePinnedLayout = isDesktop === true && !prefersReducedMotion;
+
   return (
     <section className="section" id="features">
       <div className="container-wide">
-        <div className="section-heading">
+        <Reveal className="section-heading">
           <div>
             <div className="eyebrow">03 / Built for the road</div>
             <h2 className="section-title">
@@ -414,50 +830,8 @@ function FeatureBento() {
           <p className="section-intro">
             Not more software to babysit. Just the signal you need to make a good call, then keep moving.
           </p>
-        </div>
-        <div className="feature-bento">
-          <article className="bento-card bento-tall glass" data-testid="card-feature-forecast">
-            <CloudLightning size={22} style={{ color: 'hsl(var(--primary))' }} />
-            <div className="eyebrow" style={{ marginTop: 28 }}>
-              Route intelligence
-            </div>
-            <h3>The best route is the one that pays you twice.</h3>
-            <p>
-              Rare Aer weighs location, job length, travel, and your actual overhead — then shows the route that
-              makes the day make sense.
-            </p>
-            <div className="metric-display">
-              <strong>+21%</strong>
-              <span>route margin in a typical first month</span>
-            </div>
-          </article>
-          <article className="bento-card bento-accent" data-testid="card-feature-assessment">
-            <Sparkles size={22} />
-            <div className="eyebrow" style={{ marginTop: 28 }}>
-              Business assessment
-            </div>
-            <h3>Turn your gut feeling into a number.</h3>
-            <p>Answer a few real questions. Get an honest view of the jobs, zones, and hours worth protecting.</p>
-          </article>
-          <article className="bento-card bento-small glass" data-testid="card-feature-followups">
-            <Zap size={22} style={{ color: 'hsl(var(--accent))' }} />
-            <div className="eyebrow" style={{ marginTop: 28 }}>
-              Repeatable by design
-            </div>
-            <h3>One job should not be the end of the story.</h3>
-            <p>Keep the next visit visible while the current one is still fresh.</p>
-            <div className="inline-stat">
-              <div>
-                <strong>6</strong>
-                <span>follow-ups queued</span>
-              </div>
-              <div>
-                <strong>3</strong>
-                <span>routes ready</span>
-              </div>
-            </div>
-          </article>
-        </div>
+        </Reveal>
+        {usePinnedLayout ? <FeatureBentoPinned /> : <FeatureBentoStatic />}
       </div>
     </section>
   );
@@ -467,7 +841,7 @@ function Story() {
   return (
     <section className="section story-section">
       <div className="container-wide story-grid">
-        <div>
+        <Reveal>
           <div className="eyebrow">04 / In the field</div>
           <blockquote className="story-quote">
             &ldquo;I stopped asking <span>&lsquo;can I fit it in?&rsquo;</span> and started asking &lsquo;does it
@@ -480,21 +854,21 @@ function Story() {
               <small>Owner, Northline Mobile Detail · Phoenix, AZ</small>
             </div>
           </div>
-        </div>
-        <div className="story-proof">
-          <div className="proof-card glass">
+        </Reveal>
+        <RevealGroup className="story-proof">
+          <RevealItem className="proof-card glass">
             <strong>5.3 hrs</strong>
             <span>saved per week in back-and-forth</span>
-          </div>
-          <div className="proof-card glass">
+          </RevealItem>
+          <RevealItem className="proof-card glass">
             <strong>$412</strong>
             <span>recovered from forgotten balances</span>
-          </div>
-          <div className="proof-card glass">
+          </RevealItem>
+          <RevealItem className="proof-card glass">
             <strong>8 jobs</strong>
             <span>added without adding a workday</span>
-          </div>
-        </div>
+          </RevealItem>
+        </RevealGroup>
       </div>
     </section>
   );
@@ -511,28 +885,28 @@ function Compare() {
             You already have tools. Rare Aer is the connective tissue that helps them tell the same story.
           </p>
         </div>
-        <div className="compare-table" data-testid="comparison-table">
-          <div className="compare-row header">
+        <RevealGroup className="compare-table" data-testid="comparison-table">
+          <RevealItem className="compare-row header">
             <div>What you need to know</div>
             <div>Today</div>
             <div>Rare Aer</div>
-          </div>
+          </RevealItem>
           {[
             ['Is this job worth the drive?', 'Maybe', 'Clear'],
             ['What did I actually make?', 'Somewhere', 'Tracked'],
             ['When should I follow up?', 'Remember', 'Queued'],
             ['Can I do one more stop?', 'Guess', 'Forecast'],
           ].map(([label, oldValue, newValue]) => (
-            <div className="compare-row" key={label}>
+            <RevealItem className="compare-row" key={label}>
               <div>{label}</div>
               <div className="no">{oldValue}</div>
               <div className="yes">
                 <Check size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                 {newValue}
               </div>
-            </div>
+            </RevealItem>
           ))}
-        </div>
+        </RevealGroup>
       </div>
     </section>
   );
@@ -543,7 +917,7 @@ function FAQ() {
   return (
     <section className="section" id="faq">
       <div className="container-wide faq-grid">
-        <div>
+        <Reveal>
           <div className="eyebrow">06 / Good questions</div>
           <h2 className="section-title">
             No fog.
@@ -551,7 +925,7 @@ function FAQ() {
             No fine print.
           </h2>
           <p className="compare-note">Still curious? That is a healthy operating instinct. Here is the short version.</p>
-        </div>
+        </Reveal>
         <div className="faq-list">
           {faqs.map((faq, index) => (
             <div className="faq-item" key={faq.q}>
@@ -891,7 +1265,7 @@ function AccessSection({ gated, children }: { gated: boolean; children: ReactNod
     <section className="section access-section" id="access">
       <div className="container-wide">
         <div className="access-panel glass">
-          <div className="access-copy">
+          <Reveal className="access-copy">
             <div className="eyebrow">07 / {gated ? "You're invited" : 'First flight'}</div>
             <h2 data-testid="text-access-headline">{gated ? 'Set up your business.' : 'Make your next mile count.'}</h2>
             <p data-testid="text-access-subhead">
@@ -905,7 +1279,7 @@ function AccessSection({ gated, children }: { gated: boolean; children: ReactNod
               alt="Rare Aer early access invitation reference"
               data-testid="img-invite-reference"
             />
-          </div>
+          </Reveal>
           {children}
         </div>
       </div>
@@ -920,13 +1294,35 @@ function Footer() {
         <Logo />
         <span className="footer-note">© 2026 Rare Aer · Know before you go.</span>
         <div className="footer-links">
-          <a href="#why" data-testid="link-footer-why">
+          <a
+            href="#why"
+            onClick={(e) => {
+              e.preventDefault();
+              lenisScrollToHash('#why');
+            }}
+            data-testid="link-footer-why"
+          >
             Why Rare Aer
           </a>
-          <a href="#faq" data-testid="link-footer-faq">
+          <a
+            href="#faq"
+            onClick={(e) => {
+              e.preventDefault();
+              lenisScrollToHash('#faq');
+            }}
+            data-testid="link-footer-faq"
+          >
             FAQ
           </a>
-          <a href="#top" className="back-top" data-testid="link-back-top">
+          <a
+            href="#top"
+            className="back-top"
+            onClick={(e) => {
+              e.preventDefault();
+              lenisScrollToHash('#top');
+            }}
+            data-testid="link-back-top"
+          >
             Back to top <ArrowUpRight size={12} />
           </a>
         </div>
@@ -943,17 +1339,20 @@ export default function Signup() {
 
   const inviteToken = new URLSearchParams(search).get('invite');
 
-  // The source marketing design relies on a global `html { scroll-behavior:
-  // smooth }` for its plain `<a href="#section">` nav/footer links. That rule
-  // is intentionally not in the scoped `signup.css` (a bare `html` selector
-  // can't be scoped to `.site-shell` and would leak to every other route), so
-  // it's applied here instead, directly on `document.documentElement`, only
-  // while this page is mounted, and reverted on unmount.
+  // Lenis owns smooth scroll for this page now (see `lenisScrollToHash` /
+  // `scrollToAccess` above), so the previous `document.documentElement.style
+  // .scrollBehavior = 'smooth'` effect that lived here is gone — running both
+  // at once produces janky double-smoothing. Scoped exactly the way that
+  // effect was: initialized only while `Signup()` is mounted, destroyed on
+  // unmount, never touched globally (no app-root/`main.tsx` changes) — every
+  // other route (`/calendar`, `/clients`, `/checkout`, etc.) keeps native
+  // scroll untouched.
   useEffect(() => {
-    const previous = document.documentElement.style.scrollBehavior;
-    document.documentElement.style.scrollBehavior = 'smooth';
+    const lenis = new Lenis({ autoRaf: true });
+    activeLenis = lenis;
     return () => {
-      document.documentElement.style.scrollBehavior = previous;
+      lenis.destroy();
+      activeLenis = null;
     };
   }, []);
 

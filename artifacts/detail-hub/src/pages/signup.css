@@ -40,7 +40,7 @@
   --secondary: 216 34% 16%;
   --secondary-foreground: 206 33% 94%;
   --muted: 214 32% 13%;
-  --muted-foreground: 210 18% 65%;
+  --muted-foreground: 206 33% 94%;
   --accent: 191 100% 72%;
   --accent-foreground: 215 48% 7%;
   --destructive: 0 70% 58%;
@@ -53,7 +53,38 @@
   --app-font-mono: 'DM Mono', monospace;
   --app-font-serif: 'EB Garamond', Garamond, Georgia, serif;
 
-  overflow: hidden;
+  /*
+   * No `overflow` set here on purpose (stays initial/`visible` on both
+   * axes) — `position: sticky` (used by `FeatureBentoPinned`'s
+   * `.feature-bento-sticky` in signup.tsx) stops working the moment any
+   * ancestor between it and the viewport has a non-`visible` overflow on
+   * the Y axis: that ancestor becomes the sticky element's containing block
+   * instead of the viewport, and since `.site-shell` itself never scrolls
+   * internally (the document does), the sticky pin silently never engages,
+   * leaving the runway's reserved height as a blank gap once its
+   * (no-longer-pinned) content has scrolled past.
+   *
+   * A first attempt at fixing this split the old `overflow: hidden`
+   * shorthand into `overflow-x: hidden; overflow-y: visible` here, on the
+   * theory that only the X axis needed clipping. That doesn't actually
+   * work: per the CSS Overflow spec, when one axis is non-`visible` and the
+   * other is explicitly `visible`, the `visible` axis computes to `auto`
+   * instead (confirmed via `getComputedStyle` — it read back as
+   * `overflow-y: auto`, not `visible`) — and `auto` is just as much a
+   * scroll container as `hidden` for sticky-positioning purposes, so the
+   * pin was still silently broken.
+   *
+   * The actual horizontal-bleed source this was clipping is `.hero`'s
+   * drifting/scaling video (`.hero-image`'s `site-shell-drift` keyframe
+   * scales up to 1.08 with a slight translate) — `.hero` itself had no
+   * `overflow: hidden` of its own, so that bleed rode all the way up to
+   * whatever ancestor did. `.hero` now self-clips it directly (see
+   * `.site-shell .hero` below), matching the pattern already used by
+   * every other decorative-bleed component in this file (`.dashboard`,
+   * `.bento-card`, `.workflow-board`, `.access-panel` all already clip
+   * their own `::before`/`::after` bleed locally) — so `.site-shell` no
+   * longer needs to clip anything itself.
+   */
   background: radial-gradient(circle at 50% -5%, rgba(22, 108, 160, 0.23), transparent 34rem), hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: var(--app-font-sans);
@@ -103,8 +134,8 @@
 .site-shell .menu-toggle{display:none;background:transparent;color:hsl(var(--foreground));border:0;padding:8px}
 .site-shell .mobile-nav{display:none}
 
-.site-shell .hero{min-height:800px;position:relative;display:grid;align-items:end;isolation:isolate}
-.site-shell .hero-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-3;opacity:.69;animation:site-shell-drift 16s ease-in-out infinite;bottom:16px;height:calc(100% - 16px)}
+.site-shell .hero{min-height:800px;position:relative;display:grid;align-items:end;isolation:isolate;overflow:hidden}
+.site-shell .hero-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-3;opacity:1;filter:brightness(1.6) saturate(1.15);animation:site-shell-drift 16s ease-in-out infinite;bottom:16px;height:calc(100% - 16px)}
 .site-shell .hero::before{content:"";position:absolute;inset:0;z-index:-2;background:linear-gradient(90deg,rgba(4,14,25,.97) 0%,rgba(4,14,25,.65) 49%,rgba(4,14,25,.26) 100%),linear-gradient(0deg,hsl(var(--background)) 8%,transparent 40%)}
 .site-shell .hero::after{content:"";position:absolute;inset:0;z-index:-1;opacity:.38;background-image:linear-gradient(rgba(134,196,226,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(134,196,226,.07) 1px,transparent 1px);background-size:54px 54px;mask-image:linear-gradient(to bottom,black,transparent 70%)}
 .site-shell .hero-content{display:flex;flex-direction:column;align-items:center;padding:180px 0 76px;text-align:center}
@@ -113,8 +144,8 @@
 .site-shell .hero-copy{max-width:600px;color:#fff;font-family:var(--app-font-sans);font-size:clamp(1rem,1.5vw,1.25rem);line-height:1.4;letter-spacing:-.01em;margin:0 auto 30px}
 .site-shell .hero-actions{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
 .site-shell .hero-footer{display:flex;justify-content:space-between;align-items:end;align-self:stretch;width:100%;gap:20px;margin-top:130px;text-align:left}
-.site-shell .hero-caption{color:rgba(218,235,245,.55);font-size:.75rem;max-width:230px;line-height:1.5}
-.site-shell .scroll-cue{display:inline-flex;align-items:center;gap:9px;color:rgba(218,235,245,.63);font-size:.7rem;font-family:var(--app-font-mono);text-transform:uppercase;letter-spacing:.1em}
+.site-shell .hero-caption{color:hsl(var(--foreground));font-size:.75rem;max-width:230px;line-height:1.5}
+.site-shell .scroll-cue{display:inline-flex;align-items:center;gap:9px;color:hsl(var(--foreground));font-size:.7rem;font-family:var(--app-font-mono);text-transform:uppercase;letter-spacing:.1em}
 .site-shell .scroll-cue::before{content:"";display:block;width:36px;height:1px;background:hsl(var(--primary))}
 
 .site-shell .proof-strip{border-block:1px solid rgba(130,186,216,.17);background:rgba(13,34,52,.62)}
@@ -162,18 +193,32 @@
 .site-shell .journey-connectors path{fill:none;vector-effect:non-scaling-stroke}
 .site-shell .journey-path-shadow{stroke:rgba(3,12,20,.8);stroke-width:9}
 .site-shell .journey-path{stroke:rgba(93,205,247,.48);stroke-width:1.5;stroke-dasharray:5 7}
-.site-shell .flow-node{position:absolute;z-index:3;width:190px;min-height:164px;padding:18px;border-radius:18px;background:linear-gradient(145deg,rgba(16,55,80,.96),rgba(7,25,40,.96));border:1px solid rgba(117,205,241,.28);box-shadow:0 20px 45px rgba(0,0,0,.28);transition:transform .25s ease,border-color .25s ease}
+.site-shell .journey-shimmer{filter:drop-shadow(0 0 6px rgba(112,229,255,.85)) drop-shadow(0 0 12px rgba(45,188,255,.5));pointer-events:none}
+/*
+ * `.flow-node-1..5` are the POSITIONING wrapper (absolute left/top placement
+ * in the diagram) — a `motion.div` in `signup.tsx` used for the scroll-reveal
+ * entrance animation. `.flow-node` itself is the visual card INSIDE that
+ * wrapper and owns the `:hover` lift. These are split across two elements on
+ * purpose: framer-motion drives its reveal transform via an inline style on
+ * whichever element it animates, and inline styles beat this file's `:hover`
+ * rule in the cascade — animating the same element carrying `:hover{transform}`
+ * would silently and permanently override the hover lift the first time the
+ * reveal plays. Keeping them on separate elements (wrapper=position+reveal,
+ * inner=visual+hover) avoids that collision entirely.
+ */
+.site-shell .flow-node-1,.site-shell .flow-node-2,.site-shell .flow-node-3,.site-shell .flow-node-4,.site-shell .flow-node-5{position:absolute;z-index:3}
 .site-shell .flow-node-1{left:1%;top:48px}
 .site-shell .flow-node-2{left:23%;top:300px}
 .site-shell .flow-node-3{left:44%;top:110px}
 .site-shell .flow-node-4{left:65%;top:315px}
 .site-shell .flow-node-5{right:1%;top:48px}
+.site-shell .flow-node{position:relative;width:190px;min-height:164px;padding:18px;border-radius:18px;background:linear-gradient(145deg,rgba(16,55,80,.96),rgba(7,25,40,.96));border:1px solid rgba(117,205,241,.28);box-shadow:0 20px 45px rgba(0,0,0,.28);transition:transform .25s ease,border-color .25s ease}
 .site-shell .flow-node:hover{transform:translateY(-8px);border-color:hsl(var(--primary))}
 .site-shell .flow-node::before{content:"";position:absolute;width:9px;height:9px;border-radius:50%;background:hsl(var(--primary));border:3px solid #092237;box-shadow:0 0 0 1px rgba(108,211,249,.45),0 0 15px rgba(55,197,255,.65);left:50%;bottom:-26px;transform:translateX(-50%)}
-.site-shell .flow-node-2::before,.site-shell .flow-node-4::before{top:-26px;bottom:auto}
+.site-shell .flow-node-2 .flow-node::before,.site-shell .flow-node-4 .flow-node::before{top:-26px;bottom:auto}
 .site-shell .flow-node-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .site-shell .flow-number{color:hsl(var(--accent));font-family:var(--app-font-mono);font-size:.65rem}
-.site-shell .flow-status{color:rgba(199,226,239,.48);font-family:var(--app-font-mono);font-size:.52rem;letter-spacing:.08em;text-transform:uppercase}
+.site-shell .flow-status{color:hsl(var(--foreground));font-family:var(--app-font-mono);font-size:.52rem;letter-spacing:.08em;text-transform:uppercase}
 .site-shell .flow-icon{color:hsl(var(--primary));margin:24px 0 14px}
 .site-shell .flow-node h3{font-size:.9rem;margin:0 0 7px}
 .site-shell .flow-node p{font-size:.7rem;line-height:1.5;color:hsl(var(--muted-foreground));margin:0}
@@ -189,11 +234,31 @@
 .site-shell .bento-tall::before{content:"";position:absolute;inset:auto -40px -70px auto;width:280px;height:280px;border-radius:50%;background:rgba(70,209,255,.16);filter:blur(20px)}
 .site-shell .metric-display{position:absolute;right:28px;bottom:28px;text-align:right}
 .site-shell .metric-display strong{display:block;color:hsl(var(--accent));font-size:3.2rem;letter-spacing:-.1em}
-.site-shell .metric-display span{color:rgba(223,239,248,.63);font-size:.7rem}
+.site-shell .metric-display span{color:hsl(var(--foreground));font-size:.7rem}
 .site-shell .bento-small{min-height:255px}
 .site-shell .bento-small .inline-stat{display:flex;gap:18px;margin-top:25px}
 .site-shell .inline-stat strong{display:block;font-size:1.7rem;letter-spacing:-.07em}
 .site-shell .inline-stat span{color:hsl(var(--muted-foreground));font-size:.68rem}
+
+/*
+ * Desktop-only pinned horizontal-scroll variant of `.feature-bento`
+ * (`FeatureBentoPinned` in signup.tsx) — a tall scroll runway with a
+ * `position:sticky` viewport pinned inside it while the card track's `x` is
+ * driven by vertical scroll progress. Never mounted below the
+ * `min-width:821px` desktop threshold or under `prefers-reduced-motion`
+ * (see `FeatureBento`'s `usePinnedLayout` check) — this block only exists to
+ * style markup that JS has already decided is desktop-appropriate, the
+ * `@media` here is a belt-and-suspenders match for that same threshold.
+ */
+@media(min-width:821px){
+  .site-shell .feature-bento-runway{position:relative;height:260vh}
+  .site-shell .feature-bento-sticky{position:sticky;top:0;height:100vh;display:flex;align-items:center;overflow:hidden}
+  .site-shell .feature-bento-track{display:flex;gap:18px;width:max-content}
+  .site-shell .feature-bento-track .bento-card{flex:0 0 auto}
+  .site-shell .feature-bento-track .bento-tall{width:520px}
+  .site-shell .feature-bento-track .bento-accent{width:460px}
+  .site-shell .feature-bento-track .bento-small{width:460px}
+}
 
 .site-shell .story-section{background:linear-gradient(180deg,#071a2a,hsl(var(--background)))}
 .site-shell .story-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:45px;align-items:center}
@@ -242,7 +307,7 @@
 .site-shell .field-group .field-error{color:hsl(var(--destructive));font-size:.72rem;font-family:var(--app-font-sans);text-transform:none;letter-spacing:0}
 .site-shell .field-group-honeypot{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
 .site-shell .form-submit{width:100%;margin-top:6px}
-.site-shell .form-fineprint{color:rgba(190,214,228,.45);font-size:.68rem;line-height:1.5;margin:0}
+.site-shell .form-fineprint{color:hsl(var(--foreground));font-size:.68rem;line-height:1.5;margin:0}
 .site-shell .form-notice{color:hsl(var(--muted-foreground));font-size:.82rem;line-height:1.5;margin:0 0 4px}
 .site-shell .form-notice.rejected{display:flex;align-items:flex-start;gap:9px;color:hsl(var(--foreground));background:rgba(224,90,90,.1);border:1px solid rgba(224,90,90,.35);border-radius:12px;padding:12px 14px}
 .site-shell .form-login-link{color:hsl(var(--muted-foreground));font-size:.82rem;margin:2px 0 0}
@@ -288,14 +353,15 @@
   .site-shell .workflow-board{min-height:780px}
   .site-shell .workflow-track{height:auto;display:grid;gap:18px;margin-top:36px;padding-left:30px}
   .site-shell .journey-connectors,.site-shell .journey-pill{display:none}
-  .site-shell .flow-node,.site-shell .flow-node-1,.site-shell .flow-node-2,.site-shell .flow-node-3,.site-shell .flow-node-4,.site-shell .flow-node-5{position:relative;inset:auto;width:100%;min-height:auto;display:grid;grid-template-columns:48px 1fr;align-items:center;gap:0 12px;padding:16px}
+  .site-shell .flow-node-1,.site-shell .flow-node-2,.site-shell .flow-node-3,.site-shell .flow-node-4,.site-shell .flow-node-5{position:relative;inset:auto;width:100%}
+  .site-shell .flow-node{width:100%;min-height:auto;display:grid;grid-template-columns:48px 1fr;align-items:center;gap:0 12px;padding:16px}
   .site-shell .flow-node-top{grid-column:1/-1;margin-bottom:13px}
   .site-shell .flow-icon{grid-column:1;margin:0}
   .site-shell .flow-node>div:last-child{grid-column:2}
   .site-shell .flow-node h3{margin:0 0 3px}
-  .site-shell .flow-node::before,.site-shell .flow-node-2::before,.site-shell .flow-node-4::before{left:-24px;top:50%;bottom:auto;transform:translate(-50%,-50%)}
+  .site-shell .flow-node::before,.site-shell .flow-node-2 .flow-node::before,.site-shell .flow-node-4 .flow-node::before{left:-24px;top:50%;bottom:auto;transform:translate(-50%,-50%)}
   .site-shell .flow-node::after{content:"";position:absolute;left:-25px;top:calc(50% + 5px);width:1px;height:calc(100% + 19px);background:linear-gradient(180deg,rgba(84,204,255,.7),rgba(84,204,255,.15))}
-  .site-shell .flow-node:last-child::after{display:none}
+  .site-shell .flow-node-5 .flow-node::after{display:none}
   .site-shell .feature-bento{grid-template-columns:1fr}
   .site-shell .bento-tall{grid-row:auto;min-height:350px}
   .site-shell .access-panel{padding:30px 22px}
@@ -327,4 +393,10 @@
   .site-shell{scroll-behavior:auto}
   .site-shell .brand-mark{transition:none}
   .site-shell .brand-mark:hover{transform:rotate(-8deg)}
+  /* Belt-and-suspenders alongside the JS `useReducedMotion()` check in
+     `WorkflowConnectors` (signup.tsx), which already skips rendering the
+     shimmer `<circle>`/`<animateMotion>` elements entirely under this
+     preference — this just guarantees the ambient loop can never paint even
+     if that check is ever bypassed. */
+  .site-shell .journey-shimmer{display:none}
 }
