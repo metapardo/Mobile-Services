@@ -276,8 +276,7 @@ const faqs = [
 // rows exist, so someone can compare tiers at a glance rather than parsing
 // two different lists.
 const pricingFeatures: { label: string; starter: boolean }[] = [
-  { label: 'Live route intelligence & forecasting', starter: true },
-  { label: 'Business assessment & margin insights', starter: true },
+  { label: 'Appointments & scheduling recommendations', starter: true },
   { label: 'Fuel Gauge cost check on every appointment', starter: false },
   { label: 'Email support', starter: true },
   { label: 'Priority support & onboarding', starter: false },
