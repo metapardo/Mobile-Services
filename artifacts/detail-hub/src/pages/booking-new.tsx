@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useLocation, useSearch } from 'wouter';
+import { useLocation, useSearch, Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useListClients, useListPackages, useListEmployees, useListBookings,
@@ -71,16 +71,32 @@ function PillBtn({ label, onClick, icon: Icon }: { label: string; onClick: () =>
 
 // ─── "Nothing to pick from yet" prompt ────────────────────────────────────────
 // Per the PRD's edge-case guidance (Section 8): a brand-new account with zero
-// employees or packages shouldn't see a silently empty dropdown. There's no real
-// "add a package"/"add an employee" screen to deep-link to yet (full employee/package
-// management is Phase 3) — `packages.tsx` still writes to mock data, and there's no
-// employee-management UI at all — so this is an honest disabled state with
-// explanatory copy, not a fake link.
-function NothingToPickPrompt({ icon: Icon, message }: { icon: React.ElementType; message: string }) {
+// employees or packages shouldn't see a silently empty dropdown. Packages are now
+// a real, working Settings screen, so that prompt deep-links there via `actionHref`.
+// There's still no employee-management UI at all, so that prompt stays a plain
+// explanatory message with no link.
+function NothingToPickPrompt({
+  icon: Icon,
+  message,
+  actionHref,
+  actionLabel,
+}: {
+  icon: React.ElementType;
+  message: string;
+  actionHref?: string;
+  actionLabel?: string;
+}) {
   return (
     <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-2xl bg-muted/50 text-[13px] text-muted-foreground">
       <Icon className="w-4 h-4 shrink-0 mt-0.5" />
-      <span>{message}</span>
+      <div className="flex flex-col items-start gap-1.5">
+        <span>{message}</span>
+        {actionHref && actionLabel && (
+          <Link href={actionHref} className="text-primary font-medium hover:underline">
+            {actionLabel}
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
@@ -529,7 +545,9 @@ export default function BookingNew() {
         {noPackagesYet ? (
           <NothingToPickPrompt
             icon={PackageX}
-            message="No packages yet. Add a package before booking a job — package management isn't built in this app yet, so ask an admin to add one directly for now."
+            message="No packages yet. Add a package in Settings before booking a job."
+            actionHref="/more/packages"
+            actionLabel="Go to Settings > Packages"
           />
         ) : (
           <PillBtn label="Add service" icon={Plus} onClick={() => setShowServices(true)} />

@@ -1,6 +1,14 @@
 import { useState } from 'react';
-import { packages, createPackage, updatePackage, Package } from '@/lib/mock-data';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useListPackages,
+  useCreatePackage,
+  useUpdatePackage,
+  useArchivePackage,
+  getListPackagesQueryKey,
+  type PackageResult,
+} from '@workspace/api-client-react';
+import { ArrowLeft, Plus, Archive, Loader2, AlertTriangle, PackageX } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
@@ -9,31 +17,107 @@ import { Label } from '@workspace/blue-glass-design-system/components/ui/label';
 import { Textarea } from '@workspace/blue-glass-design-system/components/ui/textarea';
 import { Switch } from '@workspace/blue-glass-design-system/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/blue-glass-design-system/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@workspace/blue-glass-design-system/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/blue-glass-design-system/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@workspace/blue-glass-design-system/components/ui/alert-dialog';
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from '@workspace/blue-glass-design-system/components/ui/empty';
+import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
+
+type PackageCategory = 'Exterior' | 'Interior' | 'Full' | 'Add-on';
+
+interface PackageFormState {
+  name: string;
+  category: PackageCategory;
+  description: string;
+  price: number;
+  durationMinutes: number;
+  isAddon: boolean;
+}
+
+const EMPTY_FORM: PackageFormState = {
+  name: '',
+  category: 'Exterior',
+  description: '',
+  price: 0,
+  durationMinutes: 60,
+  isAddon: false,
+};
 
 export default function Packages() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [editOpen, setEditOpen] = useState(false);
-  const [editingPackage, setEditingPackage] = useState<Package | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    category: 'Exterior' as 'Exterior' | 'Interior' | 'Full' | 'Add-on',
-    description: '',
-    price: 0,
-    durationMinutes: 60,
-    isAddon: false,
-    archived: false,
+  const [editingPackage, setEditingPackage] = useState<PackageResult | null>(null);
+  const [formData, setFormData] = useState<PackageFormState>(EMPTY_FORM);
+  const [archiveTarget, setArchiveTarget] = useState<PackageResult | null>(null);
+
+  // `includeArchived` so admins can still see (and reference) packages they've
+  // archived, even though archiving is one-directional (there's no "unarchive").
+  const packagesQuery = useListPackages({ includeArchived: true });
+  const allPackages = packagesQuery.data ?? [];
+
+  const invalidatePackages = () =>
+    queryClient.invalidateQueries({ queryKey: getListPackagesQueryKey() });
+
+  const createPackageMutation = useCreatePackage({
+    mutation: {
+      onSuccess: async () => {
+        await invalidatePackages();
+        toast({ title: 'Package created' });
+        setEditOpen(false);
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong creating this package. Please try again.';
+        toast({ title: 'Save failed', description: message, variant: 'destructive' });
+      },
+    },
   });
 
-  const activePackages = packages.filter(p => !p.archived);
-  const archivedPackages = packages.filter(p => p.archived);
+  const updatePackageMutation = useUpdatePackage({
+    mutation: {
+      onSuccess: async () => {
+        await invalidatePackages();
+        toast({ title: 'Package updated' });
+        setEditOpen(false);
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong saving this package. Please try again.';
+        toast({ title: 'Save failed', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  const archivePackageMutation = useArchivePackage({
+    mutation: {
+      onSuccess: async () => {
+        await invalidatePackages();
+        toast({ title: 'Package archived' });
+        setArchiveTarget(null);
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong archiving this package. Please try again.';
+        toast({ title: 'Archive failed', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  const activePackages = allPackages.filter(p => !p.archived);
+  const archivedPackages = allPackages.filter(p => p.archived);
 
   const packagesByCategory = activePackages.reduce((acc, pkg) => {
     if (!acc[pkg.category]) acc[pkg.category] = [];
     acc[pkg.category].push(pkg);
     return acc;
-  }, {} as Record<string, typeof packages>);
+  }, {} as Record<string, PackageResult[]>);
 
-  const handleEdit = (pkg: Package) => {
+  const handleEdit = (pkg: PackageResult) => {
     setEditingPackage(pkg);
     setFormData({
       name: pkg.name,
@@ -42,37 +126,34 @@ export default function Packages() {
       price: pkg.price,
       durationMinutes: pkg.durationMinutes,
       isAddon: pkg.isAddon,
-      archived: pkg.archived || false,
     });
     setEditOpen(true);
   };
 
   const handleNew = () => {
     setEditingPackage(null);
-    setFormData({
-      name: '',
-      category: 'Exterior',
-      description: '',
-      price: 0,
-      durationMinutes: 60,
-      isAddon: false,
-      archived: false,
-    });
+    setFormData(EMPTY_FORM);
     setEditOpen(true);
   };
 
   const handleSave = () => {
+    const data = {
+      name: formData.name,
+      category: formData.category,
+      description: formData.description,
+      price: formData.price,
+      durationMinutes: formData.durationMinutes,
+      isAddon: formData.isAddon,
+    };
     if (editingPackage) {
-      updatePackage(editingPackage.id, formData);
+      updatePackageMutation.mutate({ id: editingPackage.id, data });
     } else {
-      createPackage(formData);
+      createPackageMutation.mutate({ data });
     }
-    setEditOpen(false);
   };
 
-  const handleToggleArchive = (pkg: Package) => {
-    updatePackage(pkg.id, { archived: !pkg.archived });
-  };
+  const isSaving = createPackageMutation.isPending || updatePackageMutation.isPending;
+  const hasNoPackagesAtAll = !packagesQuery.isLoading && !packagesQuery.isError && allPackages.length === 0;
 
   return (
     <div className="min-h-[100dvh] bg-background pb-20 md:pb-6">
@@ -90,77 +171,107 @@ export default function Packages() {
           </Button>
         </div>
 
-        {Object.entries(packagesByCategory).map(([category, pkgs]) => (
-          <div key={category} className="mb-6">
-            <h2 className="text-[18px] font-semibold mb-3">{category}</h2>
-            <div className="space-y-2">
-              {pkgs.map(pkg => (
-                <Card
-                  key={pkg.id}
-                  onClick={() => handleEdit(pkg)}
-                  className="p-4 border border-border rounded-xl hover:bg-muted transition-colors cursor-pointer"
-                  data-testid={`package-${pkg.id}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium text-[15px]">{pkg.name}</p>
-                        {pkg.isAddon && (
-                          <span className="text-[11px] px-2 py-0.5 bg-muted text-muted-foreground rounded">
-                            Add-on
-                          </span>
-                        )}
+        {packagesQuery.isError ? (
+          <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center" data-testid="status-packages-error">
+            <AlertTriangle className="w-8 h-8 text-destructive" />
+            <p className="text-[15px] font-semibold">Couldn't load your packages</p>
+            <p className="text-[13px] text-muted-foreground max-w-[280px]">Check your connection and try again.</p>
+          </div>
+        ) : packagesQuery.isLoading ? (
+          <div className="flex items-center justify-center py-16" data-testid="status-packages-loading">
+            <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+          </div>
+        ) : hasNoPackagesAtAll ? (
+          <Empty className="border border-border rounded-xl bg-card" data-testid="empty-state-packages">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <PackageX />
+              </EmptyMedia>
+              <EmptyTitle>No packages yet</EmptyTitle>
+              <EmptyDescription>
+                Add your first service to start booking jobs against real pricing and duration.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button onClick={handleNew} data-testid="button-add-first-package">
+                <Plus className="w-4 h-4 mr-1" />
+                Add your first service
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <>
+            {Object.entries(packagesByCategory).map(([category, pkgs]) => (
+              <div key={category} className="mb-6">
+                <h2 className="text-[18px] font-semibold mb-3">{category}</h2>
+                <div className="space-y-2">
+                  {pkgs.map(pkg => (
+                    <Card
+                      key={pkg.id}
+                      onClick={() => handleEdit(pkg)}
+                      className="p-4 border border-border rounded-xl hover:bg-muted transition-colors cursor-pointer"
+                      data-testid={`package-${pkg.id}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-medium text-[15px]">{pkg.name}</p>
+                            {pkg.isAddon && (
+                              <span className="text-[11px] px-2 py-0.5 bg-muted text-muted-foreground rounded">
+                                Add-on
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[13px] text-muted-foreground mb-1">{pkg.description}</p>
+                          <p className="text-[13px] text-muted-foreground">{pkg.durationMinutes} min</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <p className="text-[18px] font-semibold tabular-nums">${pkg.price}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setArchiveTarget(pkg);
+                            }}
+                            data-testid={`button-archive-${pkg.id}`}
+                          >
+                            <Archive className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-[13px] text-muted-foreground mb-1">{pkg.description}</p>
-                      <p className="text-[13px] text-muted-foreground">{pkg.durationMinutes} min</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[18px] font-semibold tabular-nums">${pkg.price}</p>
-                      <Switch
-                        checked={!pkg.archived}
-                        onCheckedChange={() => handleToggleArchive(pkg)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="mt-2"
-                        data-testid={`switch-archive-${pkg.id}`}
-                      />
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        ))}
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ))}
 
-        {archivedPackages.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-[18px] font-semibold mb-3 text-muted-foreground">Archived</h2>
-            <div className="space-y-2">
-              {archivedPackages.map(pkg => (
-                <Card
-                  key={pkg.id}
-                  onClick={() => handleEdit(pkg)}
-                  className="p-4 border border-border rounded-xl hover:bg-muted transition-colors cursor-pointer opacity-50"
-                  data-testid={`package-${pkg.id}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="font-medium text-[15px] mb-1">{pkg.name}</p>
-                      <p className="text-[13px] text-muted-foreground">{pkg.durationMinutes} min</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[18px] font-semibold tabular-nums">${pkg.price}</p>
-                      <Switch
-                        checked={!pkg.archived}
-                        onCheckedChange={() => handleToggleArchive(pkg)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="mt-2"
-                      />
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
+            {archivedPackages.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-[18px] font-semibold mb-3 text-muted-foreground">Archived</h2>
+                <div className="space-y-2">
+                  {archivedPackages.map(pkg => (
+                    <Card
+                      key={pkg.id}
+                      className="p-4 border border-border rounded-xl opacity-50"
+                      data-testid={`package-${pkg.id}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-[15px] mb-1">{pkg.name}</p>
+                          <p className="text-[13px] text-muted-foreground">{pkg.durationMinutes} min</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[18px] font-semibold tabular-nums">${pkg.price}</p>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -180,7 +291,7 @@ export default function Packages() {
               </div>
               <div>
                 <Label htmlFor="category">Category</Label>
-                <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v as any })}>
+                <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v as PackageCategory })}>
                   <SelectTrigger id="category" data-testid="select-category">
                     <SelectValue />
                   </SelectTrigger>
@@ -207,7 +318,7 @@ export default function Packages() {
                   id="price"
                   type="number"
                   value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                   data-testid="input-price"
                 />
               </div>
@@ -217,7 +328,7 @@ export default function Packages() {
                   id="duration"
                   type="number"
                   value={formData.durationMinutes}
-                  onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 0 })}
                   data-testid="input-duration"
                 />
               </div>
@@ -230,12 +341,35 @@ export default function Packages() {
                   data-testid="switch-addon"
                 />
               </div>
-              <Button onClick={handleSave} className="w-full" data-testid="button-save">
-                {editingPackage ? 'Save Changes' : 'Create Package'}
+              <Button onClick={handleSave} className="w-full" disabled={isSaving} data-testid="button-save">
+                {isSaving ? 'Saving…' : editingPackage ? 'Save Changes' : 'Create Package'}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!archiveTarget} onOpenChange={(open) => !open && setArchiveTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Archive Package</AlertDialogTitle>
+              <AlertDialogDescription>
+                Archiving "{archiveTarget?.name}" removes it from the booking form's package picker, but keeps it
+                attached to any existing bookings that already reference it. This can't be undone from here —
+                ask an admin to recreate the package if you need it back.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => archiveTarget && archivePackageMutation.mutate({ id: archiveTarget.id })}
+                disabled={archivePackageMutation.isPending}
+                data-testid="button-confirm-archive"
+              >
+                {archivePackageMutation.isPending ? 'Archiving…' : 'Archive'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
