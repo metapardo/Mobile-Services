@@ -1,0 +1,528 @@
+/* GENERATED FROM tokens.json BY scripts/build-tokens.mjs -- DO NOT EDIT.
+ * Edit tokens.json instead; the dev server regenerates this file on change. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+/* Register this package's own components so any consumer that imports this
+ * stylesheet (via `@import "<pkg>/styles.css"`) gets their utility classes
+ * generated -- Tailwind does not scan node_modules by default. Resolved
+ * relative to this file, so it points at this package's components whether it
+ * runs in the design system's own preview or inside a consuming app/sandbox. */
+@source "./components";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary-border: var(--sidebar-primary-border);
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: calc(1 / 0.75);
+  --text-sm: 0.875rem;
+  --text-sm--line-height: calc(1.25 / 0.875);
+  --text-base: 1rem;
+  --text-base--line-height: calc(1.5 / 1);
+  --text-lg: 1.125rem;
+  --text-lg--line-height: calc(1.75 / 1.125);
+  --text-xl: 1.25rem;
+  --text-xl--line-height: calc(1.75 / 1.25);
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: calc(2 / 1.5);
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: calc(2.25 / 1.875);
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: calc(2.5 / 2.25);
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1;
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1;
+  --text-7xl: 4.5rem;
+  --text-7xl--line-height: 1;
+  --text-8xl: 6rem;
+  --text-8xl--line-height: 1;
+  --text-9xl: 8rem;
+  --text-9xl--line-height: 1;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Blue Glass surfaces: transparent layers, a fine inner highlight, and a
+ * restrained blue halo create depth without making every surface feel loud. */
+:root {
+  --glass-highlight: rgba(255, 255, 255, 0.72);
+  --glass-shadow: rgba(7, 34, 59, 0.12);
+  --glass-tint: rgba(255, 255, 255, 0.62);
+  --glass-edge: rgba(255, 255, 255, 0.56);
+  --glass-shimmer: rgba(255, 255, 255, 0.42);
+  --grid-line: rgba(7, 34, 59, 0.08);
+}
+
+.dark {
+  --glass-highlight: rgba(255, 255, 255, 0.18);
+  --glass-shadow: rgba(0, 0, 0, 0.36);
+  --glass-tint: rgba(8, 34, 57, 0.48);
+  --glass-edge: rgba(190, 226, 255, 0.32);
+  --glass-shimmer: rgba(255, 255, 255, 0.24);
+  --grid-line: rgba(133, 192, 231, 0.08);
+}
+
+/* LIGHT MODE */
+:root {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+
+  /* Automatic computation of border around primary / danger buttons */
+  --opaque-button-border-intensity: -8; /* In terms of percentages */
+
+  /* Backgrounds applied on top of other backgrounds when hovered/active */
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
+
+  --background: 210 57.1% 97.3%;
+  --foreground: 209 78.8% 12.9%;
+  --border: 205 43.9% 83.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 209 78.8% 12.9%;
+  --sidebar: 205 63% 94.7%;
+  --sidebar-foreground: 207 78.3% 18%;
+  --sidebar-border: 205 43.9% 83.9%;
+  --sidebar-primary: 204 94.2% 47.3%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 204 67.3% 90.4%;
+  --sidebar-accent-foreground: 207 78.3% 18%;
+  --sidebar-ring: 204 94.2% 47.3%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 209 78.8% 12.9%;
+  --primary: 204 94.2% 47.3%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 204 67.3% 90.4%;
+  --secondary-foreground: 207 78.3% 18%;
+  --muted: 205 63% 94.7%;
+  --muted-foreground: 206 26.8% 40.2%;
+  --accent: 205 87.2% 84.7%;
+  --accent-foreground: 207 78.3% 18%;
+  --destructive: 350 52.6% 54.5%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 205 43.9% 83.9%;
+  --ring: 204 94.2% 47.3%;
+  --chart-1: 204 94.2% 47.3%;
+  --chart-2: 209 61.5% 42.7%;
+  --chart-3: 202 65.9% 58.6%;
+  --chart-4: 201 79.5% 71.4%;
+  --chart-5: 207 67.1% 27.5%;
+
+  --app-font-sans: Inter, sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono: Geist Mono, monospace;
+  --radius: 0.75rem;
+  --spacing: 0.25rem;
+
+  /* Computed contrast borders (fallback then modern color-mix syntax). */
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --card-border: hsl(var(--card));
+  --popover-border: hsl(var(--popover));
+}
+
+.dark {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+
+  --opaque-button-border-intensity: 9;  /* In terms of percentages */
+
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  --background: 210 82.4% 6.7%;
+  --foreground: 207 60% 97.1%;
+  --border: 208 54.6% 23.3%;
+  --card: 209 68.3% 12.4%;
+  --card-foreground: 207 60% 97.1%;
+  --sidebar: 206 73.9% 9%;
+  --sidebar-foreground: 205 49.2% 88.4%;
+  --sidebar-border: 207 59.6% 21.4%;
+  --sidebar-primary: 205 100% 58.8%;
+  --sidebar-primary-foreground: 210 82.4% 6.7%;
+  --sidebar-accent: 207 73.9% 18%;
+  --sidebar-accent-foreground: 207 60% 97.1%;
+  --sidebar-ring: 205 100% 69.4%;
+  --popover: 208 72.2% 15.5%;
+  --popover-foreground: 207 60% 97.1%;
+  --primary: 205 100% 58.8%;
+  --primary-foreground: 210 82.4% 6.7%;
+  --secondary: 207 74.3% 21.4%;
+  --secondary-foreground: 207 100% 95.3%;
+  --muted: 208 72.8% 15.9%;
+  --muted-foreground: 206 31.6% 70.2%;
+  --accent: 206 69.4% 28.2%;
+  --accent-foreground: 206 100% 96.9%;
+  --destructive: 352 62.1% 62.7%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 208 54.6% 23.3%;
+  --ring: 205 100% 69.4%;
+  --chart-1: 205 100% 58.8%;
+  --chart-2: 205 100% 69.4%;
+  --chart-3: 209 61.5% 42.7%;
+  --chart-4: 201 79.5% 71.4%;
+  --chart-5: 207 67.1% 27.5%;
+
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --card-border: hsl(var(--card));
+  --popover-border: hsl(var(--popover));
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 78% -10%, color-mix(in srgb, hsl(var(--primary)) 20%, transparent), transparent 34rem),
+      radial-gradient(circle at 5% 100%, color-mix(in srgb, hsl(var(--secondary)) 38%, transparent), transparent 30rem);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background: linear-gradient(145deg, color-mix(in srgb, var(--glass-tint) 54%, transparent), color-mix(in srgb, hsl(var(--card)) 64%, transparent));
+    border-color: color-mix(in srgb, hsl(var(--foreground)) 16%, transparent);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 color-mix(in srgb, hsl(var(--primary)) 8%, transparent), 0 18px 45px var(--glass-shadow);
+    backdrop-filter: blur(24px) saturate(145%);
+  }
+
+  .glass-panel-strong {
+    background: linear-gradient(145deg, color-mix(in srgb, hsl(var(--popover)) 62%, transparent), color-mix(in srgb, hsl(var(--card)) 76%, transparent));
+    border-color: color-mix(in srgb, hsl(var(--foreground)) 21%, transparent);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 color-mix(in srgb, hsl(var(--primary)) 10%, transparent), 0 22px 60px var(--glass-shadow);
+    backdrop-filter: blur(30px) saturate(155%);
+  }
+
+  .glass-interactive {
+    isolation: isolate;
+    overflow: hidden;
+    position: relative;
+    transform: translateY(0);
+    transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1), border-color 300ms ease, box-shadow 300ms ease, background 300ms ease;
+  }
+
+  .glass-interactive::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: conic-gradient(
+      from 210deg,
+      transparent 0deg,
+      transparent 38deg,
+      color-mix(in srgb, var(--glass-edge) 78%, transparent) 72deg,
+      color-mix(in srgb, hsl(var(--primary)) 68%, transparent) 108deg,
+      transparent 146deg,
+      transparent 270deg,
+      color-mix(in srgb, var(--glass-edge) 48%, transparent) 320deg,
+      transparent 360deg
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    opacity: 0.38;
+    transform: rotate(0deg);
+    transition: opacity 300ms ease, filter 300ms ease;
+  }
+
+  .glass-interactive::after {
+    content: "";
+    position: absolute;
+    inset: -30% auto -30% -70%;
+    width: 42%;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 8%, var(--glass-shimmer) 48%, transparent 88%);
+    filter: blur(8px);
+    opacity: 0;
+    transform: skewX(-16deg);
+  }
+
+  .glass-interactive:hover,
+  .glass-interactive:focus-visible {
+    border-color: color-mix(in srgb, hsl(var(--primary)) 48%, hsl(var(--foreground)) 18%);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--glass-tint) 66%, transparent), color-mix(in srgb, hsl(var(--card)) 70%, transparent));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 125%, transparent), inset 0 -1px 0 color-mix(in srgb, hsl(var(--primary)) 22%, transparent), 0 20px 45px var(--glass-shadow), 0 0 0 1px color-mix(in srgb, hsl(var(--primary)) 14%, transparent), 0 0 28px color-mix(in srgb, hsl(var(--primary)) 14%, transparent);
+    transform: translateY(-5px);
+  }
+
+  .glass-interactive:hover::before,
+  .glass-interactive:focus-visible::before {
+    animation: glass-edge-wrap 3.8s linear infinite;
+    filter: drop-shadow(0 0 6px color-mix(in srgb, hsl(var(--primary)) 54%, transparent));
+    opacity: 0.96;
+  }
+
+  .glass-interactive:hover::after,
+  .glass-interactive:focus-visible::after {
+    animation: glass-shimmer 1.2s cubic-bezier(0.2, 0.65, 0.35, 1) both;
+  }
+
+  .glass-interactive:active {
+    transform: translateY(-1px) scale(0.995);
+    transition-duration: 120ms;
+  }
+
+  .glass-shape {
+    background: linear-gradient(145deg, color-mix(in srgb, var(--glass-tint) 62%, transparent), color-mix(in srgb, hsl(var(--card)) 48%, transparent));
+    border: 1px solid color-mix(in srgb, var(--glass-edge) 54%, transparent);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 color-mix(in srgb, hsl(var(--primary)) 12%, transparent), 0 10px 22px var(--glass-shadow);
+    backdrop-filter: blur(18px) saturate(150%);
+  }
+
+  .glass-control {
+    isolation: isolate;
+    overflow: hidden;
+    position: relative;
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease, border-color 220ms ease;
+  }
+
+  .glass-control::before {
+    content: "";
+    position: absolute;
+    inset: -70% auto -70% -90%;
+    width: 58%;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 8%, var(--glass-shimmer) 48%, transparent 88%);
+    filter: blur(7px);
+    opacity: 0;
+    transform: skewX(-16deg);
+  }
+
+  .glass-control:hover,
+  .glass-control:focus-visible {
+    border-color: color-mix(in srgb, hsl(var(--primary)) 58%, transparent);
+    box-shadow: 0 9px 24px color-mix(in srgb, hsl(var(--primary)) 16%, transparent), inset 0 1px 0 var(--glass-highlight);
+    transform: translateY(-2px);
+  }
+
+  .glass-control:hover::before,
+  .glass-control:focus-visible::before {
+    animation: glass-shimmer 1s cubic-bezier(0.2, 0.65, 0.35, 1) both;
+  }
+
+  .glass-control:active {
+    transform: translateY(1px);
+    transition-duration: 100ms;
+  }
+
+  .blue-glow {
+    box-shadow: 0 0 0 1px color-mix(in srgb, hsl(var(--primary)) 34%, transparent), 0 0 34px color-mix(in srgb, hsl(var(--primary)) 24%, transparent);
+  }
+
+  .glass-grid {
+    background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.18em] text-primary;
+  }
+
+  @keyframes glass-edge-wrap {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes glass-shimmer {
+    from {
+      left: -90%;
+      opacity: 0;
+    }
+    20% {
+      opacity: 0.72;
+    }
+    to {
+      left: 150%;
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glass-interactive,
+    .glass-control {
+      transition-duration: 0.01ms;
+    }
+
+    .glass-interactive:hover,
+    .glass-interactive:focus-visible,
+    .glass-control:hover,
+    .glass-control:focus-visible {
+      transform: none;
+    }
+
+    .glass-interactive:hover::before,
+    .glass-interactive:focus-visible::before,
+    .glass-interactive:hover::after,
+    .glass-interactive:focus-visible::after,
+    .glass-control:hover::before,
+    .glass-control:focus-visible::before {
+      animation: none;
+    }
+  }
+
+  /* Hide ugly search cancel button in Chrome until we can style it properly */
+  input[type="search"]::-webkit-search-cancel-button {
+    @apply hidden;
+  }
+
+  /* Placeholder styling for contentEditable div */
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+
+  .no-default-hover-elevate {}
+
+  .no-default-active-elevate {}
+
+  .toggle-elevate::before,
+  .toggle-elevate-2::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: -1;
+  }
+
+  .toggle-elevate.toggle-elevated::before {
+    background-color: var(--elevate-2);
+  }
+
+  .border.toggle-elevate::before {
+    inset: -1px;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate),
+  .active-elevate:not(.no-default-active-elevate),
+  .hover-elevate-2:not(.no-default-hover-elevate),
+  .active-elevate-2:not(.no-default-active-elevate) {
+    position: relative;
+    z-index: 0;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate)::after,
+  .active-elevate:not(.no-default-active-elevate)::after,
+  .hover-elevate-2:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:not(.no-default-active-elevate)::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: 999;
+  }
+
+  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-1);
+  }
+
+  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-2);
+  }
+
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+    inset: -1px;
+  }
+}

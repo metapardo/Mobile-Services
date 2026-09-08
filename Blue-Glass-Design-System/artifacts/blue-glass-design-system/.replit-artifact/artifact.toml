@@ -1,0 +1,19 @@
+kind = "design-system"
+previewPath = "/blue-glass-design-system/"
+title = "Blue Glass Design System"
+description = "A living design system for a Flora-inspired creative app, with a deep navy foundation, electric blue action color, layered glass surfaces, and reusable UI components and layouts."
+version = "1.0.0"
+id = "artifacts/blue-glass-design-system"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/blue-glass-design-system/" ]
+localPort = 18552
+
+[services.development]
+run = "pnpm --filter @workspace/blue-glass-design-system run dev"
+
+[services.env]
+PORT = "18552"
+BASE_PATH = "/blue-glass-design-system/"
