@@ -1,6 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
 import { AuthShell } from '@/components/auth-shell';
-import { Button } from '@/components/ui/button';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 
 /**
  * Top-level fallback rendered by the `Sentry.ErrorBoundary` wrapping `<App />` in

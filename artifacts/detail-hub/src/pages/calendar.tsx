@@ -1,12 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { format, addDays, addWeeks, subWeeks, startOfWeek, isToday, isSameDay } from 'date-fns';
-import { bookings, clients, packages, employees, settings } from '@/lib/mock-data';
+import { settings } from '@/lib/mock-data';
+import { adaptBooking } from '@/lib/api-adapters';
+import { useListBookings, useListClients, useListEmployees, useListPackages, getListBookingsQueryKey } from '@workspace/api-client-react';
 import { Link } from 'wouter';
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, CalendarPlus, Loader2, AlertTriangle } from 'lucide-react';
 import { StatusBadge } from '@/components/status-badge';
 import { computeFuelGauge } from '@/lib/fuel-gauge';
 import { FuelGaugeIcon } from '@/components/fuel-gauge-icon';
 import { PaymentMethodBadge } from '@/components/payment-method-badge';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from '@workspace/blue-glass-design-system/components/ui/empty';
 
 const HOUR_HEIGHT = 64; // px per hour
 const GRID_START_HOUR = 7; // 7 AM
@@ -31,9 +42,60 @@ export default function Calendar() {
 
   const weekStart = startOfWeek(weekAnchor, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const weekEnd = addDays(weekStart, 6);
 
   const selectedStr = format(selectedDate, 'yyyy-MM-dd');
-  const dayBookings = bookings
+
+  // ── Real data ──────────────────────────────────────────────────────────────
+  // Scoped to the visible week — FR-10's whole reason for a `start`/`end` list
+  // query is so the calendar doesn't fetch every booking an organization has
+  // ever made just to render one week.
+  const weekBookingsQuery = useListBookings({
+    start: format(weekStart, 'yyyy-MM-dd'),
+    end: format(weekEnd, 'yyyy-MM-dd'),
+  });
+  // `includeArchived`/`includeInactive` so a booking that references a client/
+  // package/employee retired *after* the booking was made still resolves to a real
+  // name here instead of `undefined` — soft-delete exists specifically so historical
+  // bookings keep valid, displayable references (PRD Section 8/Edge Cases).
+  const clientsQuery = useListClients({ includeArchived: true });
+  const packagesQuery = useListPackages({ includeArchived: true });
+  const employeesQuery = useListEmployees({ includeInactive: true });
+
+  const weekBookingsLoaded = weekBookingsQuery.data ?? [];
+  const hasWeekBookings = weekBookingsLoaded.length > 0;
+
+  // A brand-new organization has zero bookings, period — distinct from "no
+  // bookings this particular week" (a returning org just looking at a slow
+  // week). Only fall back to an unscoped "has this org ever booked anything"
+  // check once the visible week's own (cheap, scoped) query has already come
+  // back empty — orgs with a normal, populated calendar never pay for this
+  // extra request.
+  const allBookingsCheckQuery = useListBookings(undefined, {
+    query: {
+      queryKey: getListBookingsQueryKey(),
+      enabled: !weekBookingsQuery.isLoading && !weekBookingsQuery.isError && !hasWeekBookings,
+    },
+  });
+
+  const stillDeterminingEmptiness =
+    weekBookingsQuery.isLoading ||
+    (!weekBookingsQuery.isError && !hasWeekBookings && allBookingsCheckQuery.isLoading);
+
+  const hasNoBookingsAtAll =
+    !weekBookingsQuery.isLoading &&
+    !weekBookingsQuery.isError &&
+    !hasWeekBookings &&
+    !allBookingsCheckQuery.isLoading &&
+    !allBookingsCheckQuery.isError &&
+    (allBookingsCheckQuery.data?.length ?? 0) === 0;
+
+  const clients = clientsQuery.data ?? [];
+  const packages = packagesQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
+  const weekBookings = weekBookingsLoaded.map(adaptBooking);
+
+  const dayBookings = weekBookings
     .filter(b => b.date === selectedStr)
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
@@ -58,6 +120,8 @@ export default function Calendar() {
     setSelectedDate(today);
     setWeekAnchor(today);
   }
+
+  const loadFailed = weekBookingsQuery.isError || clientsQuery.isError || packagesQuery.isError || employeesQuery.isError;
 
   return (
     <div className="min-h-[100dvh] pb-20 md:pb-6 flex flex-col overflow-hidden">
@@ -113,13 +177,47 @@ export default function Calendar() {
         </div>
       </div>
 
+      {loadFailed ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center" data-testid="status-calendar-error">
+          <AlertTriangle className="w-8 h-8 text-destructive" />
+          <p className="text-[15px] font-semibold">Couldn't load your calendar</p>
+          <p className="text-[13px] text-muted-foreground max-w-[280px]">Check your connection and try again.</p>
+        </div>
+      ) : stillDeterminingEmptiness ? (
+        <div className="flex-1 flex items-center justify-center" data-testid="status-calendar-loading">
+          <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+        </div>
+      ) : hasNoBookingsAtAll ? (
+        <div className="flex-1 flex items-center justify-center px-4">
+          <Empty className="border border-border rounded-xl" data-testid="empty-state-calendar">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <CalendarPlus />
+              </EmptyMedia>
+              <EmptyTitle>No appointments yet</EmptyTitle>
+              <EmptyDescription>
+                Your calendar is empty. Add your first appointment to start filling in your schedule.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Link href="/booking/new">
+                <Button data-testid="button-add-first-appointment">
+                  <CalendarPlus />
+                  Add your first appointment
+                </Button>
+              </Link>
+            </EmptyContent>
+          </Empty>
+        </div>
+      ) : (
+        <>
       {/* ── Week strip ── */}
       <div className="px-3 pb-2 shrink-0">
         <div className="grid grid-cols-7">
           {weekDays.map(day => {
             const selected = isSameDay(day, selectedDate);
             const today = isToday(day);
-            const hasBkgs = bookings.some(b => b.date === format(day, 'yyyy-MM-dd'));
+            const hasBkgs = weekBookings.some(b => b.date === format(day, 'yyyy-MM-dd'));
             return (
               <button
                 key={day.toISOString()}
@@ -206,7 +304,7 @@ export default function Calendar() {
             const heightPx = Math.max((totalDuration / 60) * HOUR_HEIGHT, 40);
 
             const gauge = computeFuelGauge(
-              booking, bookings, packages,
+              booking, weekBookings, packages,
               settings.homeAddress,
               {
                 fuelGaugeHalfMi:  settings.fuelGaugeHalfMi,
@@ -265,6 +363,8 @@ export default function Calendar() {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

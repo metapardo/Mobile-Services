@@ -18,6 +18,14 @@ export const userTable = pgTable("user", {
   image: text("image"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  // Not a Better Auth core field — added per
+  // PRD_DetailHub_SelfServe_Signup_Trial.md FR-24 (guided tooltip tour, Section 7.6).
+  // Nullable: unset means "tour not yet completed/dismissed". Not registered as a
+  // Better Auth `additionalFields` entry because nothing in this task wires it through
+  // Better Auth's own APIs (signUpEmail/updateUser) — the eventual tour-completion
+  // endpoint (a separate Phase C frontend-driven task) can read/write it directly via
+  // `@workspace/db`, the same way every other non-Better-Auth-owned column here would.
+  onboardingTourCompletedAt: timestamp("onboarding_tour_completed_at"),
 });
 
 export const insertUserSchema = createInsertSchema(userTable).omit({

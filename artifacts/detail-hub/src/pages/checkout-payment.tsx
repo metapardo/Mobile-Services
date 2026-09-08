@@ -13,9 +13,9 @@ import {
   ArrowLeft, Banknote, CreditCard, Check,
   X as XIcon, Wifi, Loader2,
 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@workspace/blue-glass-design-system/components/ui/input';
+import { Label } from '@workspace/blue-glass-design-system/components/ui/label';
+import { Textarea } from '@workspace/blue-glass-design-system/components/ui/textarea';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

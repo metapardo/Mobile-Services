@@ -19,7 +19,7 @@ export const employeeSplitsTable = pgTable(
       .references(() => organizationTable.id, { onDelete: "cascade" }),
     bookingId: integer("booking_id")
       .notNull()
-      .references(() => bookingsTable.id),
+      .references(() => bookingsTable.id, { onDelete: "cascade" }),
     employeeId: integer("employee_id")
       .notNull()
       .references(() => employeesTable.id),

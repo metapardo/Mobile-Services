@@ -25,8 +25,15 @@ export const employeesTable = pgTable(
     email: text("email"),
     phone: text("phone"),
     color: text("color").notNull(),
-    workerType: workerTypeEnum("worker_type").notNull(),
-    paymentMethod: paymentMethodEnum("payment_method").notNull(),
+    // `PRD_DetailHub_Real_Bookings_Clients_Backend.md` FR-2/FR-9 wants employee
+    // creation to stay minimal (name + color, enough to assign a booking and show a
+    // name on the calendar) — the full payroll shape (worker type, payment method, bank
+    // accounts) belongs to the Payroll Module and is filled in later from that surface.
+    // Defaults here (rather than making these columns nullable) keep them meaningful
+    // Postgres enums with a real value from day one while still letting
+    // `POST /employees` omit them entirely.
+    workerType: workerTypeEnum("worker_type").notNull().default("w2_employee"),
+    paymentMethod: paymentMethodEnum("payment_method").notNull().default("direct_deposit"),
     bankAccounts: jsonb("bank_accounts").$type<BankAccount[]>().notNull().default([]),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),

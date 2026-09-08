@@ -11,11 +11,17 @@ tags:
   - name: health
     description: Health operations
   - name: auth
-    description: Admin/owner authentication and platform-invite-gated signup
-  - name: access-requests
-    description: >-
-      Public "request access" lead capture for visitors without a platform invite
-      token
+    description: Admin/owner authentication and fully self-serve signup
+  - name: settings
+    description: Per-organization business settings (home base address, Gas Meter/payroll defaults)
+  - name: clients
+    description: Customer/client records
+  - name: packages
+    description: Service packages/add-ons offered
+  - name: employees
+    description: Minimal employee records (name/color) — full payroll profile is a separate module
+  - name: bookings
+    description: Scheduled jobs, including their assigned packages and employee revenue splits
 paths:
   /healthz:
     get:
@@ -34,15 +40,20 @@ paths:
     post:
       operationId: signup
       tags: [auth]
-      summary: Platform-invite-gated admin/owner signup
+      summary: Fully self-serve admin/owner signup
       description: >-
-        Creates a new admin/owner user account together with a brand-new organization.
-        This app is invite-only at the platform level (not open signup): the request
-        must carry a live, unused, unexpired `inviteToken` issued out-of-band, or no
-        user or organization is created. On success the invite token is permanently
-        consumed (single-use). This endpoint does not sign the caller in — it only
-        provisions the account; a separate sign-in step (not yet implemented) is
-        required afterward.
+        Creates a new admin/owner user account and a brand-new organization together,
+        with no invite token or gate of any kind
+        (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-1/FR-2) — collects name, email,
+        password, business name, and a required business address (FR-3, FR-11), which
+        populates the new organization's `settings.homeAddress` (the same field the
+        Gas Meter feature depends on; not a duplicate address field). No card is
+        collected here (Phase B/Stripe scope, not this endpoint). On success, this
+        endpoint also signs the caller in (sets the session cookie, same as
+        `POST /auth/login`) and activates the newly-created organization on that
+        session — the response includes `token`/`organizationId` for the same reason
+        `LoginResult` does, so the frontend can land the user directly inside the app
+        with no separate login step and no email-verification gate (FR-5).
       requestBody:
         required: true
         content:
@@ -51,16 +62,16 @@ paths:
               $ref: "#/components/schemas/SignupRequest"
       responses:
         "201":
-          description: Account and organization created
+          description: Account and organization created; caller is signed in.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SignupResult"
         "400":
           description: >-
-            Invalid request body; invalid/expired/already-used invite token; or the
-            organization slug/name is already taken (`error` carries a machine-readable
-            code, e.g. `invalid_invite_token`, `ORGANIZATION_SLUG_ALREADY_TAKEN`).
+            Invalid request body, or the organization slug/name is already taken
+            (`error` carries a machine-readable code, e.g.
+            `ORGANIZATION_SLUG_ALREADY_TAKEN`).
           content:
             application/json:
               schema:
@@ -177,53 +188,866 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionResult"
-  /access-requests:
-    post:
-      operationId: requestAccess
-      tags: [access-requests]
-      summary: Submit a public "request access" lead
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get the current organization's settings
       description: >-
-        Public, unauthenticated endpoint for the marketing/landing page's "request
-        access" form — for visitors who don't have a platform invite token yet (see
-        `POST /auth/signup`). Records interest for an operator to follow up on
-        out-of-band (e.g. by issuing a real invite token); does not create a user,
-        organization, or invite token itself, and does not require or check one.
-
-        Resubmitting the same email while a prior submission is still `pending`
-        updates that existing request's timestamp rather than creating a duplicate row.
-        Once a request has moved to `invited` or `declined`, resubmitting the same
-        email creates a new `pending` row instead of touching the resolved one.
-
-        Carries a hidden honeypot field (`honeypot`) for spam filtering: real users
-        never populate it (it should be rendered visually hidden and excluded from tab
-        order in the form), so a non-empty value is assumed to be a bot. Submissions
-        with a non-empty `honeypot` are silently accepted (always `200`, never a
-        distinguishing error) and discarded without being recorded — this is
-        deliberate, so an automated submitter has no signal to adapt to.
+        Requires an authenticated session with an active organization (session
+        cookie). Returns the single settings row for that organization — created
+        automatically at signup (`POST /auth/signup`) with the business address
+        supplied there and sensible defaults for everything else (Gas Meter
+        thresholds, commission rate, payment-processor flags); see
+        `PRD_DetailHub_SelfServe_Signup_Trial.md` FR-11/FR-13.
+      responses:
+        "200":
+          description: The organization's settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >-
+            No settings row exists for this organization yet (should not happen for an
+            organization created via `POST /auth/signup`, which always creates one).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update the current organization's settings
+      description: >-
+        Requires an authenticated session with an active organization (session
+        cookie). Partial update — any subset of fields may be sent; omitted fields are
+        left unchanged. The primary use case for now is editing the business address
+        later (`homeAddress`, FR-13), but every settings field is editable through this
+        same endpoint.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RequestAccessRequest"
+              $ref: "#/components/schemas/UpdateSettingsRequest"
       responses:
         "200":
-          description: >-
-            Acknowledged. Returned both for a genuinely recorded/updated request and
-            for a silently-discarded honeypot-triggered submission — the response body
-            deliberately does not distinguish the two (see the honeypot description
-            above).
+          description: Updated settings.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RequestAccessResult"
+                $ref: "#/components/schemas/SettingsResult"
         "400":
-          description: Invalid request body, e.g. malformed email (`error` e.g. `invalid_request`).
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No settings row exists for this organization yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clients:
+    get:
+      operationId: listClients
+      tags: [clients]
+      summary: List the current organization's clients
+      description: >-
+        Requires an authenticated session with an active organization. Excludes
+        archived (soft-deleted) clients by default — pass `includeArchived=true` to
+        include them too (e.g. a client-detail page reached from an old booking).
+      parameters:
+        - name: includeArchived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: The organization's clients.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createClient
+      tags: [clients]
+      summary: Create a client
+      description: Requires an authenticated session with an active organization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientRequest"
+      responses:
+        "201":
+          description: Client created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clients/{id}:
+    get:
+      operationId: getClient
+      tags: [clients]
+      summary: Get a client by id
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The client.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No client with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateClient
+      tags: [clients]
+      summary: Update a client
+      description: Partial update — any subset of fields may be sent; omitted fields are left unchanged.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClientRequest"
+      responses:
+        "200":
+          description: Updated client.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No client with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: archiveClient
+      tags: [clients]
+      summary: Archive (soft-delete) a client
+      description: >-
+        Marks the client archived rather than removing the row, so any booking that
+        already references it keeps a valid `clientId`
+        (`PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 10/Edge Cases). The
+        archived client no longer appears in `GET /clients` unless
+        `includeArchived=true` is passed.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Client archived.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No client with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /packages:
+    get:
+      operationId: listPackages
+      tags: [packages]
+      summary: List the current organization's packages
+      description: >-
+        Excludes archived (soft-deleted) packages by default — pass
+        `includeArchived=true` to include retired packages still referenced by
+        historical bookings.
+      parameters:
+        - name: includeArchived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: The organization's packages.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PackageResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createPackage
+      tags: [packages]
+      summary: Create a package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePackageRequest"
+      responses:
+        "201":
+          description: Package created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /packages/{id}:
+    get:
+      operationId: getPackage
+      tags: [packages]
+      summary: Get a package by id
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The package.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No package with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updatePackage
+      tags: [packages]
+      summary: Update a package
+      description: Partial update — any subset of fields may be sent; omitted fields are left unchanged.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePackageRequest"
+      responses:
+        "200":
+          description: Updated package.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No package with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: archivePackage
+      tags: [packages]
+      summary: Archive (soft-delete) a package
+      description: >-
+        Marks the package archived rather than removing the row, so any booking that
+        already references it keeps a valid `packageId`. The archived package no
+        longer appears in `GET /packages` unless `includeArchived=true` is passed.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Package archived.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No package with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /employees:
+    get:
+      operationId: listEmployees
+      tags: [employees]
+      summary: List the current organization's employees
+      description: >-
+        Minimal employee records (`PRD_DetailHub_Real_Bookings_Clients_Backend.md`
+        FR-2/FR-9) — just enough to assign a booking and show a name/color on the
+        calendar. Excludes inactive (soft-deleted) employees by default — pass
+        `includeInactive=true` to include them too.
+      parameters:
+        - name: includeInactive
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: The organization's employees.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmployeeResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createEmployee
+      tags: [employees]
+      summary: Create an employee
+      description: >-
+        Minimal create for v1 — `name`/`color` only, matching FR-9 ("create/update can
+        be simple"). The full employee profile (worker type, pay rate, bank accounts)
+        is a Payroll Module concern layered onto this same table later.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmployeeRequest"
+      responses:
+        "201":
+          description: Employee created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /employees/{id}:
+    get:
+      operationId: getEmployee
+      tags: [employees]
+      summary: Get an employee by id
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The employee.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No employee with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateEmployee
+      tags: [employees]
+      summary: Update an employee
+      description: Partial update — any subset of fields may be sent; omitted fields are left unchanged.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmployeeRequest"
+      responses:
+        "200":
+          description: Updated employee.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No employee with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: archiveEmployee
+      tags: [employees]
+      summary: Archive (soft-delete) an employee
+      description: >-
+        Marks the employee inactive rather than removing the row, so any booking/
+        employee-split that already references it keeps a valid `employeeId`. The
+        archived employee no longer appears in `GET /employees` unless
+        `includeInactive=true` is passed.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Employee archived.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No employee with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bookings:
+    get:
+      operationId: listBookings
+      tags: [bookings]
+      summary: List bookings, optionally within a date range and/or for one client
+      description: >-
+        Powers the calendar view (FR-10) — `start`/`end` (both `YYYY-MM-DD`, both
+        optional, inclusive) filter on `date` rather than fetching every booking ever
+        made. Omitting both returns every booking for the organization. `clientId`
+        (Section 6.2 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md) further
+        narrows the result to bookings for that client — it composes with (never
+        replaces) the organization scope every request is already limited to, so a
+        `clientId` belonging to a different organization returns an empty array
+        rather than another organization's booking.
+      parameters:
+        - name: start
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: clientId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Matching bookings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookingResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a booking
+      description: >-
+        `packageIds` and `employeeSplit` fully describe the booking's line items and
+        employee revenue split in one call (a `booking_packages`/`employee_splits`
+        join row is written per entry). `employeeSplit` may be empty (a booking can be
+        created before an employee is assigned), but if non-empty every percentage
+        must be in `(0, 100]` and the set must sum to exactly 100.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingRequest"
+      responses:
+        "201":
+          description: Booking created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResult"
+        "400":
+          description: >-
+            Invalid request body, an invalid `employeeSplit` (see this operation's
+            description), or a `clientId`/`packageIds`/`employeeSplit[].employeeId`
+            that doesn't reference a real row in this organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get a booking by id
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The booking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResult"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No booking with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateBooking
+      tags: [bookings]
+      summary: Update a booking
+      description: >-
+        Partial update. Omitting `packageIds`/`employeeSplit` leaves them unchanged;
+        passing either replaces the entire set (not a merge). Same `employeeSplit`
+        validation as `POST /bookings`.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookingRequest"
+      responses:
+        "200":
+          description: Updated booking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResult"
+        "400":
+          description: Invalid request body, an invalid `employeeSplit`, or a dangling reference.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No booking with this id exists in the current organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteBooking
+      tags: [bookings]
+      summary: Delete a booking
+      description: >-
+        Hard delete (unlike clients/packages/employees) — nothing else references a
+        booking except its own `booking_packages`/`employee_splits` rows, which cascade.
+        Prefer `PATCH /bookings/{id}` with `status: cancelled` for a normal
+        cancellation; this is for genuine removal.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Booking deleted.
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No booking with this id exists in the current organization.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
   schemas:
     HealthStatus:
       type: object
@@ -235,13 +1059,9 @@ components:
     SignupRequest:
       type: object
       description: >-
-        Body for the platform-invite-gated admin/owner signup endpoint. Creates one
-        user and one brand-new organization together.
+        Body for the fully self-serve admin/owner signup endpoint. Creates one user
+        and one brand-new organization together — no invite token.
       properties:
-        inviteToken:
-          type: string
-          minLength: 1
-          description: Platform invite token issued out-of-band. Single-use.
         name:
           type: string
           minLength: 1
@@ -262,13 +1082,21 @@ components:
           type: string
           pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
           description: URL-safe unique slug for the new organization (lowercase, hyphen-separated).
+        businessAddress:
+          type: string
+          minLength: 1
+          description: >-
+            The business's home base address, required at signup
+            (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-3/FR-11). Stored verbatim as
+            `settings.homeAddress` for the new organization — not geocoded at signup
+            time (FR-12); a future geocoding job is out of scope here.
       required:
-        - inviteToken
         - name
         - email
         - password
         - organizationName
         - organizationSlug
+        - businessAddress
     AuthUser:
       type: object
       description: >-
@@ -318,9 +1146,23 @@ components:
           $ref: "#/components/schemas/AuthUser"
         organization:
           $ref: "#/components/schemas/SignupOrganization"
+        token:
+          type: string
+          description: >-
+            The raw session token, for non-cookie clients — mirrors
+            `LoginResult.token`. Present because signup now also signs the caller in
+            (see this operation's description).
+        organizationId:
+          type: string
+          description: >-
+            The newly-created organization's id, set as this session's active
+            organization. Unlike `LoginResult.organizationId`, this is never `null` —
+            signup always activates the organization it just created.
       required:
         - user
         - organization
+        - token
+        - organizationId
     LoginRequest:
       type: object
       description: Body for admin/owner sign-in.
@@ -387,37 +1229,529 @@ components:
           type: boolean
       required:
         - success
-    RequestAccessRequest:
+    SettingsResult:
       type: object
       description: >-
-        Body for the public "request access" lead-capture endpoint. Submitted from a
-        marketing/landing page form by visitors without a platform invite token.
+        Per-organization settings — one row per organization, created automatically at
+        signup. Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s
+        `Settings` interface (see `PRD_MobileDetailingApp.md` Section 3.2's Gas Meter
+        feature for what most of these beyond `homeAddress` are used for).
       properties:
+        homeAddress:
+          type: string
+          description: >-
+            The business's home base address (`AdminSettings.home_base_address` in the
+            master PRD). Editable via `PATCH /settings`.
+        gasPrice:
+          type: number
+          description: Assumed $/gallon fuel price, for Gas Meter cost estimates.
+        vehicleMpg:
+          type: number
+          description: Assumed vehicle fuel economy, for Gas Meter cost estimates.
+        gasThresholdGreen:
+          type: number
+          description: Gas Meter "green" cost-ratio threshold (percent).
+        gasThresholdAmber:
+          type: number
+          description: Gas Meter "amber" cost-ratio threshold (percent).
+        commissionRate:
+          type: number
+          description: Default employee commission rate (percent), used by Payroll.
+        fuelGaugeHalfMi:
+          type: number
+          description: Fuel Gauge "half" band lower bound, $/mile.
+        fuelGaugeFullMi:
+          type: number
+          description: Fuel Gauge "full" band lower bound, $/mile.
+        fuelGaugeHalfMin:
+          type: number
+          description: Fuel Gauge "half" band lower bound, $/minute.
+        fuelGaugeFullMin:
+          type: number
+          description: Fuel Gauge "full" band lower bound, $/minute.
+        paymentProcessorConnected:
+          type: boolean
+        cardReaderPaired:
+          type: boolean
+      required:
+        - homeAddress
+        - gasPrice
+        - vehicleMpg
+        - gasThresholdGreen
+        - gasThresholdAmber
+        - commissionRate
+        - fuelGaugeHalfMi
+        - fuelGaugeFullMi
+        - fuelGaugeHalfMin
+        - fuelGaugeFullMin
+        - paymentProcessorConnected
+        - cardReaderPaired
+    UpdateSettingsRequest:
+      type: object
+      description: >-
+        Partial update to the current organization's settings. All fields optional —
+        omitted fields are left unchanged. Same field set as `SettingsResult`.
+      properties:
+        homeAddress:
+          type: string
+          minLength: 1
+        gasPrice:
+          type: number
+        vehicleMpg:
+          type: number
+        gasThresholdGreen:
+          type: number
+        gasThresholdAmber:
+          type: number
+        commissionRate:
+          type: number
+        fuelGaugeHalfMi:
+          type: number
+        fuelGaugeFullMi:
+          type: number
+        fuelGaugeHalfMin:
+          type: number
+        fuelGaugeFullMin:
+          type: number
+        paymentProcessorConnected:
+          type: boolean
+        cardReaderPaired:
+          type: boolean
+    ClientResult:
+      type: object
+      description: >-
+        A customer/client record. Field names/shape match
+        `artifacts/detail-hub/src/lib/mock-data.ts`'s `Client` interface, plus
+        `archived`/`createdAt`/`updatedAt` (formalized here, not present on the mock
+        interface).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        archived:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - phone
+        - email
+        - address
+        - archived
+        - createdAt
+        - updatedAt
+    CreateClientRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        phone:
+          type: string
+          minLength: 1
         email:
           type: string
           format: email
-          description: The requester's email address, for an operator to follow up on.
-        businessName:
+        address:
+          type: string
+          minLength: 1
+        notes:
           type: string
           nullable: true
-          description: The requester's business name, if they gave one. Optional.
-        honeypot:
-          type: string
-          description: >-
-            Anti-spam honeypot field. Must be rendered visually hidden and left out of
-            tab order in the form so real users never populate it — any non-empty value
-            is treated as a bot and the submission is silently discarded (still
-            responds `200`, see this operation's description). Omit or send empty for
-            a real submission.
       required:
+        - name
+        - phone
         - email
-    RequestAccessResult:
+        - address
+    UpdateClientRequest:
+      type: object
+      description: Partial update — all fields optional.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        phone:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+          minLength: 1
+        notes:
+          type: string
+          nullable: true
+    PackageResult:
+      type: object
+      description: >-
+        A service package/add-on. Field names/shape match
+        `artifacts/detail-hub/src/lib/mock-data.ts`'s `Package` interface (including
+        `durationMinutes`, not `durationEstimate` — the mock interface is the source of
+        truth per `PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 7), plus
+        `createdAt`/`updatedAt`.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+          enum: [Exterior, Interior, Full, Add-on]
+        description:
+          type: string
+        price:
+          type: number
+        durationMinutes:
+          type: integer
+        isAddon:
+          type: boolean
+        archived:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - category
+        - description
+        - price
+        - durationMinutes
+        - isAddon
+        - archived
+        - createdAt
+        - updatedAt
+    CreatePackageRequest:
       type: object
       properties:
-        success:
+        name:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          enum: [Exterior, Interior, Full, Add-on]
+        description:
+          type: string
+          minLength: 1
+        price:
+          type: number
+          minimum: 0
+        durationMinutes:
+          type: integer
+          minimum: 1
+        isAddon:
           type: boolean
       required:
-        - success
+        - name
+        - category
+        - description
+        - price
+        - durationMinutes
+        - isAddon
+    UpdatePackageRequest:
+      type: object
+      description: Partial update — all fields optional.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          enum: [Exterior, Interior, Full, Add-on]
+        description:
+          type: string
+          minLength: 1
+        price:
+          type: number
+          minimum: 0
+        durationMinutes:
+          type: integer
+          minimum: 1
+        isAddon:
+          type: boolean
+    EmployeeResult:
+      type: object
+      description: >-
+        Minimal employee record — `id`/`name`/`color` match
+        `artifacts/detail-hub/src/lib/mock-data.ts`'s `Employee` interface exactly;
+        `active`/`email`/`phone`/`createdAt`/`updatedAt` are formalized additions. Does
+        NOT expose the full payroll profile (worker type, pay rate, bank accounts) that
+        already exists at the DB layer for the Payroll Module — out of scope for this
+        API surface per FR-2.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - color
+        - active
+        - createdAt
+        - updatedAt
+    CreateEmployeeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      required:
+        - name
+        - color
+    UpdateEmployeeRequest:
+      type: object
+      description: Partial update — all fields optional.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        color:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+    EmployeeSplit:
+      type: object
+      description: >-
+        Matches `artifacts/detail-hub/src/lib/mock-data.ts`'s `EmployeeSplit`
+        interface. `Booking.employeeIds` is folded into this (see `BookingResult`) —
+        the split's `employeeId` list already implies assignment, so a separate raw
+        id list would just be redundant data that could drift.
+      properties:
+        employeeId:
+          type: integer
+        percentage:
+          type: number
+          minimum: 0
+          maximum: 100
+      required:
+        - employeeId
+        - percentage
+    BookingResult:
+      type: object
+      description: >-
+        Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s
+        `Booking` interface (`date`, `startTime`, `address`, not the master PRD's
+        `scheduledDate`/`scheduledStartTime`/`serviceAddress` — the mock interface is
+        the source of truth per Section 7), plus `createdAt`/`updatedAt`/`createdBy`.
+        `employeeIds` is derived from `employeeSplit` for convenience, not stored
+        separately. (`gasMeterStatus`/`weatherSnapshot` were removed per FR-9 of
+        PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder
+        columns never populated by a real integration; FR-11 says they come back for
+        real later, see Fuel_Gauge_PRD.md.)
+      properties:
+        id:
+          type: integer
+        clientId:
+          type: integer
+        packageIds:
+          type: array
+          items:
+            type: integer
+        employeeIds:
+          type: array
+          items:
+            type: integer
+          description: Derived from `employeeSplit` (every `employeeId` present in the split).
+        employeeSplit:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeSplit"
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+          description: "24-hour HH:MM, e.g. \"09:00\"."
+        address:
+          type: string
+        depositAmount:
+          type: number
+        parkingCost:
+          type: number
+        status:
+          type: string
+          enum: [confirmed, pending, completed, cancelled, no-show]
+        notes:
+          type: string
+          nullable: true
+        paymentMethod:
+          type: string
+          nullable: true
+          enum: [cash, zelle, venmo, card, tap]
+        paymentNote:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          description: id of the admin/owner user who created this booking.
+      required:
+        - id
+        - clientId
+        - packageIds
+        - employeeIds
+        - employeeSplit
+        - date
+        - startTime
+        - address
+        - depositAmount
+        - parkingCost
+        - status
+        - createdAt
+        - updatedAt
+        - createdBy
+    CreateBookingRequest:
+      type: object
+      properties:
+        clientId:
+          type: integer
+        packageIds:
+          type: array
+          items:
+            type: integer
+          default: []
+        employeeSplit:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeSplit"
+          default: []
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+        address:
+          type: string
+          minLength: 1
+        depositAmount:
+          type: number
+          minimum: 0
+        parkingCost:
+          type: number
+          minimum: 0
+        status:
+          type: string
+          enum: [confirmed, pending, completed, cancelled, no-show]
+        notes:
+          type: string
+          nullable: true
+        paymentMethod:
+          type: string
+          nullable: true
+          enum: [cash, zelle, venmo, card, tap]
+        paymentNote:
+          type: string
+          nullable: true
+      required:
+        - clientId
+        - date
+        - startTime
+        - address
+        - depositAmount
+        - parkingCost
+        - status
+    UpdateBookingRequest:
+      type: object
+      description: >-
+        Partial update — all fields optional. Omitting `packageIds`/`employeeSplit`
+        leaves them unchanged; passing either replaces the entire set.
+      properties:
+        clientId:
+          type: integer
+        packageIds:
+          type: array
+          items:
+            type: integer
+        employeeSplit:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeSplit"
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+        address:
+          type: string
+          minLength: 1
+        depositAmount:
+          type: number
+          minimum: 0
+        parkingCost:
+          type: number
+          minimum: 0
+        status:
+          type: string
+          enum: [confirmed, pending, completed, cancelled, no-show]
+        notes:
+          type: string
+          nullable: true
+        paymentMethod:
+          type: string
+          nullable: true
+          enum: [cash, zelle, venmo, card, tap]
+        paymentNote:
+          type: string
+          nullable: true
     ErrorResponse:
       type: object
       properties:

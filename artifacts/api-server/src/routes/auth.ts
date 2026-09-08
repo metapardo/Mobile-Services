@@ -6,8 +6,8 @@ import {
   userTable,
   memberTable,
   sessionTable,
-  claimPlatformInviteToken,
-  releasePlatformInviteToken,
+  organizationTable,
+  createDefaultSettings,
   eq,
 } from "@workspace/db";
 import {
@@ -26,15 +26,20 @@ import { toFetchHeaders, forwardSetCookies } from "../lib/http-bridge";
 const router: IRouter = Router();
 
 /**
- * POST /auth/signup — the platform-level, invite-gated admin/owner signup endpoint.
+ * POST /auth/signup — fully self-serve admin/owner signup. No invite token, no gate of
+ * any kind (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-1/FR-2 — this reverses the
+ * previous platform-invite-token gate entirely, see that PRD's Section 2). On success,
+ * this route also signs the caller in and activates the new organization, so the
+ * response can be used the same way `POST /auth/login`'s is (FR-5: land directly in
+ * the app, no separate login step).
  *
  * DESIGN NOTE — why this is NOT a single real DB transaction, and what stands in for
  * one instead:
  *
- * The obvious shape for "create a user, create an org, mark a token used" is one DB
- * transaction: if any step fails, nothing sticks. That's not achievable here through
- * Better Auth's public API, and this was verified against the installed
- * `better-auth@1.6.26` / `@better-auth/core@1.6.26` packages rather than assumed:
+ * The obvious shape for "create a user, create an org, create its settings, sign the
+ * user in" is one DB transaction: if any step fails, nothing sticks. That's not
+ * achievable here through Better Auth's public API, and this was verified against the
+ * installed `better-auth@1.6.26` / `@better-auth/core@1.6.26` packages rather than assumed:
  *
  *   - `auth.api.signUpEmail` (dist/api/routes/sign-up.mjs) wraps its own body in
  *     `runWithTransaction(ctx.context.adapter, ...)`, which calls `adapter.transaction(cb)`
@@ -55,29 +60,41 @@ const router: IRouter = Router();
  * `db.transaction(...)` — Better Auth manages its own connection/adapter internally and
  * doesn't accept an externally-supplied transaction handle to participate in.
  *
- * Given that, this route uses Better Auth's own APIs sequentially and layers
+ * Given that, this route runs its steps sequentially and layers
  * eventual-consistency-with-compensation on top:
- *   1. Atomically claim the invite token first (see `claimPlatformInviteToken` in
- *      `@workspace/db` for why that single conditional UPDATE is race-safe on its own).
- *      If claiming fails, nothing else happens — no user, no org.
- *   2. Create the user + credential account via `auth.api.signUpEmail`.
- *   3. Create the organization (+ owner membership) via `auth.api.createOrganization`,
+ *   1. Create the user + credential account via `auth.api.signUpEmail`.
+ *   2. Create the organization (+ owner membership) via `auth.api.createOrganization`,
  *      passing `userId` explicitly with no session/headers so Better Auth treats this as
  *      a trusted server-side ("system") action, per `crud-org.mjs`'s own
  *      `isSystemAction` check.
- *   4. If step 3 fails after step 2 succeeded, compensate: delete the orphaned user (and
- *      its `account` row) directly via our own `db`/Drizzle, and release the invite token
- *      back to unused so it isn't wasted on a failed attempt. Both are best-effort — this
- *      is intentionally NOT re-wrapped in more Better Auth calls, since the whole point
- *      is to clean up state Better Auth's own API already committed.
+ *   3. Create the organization's `settings` row (`createDefaultSettings`, `@workspace/db`)
+ *      from the required `businessAddress` field, seeding everything else with
+ *      mock-data.ts-matching defaults (FR-11/FR-12/FR-13 — see that function's own
+ *      comment for why these particular defaults).
+ *   4. Sign the new user in for real (`auth.api.signInEmail`, WITH this request's real
+ *      headers this time, unlike step 1's headless call — see `POST /auth/login`'s doc
+ *      comment for why `returnHeaders`/`forwardSetCookies` matter here), then set the
+ *      just-created organization as that session's active organization directly (a
+ *      plain Drizzle `UPDATE` on `sessionTable`, same approach `POST /auth/login` uses
+ *      — except here there's no membership-count ambiguity to resolve first, since this
+ *      is necessarily the only organization this brand-new user belongs to).
+ *   5. If any step from 2 onward fails, compensate: best-effort delete the organization
+ *      row directly via `db`/Drizzle (cascades to `member` and `settings` via their own
+ *      `onDelete: "cascade"` FKs — see `auth-member.ts`/`settings.ts`) and the orphaned
+ *      user (+ its `account`/`session` rows, same cascade mechanism). Deliberately NOT
+ *      `auth.api.deleteOrganization` — that endpoint requires a real authenticated
+ *      session (`requireHeaders: true`, `ctx.context.getSession(ctx)` must succeed),
+ *      which doesn't exist yet if step 2 or 3 is what failed, and may or may not exist
+ *      yet if step 4 is what failed. A direct cascade delete works regardless of which
+ *      step failed and needs no session at all.
  *
- * This leaves one honest gap, called out rather than hidden: between step 2 succeeding
- * and step 3 failing, there is a brief window where a `user`/`account` row exists with
- * no organization. The compensation above closes that window quickly (same request, no
- * user-visible intermediate state — the caller never receives success until step 3
- * succeeds), but it is not instantaneous/atomic the way a single transaction would be.
- * If the compensating cleanup itself fails (e.g. DB connection drops mid-request), an
- * orphaned user with a burned invite token could persist — logged loudly so it's
+ * This leaves one honest gap, called out rather than hidden: between step 1 succeeding
+ * and a later step failing, there is a brief window where a `user`/`organization`/etc.
+ * row exists that the caller was never told about. The compensation above closes that
+ * window quickly (same request, no user-visible intermediate state — the caller never
+ * receives success until every step succeeds), but it is not instantaneous/atomic the
+ * way a single transaction would be. If the compensating cleanup itself fails (e.g. DB
+ * connection drops mid-request), orphaned rows could persist — logged loudly so it's
  * operationally visible, not silently swallowed.
  */
 router.post("/auth/signup", async (req, res) => {
@@ -86,18 +103,10 @@ router.post("/auth/signup", async (req, res) => {
     res.status(400).json({ error: "invalid_request", message: parsed.error.message });
     return;
   }
-  const { inviteToken, name, email, password, organizationName, organizationSlug } = parsed.data;
-
-  const claimedToken = await claimPlatformInviteToken(inviteToken, email);
-  if (!claimedToken) {
-    res.status(400).json({
-      error: "invalid_invite_token",
-      message: "This invite token is invalid, expired, or has already been used.",
-    });
-    return;
-  }
+  const { name, email, password, organizationName, organizationSlug, businessAddress } = parsed.data;
 
   let createdUserId: string | undefined;
+  let createdOrganizationId: string | undefined;
   try {
     const signUpResult = await auth.api.signUpEmail({
       body: { name, email, password },
@@ -114,6 +123,21 @@ router.post("/auth/signup", async (req, res) => {
     if (!organization) {
       throw new Error("createOrganization returned no result");
     }
+    createdOrganizationId = organization.id;
+
+    await createDefaultSettings(organization.id, businessAddress);
+
+    const { headers, response: signInResponse } = await auth.api.signInEmail({
+      body: { email, password },
+      headers: toFetchHeaders(req.headers),
+      returnHeaders: true,
+    });
+    forwardSetCookies(res, headers);
+
+    await db
+      .update(sessionTable)
+      .set({ activeOrganizationId: organization.id })
+      .where(eq(sessionTable.token, signInResponse.token));
 
     const data = SignupResponse.parse({
       user: {
@@ -129,6 +153,8 @@ router.post("/auth/signup", async (req, res) => {
         slug: organization.slug,
         createdAt: organization.createdAt,
       },
+      token: signInResponse.token,
+      organizationId: organization.id,
     });
     res.status(201).json(data);
     return;
@@ -136,6 +162,16 @@ router.post("/auth/signup", async (req, res) => {
     // Compensating cleanup — see the design note above for why this exists instead of
     // a real transaction. Both actions are best-effort; failures here are logged loudly
     // rather than silently swallowed, since they mean leftover state.
+    if (createdOrganizationId) {
+      try {
+        await db.delete(organizationTable).where(eq(organizationTable.id, createdOrganizationId));
+      } catch (cleanupErr) {
+        logger.error(
+          { err: cleanupErr, organizationId: createdOrganizationId },
+          "signup: failed to clean up orphaned organization after a later step failed — manual intervention required",
+        );
+      }
+    }
     if (createdUserId) {
       try {
         await db.transaction(async (tx) => {
@@ -145,17 +181,9 @@ router.post("/auth/signup", async (req, res) => {
       } catch (cleanupErr) {
         logger.error(
           { err: cleanupErr, userId: createdUserId },
-          "signup: failed to clean up orphaned user after organization creation failure — manual intervention required",
+          "signup: failed to clean up orphaned user after a later step failed — manual intervention required",
         );
       }
-    }
-    try {
-      await releasePlatformInviteToken(claimedToken.id);
-    } catch (releaseErr) {
-      logger.error(
-        { err: releaseErr, tokenId: claimedToken.id },
-        "signup: failed to release claimed invite token after failure — token is now burned without a successful signup",
-      );
     }
 
     if (err instanceof APIError) {

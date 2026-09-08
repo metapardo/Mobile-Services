@@ -3,8 +3,8 @@ import { employees } from '@/lib/mock-data';
 import { payProfiles, updatePayProfile, addBankAccount, type EmployeeRole, type WorkerType, type PaymentMethod } from '@/lib/payroll-data';
 import { ArrowLeft, ChevronDown, ChevronUp, Plus, CreditCard } from 'lucide-react';
 import { Link } from 'wouter';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 
 function PayTypeChip({ pay_type }: { pay_type: string }) {
   return (

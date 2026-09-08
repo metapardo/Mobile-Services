@@ -2,7 +2,7 @@ import { format, isToday } from 'date-fns';
 import { bookings, clients, packages, employees } from '@/lib/mock-data';
 import { Link } from 'wouter';
 import { Calendar, DollarSign, Users, FileText } from 'lucide-react';
-import { Card } from '@/components/ui/card';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
 import { StatusBadge } from '@/components/status-badge';
 
 export default function Home() {

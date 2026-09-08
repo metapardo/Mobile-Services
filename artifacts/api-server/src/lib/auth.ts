@@ -46,15 +46,19 @@ import { getAllowedOriginPatterns } from "./cors";
  * point — the caller isn't authenticated yet, they're mid-signup), so auto-sign-in would
  * still create a `session` row server-side even though its cookie could never reach the
  * client, leaving a dangling, unusable session behind on every signup. Disabling it keeps
- * `signUpEmail` to exactly "create user + credential account", nothing else. Sign-in
- * (`auth.api.signInEmail`, a real session) is a separate, not-yet-built route — this repo
- * has no generic Better Auth HTTP handler (`auth.handler`) mounted anywhere yet, and
- * `routes/auth.ts` deliberately doesn't add one: mounting Better Auth's own catch-all
- * would also expose its ungated `/sign-up/email` endpoint directly, bypassing the
- * platform-invite-token gate entirely. `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are
- * also required in the environment before this can serve real traffic; Better Auth
- * resolves those from `process.env` itself (not read explicitly here), same as every
- * other Better Auth deployment.
+ * `signUpEmail` to exactly "create user + credential account", nothing else. `routes/auth.ts`
+ * now makes its own explicit `auth.api.signInEmail` call afterward (real request headers,
+ * `returnHeaders: true`) once the organization + its settings are created — see that
+ * route's doc comment (step 4) for why signup does this itself
+ * (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-5: land directly in the app after
+ * signup, no separate login step) rather than relying on `autoSignIn`. This repo still
+ * has no generic Better Auth HTTP handler (`auth.handler`) mounted anywhere — every
+ * route in `routes/auth.ts` calls `auth.api.*` directly instead, so the exact set of
+ * exposed auth operations stays deliberately curated rather than whatever Better Auth's
+ * own catch-all would expose. `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are also
+ * required in the environment before this can serve real traffic; Better Auth resolves
+ * those from `process.env` itself (not read explicitly here), same as every other
+ * Better Auth deployment.
  *
  * `trustedOrigins` — added alongside `POST /auth/login` and `GET /auth/session`, the
  * first two routes that need a real cross-origin browser session (signup's server-side

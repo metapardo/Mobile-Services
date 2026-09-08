@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { cn } from '@workspace/blue-glass-design-system/lib/utils';
 
 /**
  * Fixed pixel heights (not aspect-ratio-driven) so the "does one strip-copy

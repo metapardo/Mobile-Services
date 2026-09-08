@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, ArrowLeft, ChevronRight, Lock, Check, Building2, Car, CreditCard, Landmark } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import {
   getSetupProfile, updateSetupProfile, completeSetup,
   BUSINESS_CATEGORIES, BUSINESS_STRUCTURES, PAYMENT_PROCESSORS,

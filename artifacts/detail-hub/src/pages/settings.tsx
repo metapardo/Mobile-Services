@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { settings, updateSettings } from '@/lib/mock-data';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { Link } from 'wouter';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Input } from '@workspace/blue-glass-design-system/components/ui/input';
+import { Label } from '@workspace/blue-glass-design-system/components/ui/label';
+import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { SetupWizard } from '@/components/setup-wizard';
 import { getSetupProfile } from '@/lib/setup-store';
 
@@ -79,7 +79,10 @@ export default function Settings() {
         </Card>
 
         <Card className="p-6 border border-border rounded-xl mb-6">
-          <h2 className="text-[18px] font-semibold mb-4">Gas Meter Settings</h2>
+          <h2 className="text-[18px] font-semibold mb-4">Travel Cost Settings</h2>
+          <p className="text-[13px] text-muted-foreground mb-4">
+            Used to estimate gas cost/margin for the booking form's smart time-slot suggestions.
+          </p>
           <div className="space-y-4">
             <div>
               <Label htmlFor="gasPrice">Gas Price per Gallon</Label>
@@ -101,32 +104,6 @@ export default function Settings() {
                 onChange={(e) => setFormData({ ...formData, vehicleMpg: parseInt(e.target.value) })}
                 data-testid="input-vehicle-mpg"
               />
-            </div>
-            <div>
-              <Label htmlFor="gasThresholdGreen">Green Threshold (%)</Label>
-              <Input
-                id="gasThresholdGreen"
-                type="number"
-                value={formData.gasThresholdGreen}
-                onChange={(e) => setFormData({ ...formData, gasThresholdGreen: parseInt(e.target.value) })}
-                data-testid="input-threshold-green"
-              />
-              <p className="text-[13px] text-muted-foreground mt-1">
-                Show green when gas cost is ≤ this % of booking price
-              </p>
-            </div>
-            <div>
-              <Label htmlFor="gasThresholdAmber">Amber Threshold (%)</Label>
-              <Input
-                id="gasThresholdAmber"
-                type="number"
-                value={formData.gasThresholdAmber}
-                onChange={(e) => setFormData({ ...formData, gasThresholdAmber: parseInt(e.target.value) })}
-                data-testid="input-threshold-amber"
-              />
-              <p className="text-[13px] text-muted-foreground mt-1">
-                Show amber when gas cost is ≤ this % of booking price
-              </p>
             </div>
           </div>
         </Card>

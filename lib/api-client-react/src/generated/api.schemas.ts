@@ -10,14 +10,9 @@ export interface HealthStatus {
 }
 
 /**
- * Body for the platform-invite-gated admin/owner signup endpoint. Creates one user and one brand-new organization together.
+ * Body for the fully self-serve admin/owner signup endpoint. Creates one user and one brand-new organization together — no invite token.
  */
 export interface SignupRequest {
-  /**
-     * Platform invite token issued out-of-band. Single-use.
-     * @minLength 1
-     */
-  inviteToken: string;
   /**
      * The admin/owner user's display name.
      * @minLength 1
@@ -40,6 +35,11 @@ export interface SignupRequest {
      * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
      */
   organizationSlug: string;
+  /**
+     * The business's home base address, required at signup (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-3/FR-11). Stored verbatim as `settings.homeAddress` for the new organization — not geocoded at signup time (FR-12); a future geocoding job is out of scope here.
+     * @minLength 1
+     */
+  businessAddress: string;
 }
 
 /**
@@ -63,6 +63,10 @@ export interface SignupOrganization {
 export interface SignupResult {
   user: AuthUser;
   organization: SignupOrganization;
+  /** The raw session token, for non-cookie clients — mirrors `LoginResult.token`. Present because signup now also signs the caller in (see this operation's description). */
+  token: string;
+  /** The newly-created organization's id, set as this session's active organization. Unlike `LoginResult.organizationId`, this is never `null` — signup always activates the organization it just created. */
+  organizationId: string;
 }
 
 /**
@@ -101,19 +105,345 @@ export interface LogoutResult {
 }
 
 /**
- * Body for the public "request access" lead-capture endpoint. Submitted from a marketing/landing page form by visitors without a platform invite token.
+ * Per-organization settings — one row per organization, created automatically at signup. Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Settings` interface (see `PRD_MobileDetailingApp.md` Section 3.2's Gas Meter feature for what most of these beyond `homeAddress` are used for).
  */
-export interface RequestAccessRequest {
-  /** The requester's email address, for an operator to follow up on. */
-  email: string;
-  /** The requester's business name, if they gave one. Optional. */
-  businessName?: string | null;
-  /** Anti-spam honeypot field. Must be rendered visually hidden and left out of tab order in the form so real users never populate it — any non-empty value is treated as a bot and the submission is silently discarded (still responds `200`, see this operation's description). Omit or send empty for a real submission. */
-  honeypot?: string;
+export interface SettingsResult {
+  /** The business's home base address (`AdminSettings.home_base_address` in the master PRD). Editable via `PATCH /settings`. */
+  homeAddress: string;
+  /** Assumed $/gallon fuel price, for Gas Meter cost estimates. */
+  gasPrice: number;
+  /** Assumed vehicle fuel economy, for Gas Meter cost estimates. */
+  vehicleMpg: number;
+  /** Gas Meter "green" cost-ratio threshold (percent). */
+  gasThresholdGreen: number;
+  /** Gas Meter "amber" cost-ratio threshold (percent). */
+  gasThresholdAmber: number;
+  /** Default employee commission rate (percent), used by Payroll. */
+  commissionRate: number;
+  /** Fuel Gauge "half" band lower bound, $/mile. */
+  fuelGaugeHalfMi: number;
+  /** Fuel Gauge "full" band lower bound, $/mile. */
+  fuelGaugeFullMi: number;
+  /** Fuel Gauge "half" band lower bound, $/minute. */
+  fuelGaugeHalfMin: number;
+  /** Fuel Gauge "full" band lower bound, $/minute. */
+  fuelGaugeFullMin: number;
+  paymentProcessorConnected: boolean;
+  cardReaderPaired: boolean;
 }
 
-export interface RequestAccessResult {
-  success: boolean;
+/**
+ * Partial update to the current organization's settings. All fields optional — omitted fields are left unchanged. Same field set as `SettingsResult`.
+ */
+export interface UpdateSettingsRequest {
+  /** @minLength 1 */
+  homeAddress?: string;
+  gasPrice?: number;
+  vehicleMpg?: number;
+  gasThresholdGreen?: number;
+  gasThresholdAmber?: number;
+  commissionRate?: number;
+  fuelGaugeHalfMi?: number;
+  fuelGaugeFullMi?: number;
+  fuelGaugeHalfMin?: number;
+  fuelGaugeFullMin?: number;
+  paymentProcessorConnected?: boolean;
+  cardReaderPaired?: boolean;
+}
+
+/**
+ * A customer/client record. Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Client` interface, plus `archived`/`createdAt`/`updatedAt` (formalized here, not present on the mock interface).
+ */
+export interface ClientResult {
+  id: number;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  notes?: string | null;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateClientRequest {
+  /** @minLength 1 */
+  name: string;
+  /** @minLength 1 */
+  phone: string;
+  email: string;
+  /** @minLength 1 */
+  address: string;
+  notes?: string | null;
+}
+
+/**
+ * Partial update — all fields optional.
+ */
+export interface UpdateClientRequest {
+  /** @minLength 1 */
+  name?: string;
+  /** @minLength 1 */
+  phone?: string;
+  email?: string;
+  /** @minLength 1 */
+  address?: string;
+  notes?: string | null;
+}
+
+export type PackageResultCategory = typeof PackageResultCategory[keyof typeof PackageResultCategory];
+
+
+export const PackageResultCategory = {
+  Exterior: 'Exterior',
+  Interior: 'Interior',
+  Full: 'Full',
+  'Add-on': 'Add-on',
+} as const;
+
+/**
+ * A service package/add-on. Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Package` interface (including `durationMinutes`, not `durationEstimate` — the mock interface is the source of truth per `PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 7), plus `createdAt`/`updatedAt`.
+ */
+export interface PackageResult {
+  id: number;
+  name: string;
+  category: PackageResultCategory;
+  description: string;
+  price: number;
+  durationMinutes: number;
+  isAddon: boolean;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreatePackageRequestCategory = typeof CreatePackageRequestCategory[keyof typeof CreatePackageRequestCategory];
+
+
+export const CreatePackageRequestCategory = {
+  Exterior: 'Exterior',
+  Interior: 'Interior',
+  Full: 'Full',
+  'Add-on': 'Add-on',
+} as const;
+
+export interface CreatePackageRequest {
+  /** @minLength 1 */
+  name: string;
+  category: CreatePackageRequestCategory;
+  /** @minLength 1 */
+  description: string;
+  /** @minimum 0 */
+  price: number;
+  /** @minimum 1 */
+  durationMinutes: number;
+  isAddon: boolean;
+}
+
+export type UpdatePackageRequestCategory = typeof UpdatePackageRequestCategory[keyof typeof UpdatePackageRequestCategory];
+
+
+export const UpdatePackageRequestCategory = {
+  Exterior: 'Exterior',
+  Interior: 'Interior',
+  Full: 'Full',
+  'Add-on': 'Add-on',
+} as const;
+
+/**
+ * Partial update — all fields optional.
+ */
+export interface UpdatePackageRequest {
+  /** @minLength 1 */
+  name?: string;
+  category?: UpdatePackageRequestCategory;
+  /** @minLength 1 */
+  description?: string;
+  /** @minimum 0 */
+  price?: number;
+  /** @minimum 1 */
+  durationMinutes?: number;
+  isAddon?: boolean;
+}
+
+/**
+ * Minimal employee record — `id`/`name`/`color` match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Employee` interface exactly; `active`/`email`/`phone`/`createdAt`/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.
+ */
+export interface EmployeeResult {
+  id: number;
+  name: string;
+  color: string;
+  email?: string | null;
+  phone?: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEmployeeRequest {
+  /** @minLength 1 */
+  name: string;
+  /** @minLength 1 */
+  color: string;
+  email?: string | null;
+  phone?: string | null;
+  active?: boolean;
+}
+
+/**
+ * Partial update — all fields optional.
+ */
+export interface UpdateEmployeeRequest {
+  /** @minLength 1 */
+  name?: string;
+  /** @minLength 1 */
+  color?: string;
+  email?: string | null;
+  phone?: string | null;
+  active?: boolean;
+}
+
+/**
+ * Matches `artifacts/detail-hub/src/lib/mock-data.ts`'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split's `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.
+ */
+export interface EmployeeSplit {
+  employeeId: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  percentage: number;
+}
+
+export type BookingResultStatus = typeof BookingResultStatus[keyof typeof BookingResultStatus];
+
+
+export const BookingResultStatus = {
+  confirmed: 'confirmed',
+  pending: 'pending',
+  completed: 'completed',
+  cancelled: 'cancelled',
+  'no-show': 'no-show',
+} as const;
+
+export type BookingResultPaymentMethod = typeof BookingResultPaymentMethod[keyof typeof BookingResultPaymentMethod] | null;
+
+
+export const BookingResultPaymentMethod = {
+  cash: 'cash',
+  zelle: 'zelle',
+  venmo: 'venmo',
+  card: 'card',
+  tap: 'tap',
+} as const;
+
+/**
+ * Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD's `scheduledDate`/`scheduledStartTime`/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`/`updatedAt`/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)
+ */
+export interface BookingResult {
+  id: number;
+  clientId: number;
+  packageIds: number[];
+  /** Derived from `employeeSplit` (every `employeeId` present in the split). */
+  employeeIds: number[];
+  employeeSplit: EmployeeSplit[];
+  date: string;
+  /** 24-hour HH:MM, e.g. "09:00". */
+  startTime: string;
+  address: string;
+  depositAmount: number;
+  parkingCost: number;
+  status: BookingResultStatus;
+  notes?: string | null;
+  paymentMethod?: BookingResultPaymentMethod;
+  paymentNote?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** id of the admin/owner user who created this booking. */
+  createdBy: string;
+}
+
+export type CreateBookingRequestStatus = typeof CreateBookingRequestStatus[keyof typeof CreateBookingRequestStatus];
+
+
+export const CreateBookingRequestStatus = {
+  confirmed: 'confirmed',
+  pending: 'pending',
+  completed: 'completed',
+  cancelled: 'cancelled',
+  'no-show': 'no-show',
+} as const;
+
+export type CreateBookingRequestPaymentMethod = typeof CreateBookingRequestPaymentMethod[keyof typeof CreateBookingRequestPaymentMethod] | null;
+
+
+export const CreateBookingRequestPaymentMethod = {
+  cash: 'cash',
+  zelle: 'zelle',
+  venmo: 'venmo',
+  card: 'card',
+  tap: 'tap',
+} as const;
+
+export interface CreateBookingRequest {
+  clientId: number;
+  packageIds?: number[];
+  employeeSplit?: EmployeeSplit[];
+  date: string;
+  startTime: string;
+  /** @minLength 1 */
+  address: string;
+  /** @minimum 0 */
+  depositAmount: number;
+  /** @minimum 0 */
+  parkingCost: number;
+  status: CreateBookingRequestStatus;
+  notes?: string | null;
+  paymentMethod?: CreateBookingRequestPaymentMethod;
+  paymentNote?: string | null;
+}
+
+export type UpdateBookingRequestStatus = typeof UpdateBookingRequestStatus[keyof typeof UpdateBookingRequestStatus];
+
+
+export const UpdateBookingRequestStatus = {
+  confirmed: 'confirmed',
+  pending: 'pending',
+  completed: 'completed',
+  cancelled: 'cancelled',
+  'no-show': 'no-show',
+} as const;
+
+export type UpdateBookingRequestPaymentMethod = typeof UpdateBookingRequestPaymentMethod[keyof typeof UpdateBookingRequestPaymentMethod] | null;
+
+
+export const UpdateBookingRequestPaymentMethod = {
+  cash: 'cash',
+  zelle: 'zelle',
+  venmo: 'venmo',
+  card: 'card',
+  tap: 'tap',
+} as const;
+
+/**
+ * Partial update — all fields optional. Omitting `packageIds`/`employeeSplit` leaves them unchanged; passing either replaces the entire set.
+ */
+export interface UpdateBookingRequest {
+  clientId?: number;
+  packageIds?: number[];
+  employeeSplit?: EmployeeSplit[];
+  date?: string;
+  startTime?: string;
+  /** @minLength 1 */
+  address?: string;
+  /** @minimum 0 */
+  depositAmount?: number;
+  /** @minimum 0 */
+  parkingCost?: number;
+  status?: UpdateBookingRequestStatus;
+  notes?: string | null;
+  paymentMethod?: UpdateBookingRequestPaymentMethod;
+  paymentNote?: string | null;
 }
 
 export interface ErrorResponse {
@@ -122,4 +452,22 @@ export interface ErrorResponse {
   /** Human-readable detail, when available. */
   message?: string;
 }
+
+export type ListClientsParams = {
+includeArchived?: boolean;
+};
+
+export type ListPackagesParams = {
+includeArchived?: boolean;
+};
+
+export type ListEmployeesParams = {
+includeInactive?: boolean;
+};
+
+export type ListBookingsParams = {
+start?: string;
+end?: string;
+clientId?: number;
+};
 

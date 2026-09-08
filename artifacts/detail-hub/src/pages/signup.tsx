@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { Redirect, useLocation, Link, useSearch } from 'wouter';
+import { Redirect, useLocation, Link } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,12 +12,10 @@ import {
   type Variants,
 } from 'framer-motion';
 import {
-  AlertTriangle,
   ArrowUpRight,
   BarChart3,
   CalendarDays,
   Check,
-  CheckCircle2,
   ChevronDown,
   CircleDollarSign,
   CloudLightning,
@@ -34,12 +32,11 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useSignup, useRequestAccess, getGetAuthSessionQueryKey } from '@workspace/api-client-react';
-import { useToast } from '@/hooks/use-toast';
+import { useSignup, getGetAuthSessionQueryKey } from '@workspace/api-client-react';
+import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { useSession } from '@/hooks/use-session';
 import { useQueryClient } from '@tanstack/react-query';
 import rareAerMark from '@/assets/rare-aer-mark.png';
-import inviteReferenceImage from '@/assets/info_1788377152751.png';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
 import './signup.css';
@@ -52,15 +49,17 @@ import './signup.css';
 // already provides all of that at its own root in `App.tsx`).
 //
 // The one functional carry-over from the real, previous `/signup` page is
-// everything in the access-section state machine at the bottom of this file:
-// the no-token/rejected-token → real lead-capture `RequestAccessPanel` vs.
-// valid-`?invite=`-token → real account-creation `GatedSignupPanel` branch,
-// the already-authenticated → redirect-to-`/` check, and the invite-rejection
-// fallback + URL-clearing behavior. All of that is real, backend-wired logic
-// (`useRequestAccess`/`useSignup` from `@workspace/api-client-react`) restyled
-// to fit this design's `.access-panel.glass` / `.field-group` / `.access-form`
-// hand-styled markup instead of the shadcn `Form`/`FormField` components used
-// elsewhere in this app — this section intentionally does not use shadcn.
+// everything in the access-section at the bottom of this file: the real
+// account-creation `SignupPanel`, the already-authenticated → redirect-to-`/`
+// check, and real error handling from the mutation. Per
+// `PRD_DetailHub_SelfServe_Signup_Trial.md` (Phase A), signup is now fully
+// self-serve — there is no invite token, no gate, and no lead-capture
+// "request access" fallback; `SignupPanel` always renders unconditionally.
+// This is real, backend-wired logic (`useSignup` from
+// `@workspace/api-client-react`) restyled to fit this design's
+// `.access-panel.glass` / `.field-group` / `.access-form` hand-styled markup
+// instead of the shadcn `Form`/`FormField` components used elsewhere in this
+// app — this section intentionally does not use shadcn.
 // ─────────────────────────────────────────────────────────────────────────
 
 type IconType = typeof CalendarDays;
@@ -267,7 +266,7 @@ const faqs = [
   },
   {
     q: 'When can I start using it?',
-    a: 'Mobull is opening in small waves in 2026. Request access and we will follow up with the right early-access path for your business.',
+    a: 'Right now — sign up above and you are in. Every new account starts with a free 14-day trial and no card required, so you can try Mobull with real appointments before you decide.',
   },
 ];
 
@@ -335,20 +334,12 @@ const signupSchema = z.object({
     .string()
     .min(1, 'Business URL is required')
     .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Lowercase letters, numbers, and hyphens only (e.g. "acme-detailing")'),
+  // Populates `AdminSettings.home_base_address` (Gas Meter's home base) —
+  // stored verbatim, no geocoding at signup time (FR-11/FR-12).
+  businessAddress: z.string().min(1, 'Business address is required'),
 });
 
 type SignupFormValues = z.infer<typeof signupSchema>;
-
-const requestAccessSchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
-  businessName: z.string().optional(),
-  // Anti-spam honeypot — real visitors never see or fill this field (rendered
-  // visually hidden, out of tab order, below). Any non-empty value here means
-  // the submitter is a bot; the backend discards those silently.
-  honeypot: z.string().optional(),
-});
-
-type RequestAccessFormValues = z.infer<typeof requestAccessSchema>;
 
 function slugify(value: string): string {
   return value
@@ -404,7 +395,7 @@ function Header({ open, setOpen }: { open: boolean; setOpen: (value: boolean) =>
             Log in
           </Link>
           <button className="button-primary nav-cta" onClick={scrollToAccess} data-testid="button-nav-request">
-            Request access <ArrowUpRight size={14} />
+            Sign up <ArrowUpRight size={14} />
           </button>
         </div>
         <button
@@ -432,7 +423,7 @@ function Header({ open, setOpen }: { open: boolean; setOpen: (value: boolean) =>
             Log in
           </Link>
           <button className="button-primary" onClick={scrollToAccess} data-testid="button-mobile-request">
-            Request early access <ArrowUpRight size={15} />
+            Sign up <ArrowUpRight size={15} />
           </button>
         </nav>
       )}
@@ -1001,8 +992,10 @@ function FAQ() {
  * tier doesn't include stay dimmed rather than being omitted, so the two
  * cards stay visually comparable at a glance. Both CTAs are soft
  * top-of-funnel actions (`scrollToAccess`, same as the Hero/header buttons)
- * — this is a pre-launch, invite-only site with no real billing anywhere in
- * this codebase, so neither button implies an actual purchase.
+ * that scroll down to the real signup form rather than charging anything
+ * directly — there is no card-collection UI on this page; Stripe Checkout
+ * handles billing after signup, so neither button here implies an in-page
+ * purchase.
  */
 function Pricing() {
   return (
@@ -1068,144 +1061,15 @@ function Pricing() {
 }
 
 /**
- * The real no-token / rejected-token path: a real lead-capture form, wired to
- * the real `useRequestAccess` mutation — restyled to this design's
- * `.field-group`/`.access-form` markup instead of shadcn `Form`/`FormField`.
+ * The real, always-shown account-creation form — no invite token, no gate
+ * (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-1/FR-2/FR-5). Wired to the
+ * real `useSignup` mutation, restyled to this design's markup. On success the
+ * backend has already created the org, signed the user in (cookies set on
+ * the response, same mechanism `POST /auth/login` uses), and activated the
+ * new organization — so this lands the user directly in the app rather than
+ * sending them to `/login`.
  */
-function RequestAccessPanel({ noticeText, tokenRejected }: { noticeText: string; tokenRejected: boolean }) {
-  const { toast } = useToast();
-  const [submitted, setSubmitted] = useState(false);
-  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RequestAccessFormValues>({
-    resolver: zodResolver(requestAccessSchema),
-    defaultValues: { email: '', businessName: '', honeypot: '' },
-  });
-
-  const requestAccessMutation = useRequestAccess({
-    mutation: {
-      onSuccess: (_data, variables) => {
-        setSubmittedEmail(variables.data.email);
-        setSubmitted(true);
-      },
-      onError: (err) => {
-        const message = err?.data?.message ?? 'Something went wrong submitting your request. Please try again.';
-        toast({ title: 'Request failed', description: message, variant: 'destructive' });
-      },
-    },
-  });
-
-  const onSubmit = (values: RequestAccessFormValues) => {
-    requestAccessMutation.mutate({
-      data: {
-        email: values.email,
-        businessName: values.businessName?.trim() ? values.businessName.trim() : undefined,
-        honeypot: values.honeypot || undefined,
-      },
-    });
-  };
-
-  if (submitted) {
-    return (
-      <div className="success-state" data-testid="status-request-access-success">
-        <div className="success-icon">
-          <CheckCircle2 size={27} />
-        </div>
-        <h3>You&rsquo;re on the radar.</h3>
-        <p>Thanks for your interest in Mobull. We&rsquo;ll email {submittedEmail ?? 'you'} if a spot opens up.</p>
-        <p className="form-login-link">
-          Already have an account?{' '}
-          <Link href="/login" data-testid="link-login">
-            Log in
-          </Link>
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <form className="access-form" onSubmit={handleSubmit(onSubmit)} data-testid="form-request-access">
-      {tokenRejected ? (
-        <div className="form-notice rejected" data-testid="text-request-access-notice">
-          <AlertTriangle size={16} />
-          <p>{noticeText}</p>
-        </div>
-      ) : (
-        <p className="form-notice" data-testid="text-request-access-notice">
-          {noticeText}
-        </p>
-      )}
-
-      <div className="field-group">
-        <label htmlFor="request-email">Work email</label>
-        <input
-          id="request-email"
-          type="email"
-          autoComplete="email"
-          placeholder="you@yourbusiness.com"
-          data-testid="input-request-email"
-          {...register('email')}
-        />
-        {errors.email && <span className="field-error">{errors.email.message}</span>}
-      </div>
-
-      <div className="field-group">
-        <label htmlFor="request-business-name">Business name</label>
-        <input
-          id="request-business-name"
-          placeholder="Northline Mobile Detail (optional)"
-          data-testid="input-request-business-name"
-          {...register('businessName')}
-        />
-      </div>
-
-      {/* Honeypot: visually hidden and out of tab order, never seen by real
-          visitors. Positioned off-screen (not display:none — some bots
-          specifically skip display:none fields) so it still exists in the
-          DOM for less careful automated submitters to fill in. */}
-      <div className="field-group field-group-honeypot" aria-hidden="true">
-        <label htmlFor="request-honeypot">Company website</label>
-        <input id="request-honeypot" tabIndex={-1} autoComplete="off" data-testid="input-honeypot" {...register('honeypot')} />
-      </div>
-
-      <button
-        className="button-primary form-submit"
-        type="submit"
-        disabled={requestAccessMutation.isPending}
-        data-testid="button-request-access"
-      >
-        {requestAccessMutation.isPending ? (
-          <>
-            <Loader2 className="animate-spin" size={16} /> Submitting…
-          </>
-        ) : (
-          <>
-            Request access <Send size={15} />
-          </>
-        )}
-      </button>
-      <p className="form-fineprint">No sales sequence. No credit card. Just a thoughtful follow-up from a human.</p>
-      <p className="form-login-link">
-        Already have an account?{' '}
-        <Link href="/login" data-testid="link-login">
-          Log in
-        </Link>
-      </p>
-    </form>
-  );
-}
-
-/**
- * The real gated account-creation form, shown whenever an `?invite=` token is
- * present — wired to the real `useSignup` mutation, restyled to this design's
- * markup. Token validity can only be discovered at submit time (single-use
- * atomic claim on the backend, by design) — see `onInviteRejected`.
- */
-function GatedSignupPanel({ inviteToken, onInviteRejected }: { inviteToken: string; onInviteRejected: () => void }) {
+function SignupPanel() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1219,28 +1083,32 @@ function GatedSignupPanel({ inviteToken, onInviteRejected }: { inviteToken: stri
     formState: { errors },
   } = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
-    defaultValues: { name: '', email: '', password: '', organizationName: '', organizationSlug: '' },
+    defaultValues: {
+      name: '',
+      email: '',
+      password: '',
+      organizationName: '',
+      organizationSlug: '',
+      businessAddress: '',
+    },
   });
 
   const signupMutation = useSignup({
     mutation: {
       onSuccess: async () => {
-        // Signup only creates the user + organization — it doesn't sign in on its own
-        // (see `useSignup`'s JSDoc / the api-server's `autoSignIn: false`). Send the new
-        // user to log in with the credentials they just chose rather than pretending
-        // they're already authenticated.
+        // Signup now also signs the caller in and activates the new
+        // organization (see `SignupResult.token`/`organizationId`) — refresh
+        // the cached session query so `AuthGate`/`useSession` pick up the new
+        // `authenticated: true` state immediately instead of momentarily
+        // rendering a "still logged out" flash before their own next refetch.
         await queryClient.invalidateQueries({ queryKey: getGetAuthSessionQueryKey() });
         toast({
           title: 'Account created',
-          description: 'Log in with your new email and password to get started.',
+          description: "You're all set — welcome to Mobull.",
         });
-        setLocation('/login');
+        setLocation('/');
       },
       onError: (err) => {
-        if (err?.data?.error === 'invalid_invite_token') {
-          onInviteRejected();
-          return;
-        }
         const message = err?.data?.message ?? 'Something went wrong creating your account. Please try again.';
         toast({ title: 'Signup failed', description: message, variant: 'destructive' });
       },
@@ -1248,9 +1116,7 @@ function GatedSignupPanel({ inviteToken, onInviteRejected }: { inviteToken: stri
   });
 
   const onSubmit = (values: SignupFormValues) => {
-    signupMutation.mutate({
-      data: { ...values, inviteToken },
-    });
+    signupMutation.mutate({ data: values });
   };
 
   return (
@@ -1289,6 +1155,23 @@ function GatedSignupPanel({ inviteToken, onInviteRejected }: { inviteToken: stri
         ) : (
           <span className="field-error" style={{ color: 'hsl(var(--muted-foreground))' }}>
             Lowercase letters, numbers, and hyphens only.
+          </span>
+        )}
+      </div>
+
+      <div className="field-group">
+        <label htmlFor="business-address">Business address</label>
+        <input
+          id="business-address"
+          placeholder="123 Main St, Phoenix, AZ 85001"
+          data-testid="input-business-address"
+          {...register('businessAddress')}
+        />
+        {errors.businessAddress ? (
+          <span className="field-error">{errors.businessAddress.message}</span>
+        ) : (
+          <span className="field-error" style={{ color: 'hsl(var(--muted-foreground))' }}>
+            Your home base — used for route and Fuel Gauge calculations. Editable later in Settings.
           </span>
         )}
       </div>
@@ -1360,6 +1243,7 @@ function GatedSignupPanel({ inviteToken, onInviteRejected }: { inviteToken: stri
         )}
       </button>
 
+      <p className="form-fineprint">Free for your first 14 days. No card required.</p>
       <p className="form-login-link">
         Already have an account?{' '}
         <Link href="/login" data-testid="link-login">
@@ -1371,30 +1255,22 @@ function GatedSignupPanel({ inviteToken, onInviteRejected }: { inviteToken: stri
 }
 
 /**
- * "08 / First flight" section shell — the copy column adapts to whether a
- * valid invite token is in play, but the actual form rendered as `children`
- * is decided by `Signup()` below using the exact same state machine the
- * previous version of this page used.
+ * "08 / First flight" section shell — signup is fully self-serve now, so the
+ * copy here is fixed (no gated/invite-only variant). The form rendered as
+ * `children` is decided by `Signup()` below.
  */
-function AccessSection({ gated, children }: { gated: boolean; children: ReactNode }) {
+function AccessSection({ children }: { children: ReactNode }) {
   return (
     <section className="section access-section" id="access">
       <div className="container-wide">
         <div className="access-panel glass">
           <Reveal className="access-copy">
-            <div className="eyebrow">08 / {gated ? "You're invited" : 'First flight'}</div>
-            <h2 data-testid="text-access-headline">{gated ? 'Set up your business.' : 'Make your next mile count.'}</h2>
+            <div className="eyebrow">08 / First flight</div>
+            <h2 data-testid="text-access-headline">Make your next mile count.</h2>
             <p data-testid="text-access-subhead">
-              {gated
-                ? "You're one step from your first route — create your account and business below."
-                : "Mobull is invite-only while we build with owners who know the road. Tell us what you're building and we'll save you a seat."}
+              You&rsquo;re one step from your first route — create your account and business below. Free for your
+              first 14 days, no card required.
             </p>
-            <img
-              className="invite-image"
-              src={inviteReferenceImage}
-              alt="Mobull early access invitation reference"
-              data-testid="img-invite-reference"
-            />
           </Reveal>
           {children}
         </div>
@@ -1448,12 +1324,7 @@ function Footer() {
 }
 
 export default function Signup() {
-  const search = useSearch();
-  const [, setLocation] = useLocation();
-  const [inviteRejected, setInviteRejected] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-
-  const inviteToken = new URLSearchParams(search).get('invite');
 
   // Lenis owns smooth scroll for this page now (see `lenisScrollToHash` /
   // `scrollToAccess` above), so the previous `document.documentElement.style
@@ -1479,14 +1350,6 @@ export default function Signup() {
     return <Redirect to="/" />;
   }
 
-  // There is no way to check an invite token's validity without consuming it
-  // (see `claimPlatformInviteToken` — single atomic claim-and-consume, by
-  // design, to stay race-safe on single-use tokens). So "invalid, expired, or
-  // used" can only ever be discovered when the gated form below is actually
-  // submitted and the API rejects it (`onInviteRejected` from
-  // `GatedSignupPanel`) — never pre-validated on load.
-  const showGatedSignup = Boolean(inviteToken) && !inviteRejected;
-
   return (
     <div className="site-shell">
       <Header open={menuOpen} setOpen={setMenuOpen} />
@@ -1498,28 +1361,8 @@ export default function Signup() {
       <Compare />
       <FAQ />
       <Pricing />
-      <AccessSection gated={showGatedSignup}>
-        {showGatedSignup && inviteToken ? (
-          <GatedSignupPanel
-            inviteToken={inviteToken}
-            onInviteRejected={() => {
-              setInviteRejected(true);
-              // The token turned out invalid/expired/used — drop it from the
-              // URL rather than leaving a stale `?invite=` hanging around
-              // once we've fallen back to the request-access form.
-              setLocation('/signup', { replace: true });
-            }}
-          />
-        ) : (
-          <RequestAccessPanel
-            tokenRejected={inviteRejected}
-            noticeText={
-              inviteRejected
-                ? "That invite link didn't work — it may be expired or already used. Request a new one below and we'll follow up."
-                : "Mobull is invite-only right now. Request access below and we'll follow up if a spot opens up."
-            }
-          />
-        )}
+      <AccessSection>
+        <SignupPanel />
       </AccessSection>
       <Footer />
     </div>

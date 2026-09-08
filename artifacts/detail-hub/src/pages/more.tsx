@@ -1,6 +1,6 @@
 import { Link } from 'wouter';
 import { BarChart3, Package, Users2, Settings, LogOut, Loader2 } from 'lucide-react';
-import { Card } from '@/components/ui/card';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
 import { useLogout } from '@/hooks/use-logout';
 
 export default function More() {

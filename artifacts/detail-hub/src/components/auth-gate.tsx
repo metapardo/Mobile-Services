@@ -1,7 +1,7 @@
 import { Redirect } from 'wouter';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { AuthShell } from '@/components/auth-shell';
-import { Button } from '@/components/ui/button';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import { useSession } from '@/hooks/use-session';
 
 /**

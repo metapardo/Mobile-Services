@@ -1,45 +1,125 @@
-import { useState } from 'react';
-import { useParams, Link } from 'wouter';
-import { bookings, clients, packages, employees, updateBooking, deleteBooking, getGasMeter, getWeather, settings, BookingStatus } from '@/lib/mock-data';
-import { ArrowLeft, Trash2, Plus, X, Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useParams, Link, useLocation } from 'wouter';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useGetBooking, useUpdateBooking, useDeleteBooking,
+  useListClients, useListPackages, useListEmployees,
+  getGetBookingQueryKey, getListBookingsQueryKey,
+  type UpdateBookingRequestStatus,
+} from '@workspace/api-client-react';
+import { evenSplit, normalizeSplitTo100, isoDateOnly } from '@/lib/api-adapters';
+import { type BookingStatus } from '@/lib/mock-data';
+import { ArrowLeft, Trash2, Plus, X, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { PaymentMethodBadge } from '@/components/payment-method-badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Input } from '@workspace/blue-glass-design-system/components/ui/input';
+import { Label } from '@workspace/blue-glass-design-system/components/ui/label';
+import { Textarea } from '@workspace/blue-glass-design-system/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/blue-glass-design-system/components/ui/select';
 import { StatusBadge } from '@/components/status-badge';
-import { GasMeterBadge } from '@/components/gas-meter-badge';
-import { WeatherBadge } from '@/components/weather-badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { useLocation } from 'wouter';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/blue-glass-design-system/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@workspace/blue-glass-design-system/components/ui/alert-dialog';
+import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 
 export default function BookingDetail() {
   const params = useParams();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const bookingId = parseInt(params.id || '0');
-  const booking = bookings.find(b => b.id === bookingId);
-  
-  const [status, setStatus] = useState(booking?.status || 'pending');
-  const [date, setDate] = useState(booking?.date || '');
-  const [time, setTime] = useState(booking?.startTime || '');
-  const [address, setAddress] = useState(booking?.address || '');
-  const [deposit, setDeposit] = useState(booking?.depositAmount.toString() || '0');
-  const [parking, setParking] = useState(booking?.parkingCost.toString() || '0');
-  const [notes, setNotes] = useState(booking?.notes || '');
-  const [selectedEmployees, setSelectedEmployees] = useState<number[]>(booking?.employeeIds || []);
-  const [employeeSplit, setEmployeeSplit] = useState(booking?.employeeSplit || []);
-  const [selectedPackageIds, setSelectedPackageIds] = useState<number[]>(booking?.packageIds || []);
-  const [showGasBreakdown, setShowGasBreakdown] = useState(false);
+
+  const bookingQuery = useGetBooking(bookingId, {
+    query: { queryKey: getGetBookingQueryKey(bookingId), enabled: !!bookingId },
+  });
+  // `includeArchived`/`includeInactive` — this booking may reference a client/
+  // package/employee that's since been retired; the detail view still needs to
+  // resolve a real name for it (see the same note in `calendar.tsx`).
+  const clientsQuery = useListClients({ includeArchived: true });
+  const packagesQuery = useListPackages({ includeArchived: true });
+  const employeesQuery = useListEmployees({ includeInactive: true });
+
+  const booking = bookingQuery.data;
+  const clients = clientsQuery.data ?? [];
+  const packages = packagesQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
+
+  const [status, setStatus] = useState<BookingStatus>('pending');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [address, setAddress] = useState('');
+  const [deposit, setDeposit] = useState('0');
+  const [parking, setParking] = useState('0');
+  const [notes, setNotes] = useState('');
+  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
+  const [employeeSplit, setEmployeeSplit] = useState<{ employeeId: number; percentage: number }[]>([]);
+  const [selectedPackageIds, setSelectedPackageIds] = useState<number[]>([]);
   const [showAddService, setShowAddService] = useState(false);
 
-  if (!booking) {
+  // Sync local edit state from the fetched booking. Keyed on the booking's own id
+  // (not the whole `booking` object, which changes identity on every refetch after a
+  // save) so an in-flight edit doesn't get silently clobbered by its own save
+  // response — this only re-syncs when navigating to a genuinely different booking.
+  useEffect(() => {
+    if (booking) {
+      setStatus(booking.status);
+      setDate(isoDateOnly(booking.date));
+      setTime(booking.startTime);
+      setAddress(booking.address);
+      setDeposit(String(booking.depositAmount));
+      setParking(String(booking.parkingCost));
+      setNotes(booking.notes ?? '');
+      setSelectedEmployees(booking.employeeIds);
+      setEmployeeSplit(booking.employeeSplit);
+      setSelectedPackageIds(booking.packageIds);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id]);
+
+  const updateBookingMutation = useUpdateBooking({
+    mutation: {
+      onSuccess: async () => {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: getGetBookingQueryKey(bookingId) }),
+          queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() }),
+        ]);
+        toast({ title: 'Booking updated' });
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong saving this booking. Please try again.';
+        toast({ title: 'Save failed', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  const deleteBookingMutation = useDeleteBooking({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() });
+        setLocation('/calendar');
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong deleting this booking. Please try again.';
+        toast({ title: 'Delete failed', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  if (bookingQuery.isLoading || clientsQuery.isLoading || packagesQuery.isLoading || employeesQuery.isLoading) {
+    return (
+      <div className="min-h-[100dvh] bg-background pb-20 md:pb-6 flex items-center justify-center" data-testid="status-booking-detail-loading">
+        <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (bookingQuery.isError || !booking) {
     return (
       <div className="min-h-[100dvh] bg-background pb-20 md:pb-6">
-        <div className="max-w-2xl mx-auto px-4 pt-6">
+        <div className="max-w-2xl mx-auto px-4 pt-6 flex flex-col items-center gap-3 text-center">
+          <AlertTriangle className="w-8 h-8 text-destructive" />
           <p>Booking not found</p>
+          <Link href="/calendar" className="text-primary text-[14px]">Back to Calendar</Link>
         </div>
       </div>
     );
@@ -48,32 +128,39 @@ export default function BookingDetail() {
   const client = clients.find(c => c.id === booking.clientId);
   const pkgs = selectedPackageIds.map(id => packages.find(p => p.id === id)!).filter(Boolean);
   const totalPrice = pkgs.reduce((sum, p) => sum + p.price, 0);
-  const gasMeter = getGasMeter(address, totalPrice, settings);
-  const weather = getWeather(date);
 
   const handleSave = () => {
-    const updatedSplit = selectedEmployees.map(id => {
-      const existing = employeeSplit.find(s => s.employeeId === id);
-      return existing || { employeeId: id, percentage: Math.floor(100 / selectedEmployees.length) };
+    // Fresh employees (just added via the Team list, no existing split entry yet)
+    // fall back to an even distribution; employees with an existing/manually-edited
+    // percentage (via the payroll-split inputs below) keep it. `normalizeSplitTo100`
+    // then guarantees the final set sums to exactly 100 — required by the real API
+    // (`POST/PATCH /bookings`), unlike the mock version this replaces which never
+    // validated the split at all.
+    const base = evenSplit(selectedEmployees);
+    const updatedSplit = base.map(b => {
+      const existing = employeeSplit.find(s => s.employeeId === b.employeeId);
+      return existing ? { employeeId: b.employeeId, percentage: existing.percentage } : b;
     });
+    const normalizedSplit = normalizeSplitTo100(updatedSplit);
 
-    updateBooking(bookingId, {
-      status: status as BookingStatus,
-      date,
-      startTime: time,
-      address,
-      packageIds: selectedPackageIds,
-      depositAmount: parseFloat(deposit) || 0,
-      parkingCost: parseFloat(parking) || 0,
-      notes,
-      employeeIds: selectedEmployees,
-      employeeSplit: updatedSplit,
+    updateBookingMutation.mutate({
+      id: bookingId,
+      data: {
+        status: status as UpdateBookingRequestStatus,
+        date,
+        startTime: time,
+        address,
+        packageIds: selectedPackageIds,
+        depositAmount: parseFloat(deposit) || 0,
+        parkingCost: parseFloat(parking) || 0,
+        notes: notes.trim() ? notes.trim() : null,
+        employeeSplit: normalizedSplit,
+      },
     });
   };
 
   const handleDelete = () => {
-    deleteBooking(bookingId);
-    setLocation('/calendar');
+    deleteBookingMutation.mutate({ id: bookingId });
   };
 
   const handleSplitChange = (employeeId: number, percentage: number) => {
@@ -94,7 +181,7 @@ export default function BookingDetail() {
 
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold mb-2">{client?.name}</h1>
+            <h1 className="text-2xl font-semibold mb-2">{client?.name ?? 'Unknown client'}</h1>
             <StatusBadge status={status as BookingStatus} />
           </div>
           <AlertDialog>
@@ -112,7 +199,9 @@ export default function BookingDetail() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                <AlertDialogAction onClick={handleDelete} disabled={deleteBookingMutation.isPending}>
+                  {deleteBookingMutation.isPending ? 'Deleting…' : 'Delete'}
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -138,7 +227,7 @@ export default function BookingDetail() {
           <Card className="p-4 border border-border rounded-xl">
             <h3 className="text-[15px] font-medium mb-3">Client</h3>
             <div className="space-y-1">
-              <p className="text-[15px]">{client?.name}</p>
+              <p className="text-[15px]">{client?.name ?? '—'}</p>
               <p className="text-[13px] text-muted-foreground">{client?.phone}</p>
               <p className="text-[13px] text-muted-foreground">{client?.email}</p>
             </div>
@@ -220,39 +309,41 @@ export default function BookingDetail() {
                   data-testid="input-address"
                 />
               </div>
-              <div className="flex gap-2 pt-1">
-                <GasMeterBadge gasMeter={gasMeter} onClick={() => setShowGasBreakdown(true)} />
-                <WeatherBadge weather={weather} />
-              </div>
             </div>
           </Card>
 
           <Card className="p-4 border border-border rounded-xl">
             <h3 className="text-[15px] font-medium mb-3">Team</h3>
-            <div className="space-y-2">
-              {employees.map(emp => {
-                const isSelected = selectedEmployees.includes(emp.id);
-                return (
-                  <div
-                    key={emp.id}
-                    onClick={() => {
-                      setSelectedEmployees(prev =>
-                        prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]
-                      );
-                    }}
-                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                      isSelected ? 'border-primary bg-[var(--accent-subtle)]' : 'border-border hover:bg-muted'
-                    }`}
-                    data-testid={`employee-${emp.id}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: emp.color }} />
-                      <p className="text-[15px]">{emp.name}</p>
+            {employees.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground py-1">
+                No employees on this account yet — employee management isn't built in this app yet, so ask an admin to add one directly for now.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {employees.map(emp => {
+                  const isSelected = selectedEmployees.includes(emp.id);
+                  return (
+                    <div
+                      key={emp.id}
+                      onClick={() => {
+                        setSelectedEmployees(prev =>
+                          prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]
+                        );
+                      }}
+                      className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                        isSelected ? 'border-primary bg-[var(--accent-subtle)]' : 'border-border hover:bg-muted'
+                      }`}
+                      data-testid={`employee-${emp.id}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: emp.color }} />
+                        <p className="text-[15px]">{emp.name}</p>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             {selectedEmployees.length > 1 && (
               <div className="mt-4 pt-4 border-t border-border">
@@ -262,7 +353,7 @@ export default function BookingDetail() {
                     const emp = employees.find(e => e.id === empId);
                     const split = employeeSplit.find(s => s.employeeId === empId);
                     const payout = ((split?.percentage || 0) / 100) * totalPrice;
-                    
+
                     return (
                       <div key={empId} className="flex items-center gap-2">
                         <Label className="text-[13px] w-24">{emp?.name}</Label>
@@ -338,36 +429,42 @@ export default function BookingDetail() {
             <DialogHeader>
               <DialogTitle>Add Service</DialogTitle>
             </DialogHeader>
-            <div className="overflow-y-auto -mx-6 px-6 space-y-2 py-2 flex-1">
-              {packages.map(pkg => {
-                const selected = selectedPackageIds.includes(pkg.id);
-                return (
-                  <button
-                    key={pkg.id}
-                    onClick={() => {
-                      setSelectedPackageIds(ids =>
-                        selected ? ids.filter(id => id !== pkg.id) : [...ids, pkg.id]
-                      );
-                    }}
-                    className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-                      selected
-                        ? 'border-primary bg-[var(--accent-subtle)]'
-                        : 'border-border hover:bg-muted'
-                    }`}
-                    data-testid={`pick-service-${pkg.id}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[15px] font-medium truncate">{pkg.name}</p>
-                      <p className="text-[13px] text-muted-foreground">{pkg.durationMinutes} min</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 mt-0.5">
-                      <span className="text-[15px] font-medium tabular-nums">${pkg.price}</span>
-                      {selected && <Check className="w-4 h-4 text-primary" />}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            {packages.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground py-2">
+                No packages on this account yet — package management isn't built in this app yet, so ask an admin to add one directly for now.
+              </p>
+            ) : (
+              <div className="overflow-y-auto -mx-6 px-6 space-y-2 py-2 flex-1">
+                {packages.map(pkg => {
+                  const selected = selectedPackageIds.includes(pkg.id);
+                  return (
+                    <button
+                      key={pkg.id}
+                      onClick={() => {
+                        setSelectedPackageIds(ids =>
+                          selected ? ids.filter(id => id !== pkg.id) : [...ids, pkg.id]
+                        );
+                      }}
+                      className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                        selected
+                          ? 'border-primary bg-[var(--accent-subtle)]'
+                          : 'border-border hover:bg-muted'
+                      }`}
+                      data-testid={`pick-service-${pkg.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[15px] font-medium truncate">{pkg.name}</p>
+                        <p className="text-[13px] text-muted-foreground">{pkg.durationMinutes} min</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                        <span className="text-[15px] font-medium tabular-nums">${pkg.price}</span>
+                        {selected && <Check className="w-4 h-4 text-primary" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="pt-3 border-t border-border">
               <Button className="w-full" onClick={() => setShowAddService(false)}>
                 Done · {selectedPackageIds.length} service{selectedPackageIds.length !== 1 ? 's' : ''}
@@ -380,38 +477,13 @@ export default function BookingDetail() {
         <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-20 bg-background/95 backdrop-blur-md border-t border-border/40 px-5 py-4">
           <button
             onClick={handleSave}
-            className="w-full py-4 rounded-2xl text-[17px] font-semibold gradient-btn text-white transition-all"
+            disabled={updateBookingMutation.isPending}
+            className="w-full py-4 rounded-2xl text-[17px] font-semibold gradient-btn text-white transition-all disabled:opacity-60"
             data-testid="button-save"
           >
-            Save Changes
+            {updateBookingMutation.isPending ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
-
-        <Dialog open={showGasBreakdown} onOpenChange={setShowGasBreakdown}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Gas Cost Breakdown</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 pt-4">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Distance (one way)</span>
-                <span className="tabular-nums">{gasMeter.distanceMiles} mi</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Round trip</span>
-                <span className="tabular-nums">{gasMeter.roundTrip} mi</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Gas cost</span>
-                <span className="tabular-nums">${gasMeter.gasCost.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">% of booking</span>
-                <span className="tabular-nums">{(gasMeter.ratio * 100).toFixed(1)}%</span>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );

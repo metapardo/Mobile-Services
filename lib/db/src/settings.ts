@@ -1,0 +1,89 @@
+import { eq } from "drizzle-orm";
+import { settingsTable, type InsertSettings, type Settings } from "./schema";
+import { withOrganization } from "./tenant";
+
+/**
+ * Defaults for every `settings` column other than `organizationId`/`homeAddress`,
+ * used to create a new organization's settings row at signup time. Intentionally
+ * copied from `artifacts/detail-hub/src/lib/mock-data.ts`'s `settings` object (the
+ * values a brand-new frontend instance already assumes as "sensible defaults" today),
+ * not invented fresh here — these are Gas Meter / commission assumptions this PRD
+ * (`PRD_DetailHub_SelfServe_Signup_Trial.md`) doesn't ask a signing-up business to
+ * configure, but `settingsTable`'s columns are `NOT NULL` with no DB-level default, so
+ * *something* has to be written at row-creation time. All Gas Meter/commission-rate
+ * defaults are expected to be reviewed/adjusted later from Settings — only
+ * `homeAddress` is real signup input (see `createDefaultSettings` below).
+ */
+const SETTINGS_DEFAULTS = {
+  gasPrice: "6.00",
+  vehicleMpg: "28",
+  gasThresholdGreen: "10",
+  gasThresholdAmber: "20",
+  commissionRate: "25",
+  fuelGaugeHalfMi: "3",
+  fuelGaugeFullMi: "8",
+  fuelGaugeHalfMin: "1.5",
+  fuelGaugeFullMin: "4",
+  paymentProcessorConnected: false,
+  cardReaderPaired: false,
+} satisfies Partial<InsertSettings>;
+
+/**
+ * Creates the one-row-per-organization `settings` row for a brand-new organization,
+ * populating `homeAddress` from the required business-address field collected at
+ * signup (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-11/FR-13 — this is
+ * `AdminSettings.home_base_address` from the master PRD; formalized here as
+ * `settingsTable.homeAddress`, which already existed in this schema before this PRD's
+ * work started, rather than as a new/duplicate address field or table). Every other
+ * column is seeded from `SETTINGS_DEFAULTS` above, editable later via
+ * `updateSettings`/`GET|PATCH /settings`.
+ *
+ * Must be called with the organization's own id already in hand (i.e. after
+ * `auth.api.createOrganization` succeeds) — `withOrganization` sets the RLS session
+ * variable to this same id for the duration of the insert, so the newly-created row
+ * satisfies its own `tenant_isolation` policy's `WITH CHECK` immediately.
+ */
+export async function createDefaultSettings(
+  organizationId: string,
+  homeAddress: string,
+): Promise<Settings> {
+  return withOrganization(organizationId, async (tx) => {
+    const [created] = await tx
+      .insert(settingsTable)
+      .values({ organizationId, homeAddress, ...SETTINGS_DEFAULTS })
+      .returning();
+    return created!;
+  });
+}
+
+/** Reads the single settings row for an organization, or `null` if none exists yet. */
+export async function getSettings(organizationId: string): Promise<Settings | null> {
+  return withOrganization(organizationId, async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.organizationId, organizationId));
+    return row ?? null;
+  });
+}
+
+/**
+ * Partially updates an organization's settings row (e.g. editing `homeAddress` later
+ * from Settings, per FR-13). `organizationId` itself is never patchable — callers
+ * can't pass it in `patch` since it's typed as `Omit<..., "organizationId">`, and even
+ * if a caller managed to smuggle it in, the RLS `WITH CHECK` predicate this row is
+ * scoped under would reject any attempt to move it to a different organization.
+ */
+export async function updateSettings(
+  organizationId: string,
+  patch: Partial<Omit<InsertSettings, "organizationId">>,
+): Promise<Settings | null> {
+  return withOrganization(organizationId, async (tx) => {
+    const [updated] = await tx
+      .update(settingsTable)
+      .set(patch)
+      .where(eq(settingsTable.organizationId, organizationId))
+      .returning();
+    return updated ?? null;
+  });
+}

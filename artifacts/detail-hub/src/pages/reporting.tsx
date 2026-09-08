@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { bookings, packages, employees } from '@/lib/mock-data';
-import { Card } from '@/components/ui/card';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Cell,

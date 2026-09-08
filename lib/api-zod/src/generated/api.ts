@@ -18,10 +18,9 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Creates a new admin/owner user account together with a brand-new organization. This app is invite-only at the platform level (not open signup): the request must carry a live, unused, unexpired `inviteToken` issued out-of-band, or no user or organization is created. On success the invite token is permanently consumed (single-use). This endpoint does not sign the caller in — it only provisions the account; a separate sign-in step (not yet implemented) is required afterward.
- * @summary Platform-invite-gated admin/owner signup
+ * Creates a new admin/owner user account and a brand-new organization together, with no invite token or gate of any kind (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-1/FR-2) — collects name, email, password, business name, and a required business address (FR-3, FR-11), which populates the new organization's `settings.homeAddress` (the same field the Gas Meter feature depends on; not a duplicate address field). No card is collected here (Phase B/Stripe scope, not this endpoint). On success, this endpoint also signs the caller in (sets the session cookie, same as `POST /auth/login`) and activates the newly-created organization on that session — the response includes `token`/`organizationId` for the same reason `LoginResult` does, so the frontend can land the user directly inside the app with no separate login step and no email-verification gate (FR-5).
+ * @summary Fully self-serve admin/owner signup
  */
-
 
 export const signupBodyPasswordMin = 8;
 
@@ -29,14 +28,15 @@ export const signupBodyPasswordMin = 8;
 export const signupBodyOrganizationSlugRegExp = new RegExp('^[a-z0-9]+(-[a-z0-9]+)*$');
 
 
+
 export const SignupBody = zod.object({
-  "inviteToken": zod.string().min(1).describe('Platform invite token issued out-of-band. Single-use.'),
   "name": zod.string().min(1).describe('The admin\/owner user\'s display name.'),
   "email": zod.string().email().describe('The admin\/owner user\'s login email.'),
   "password": zod.string().min(signupBodyPasswordMin).describe('The admin\/owner user\'s password (min length matches Better Auth\'s default).'),
   "organizationName": zod.string().min(1).describe('Display name of the new organization.'),
-  "organizationSlug": zod.string().regex(signupBodyOrganizationSlugRegExp).describe('URL-safe unique slug for the new organization (lowercase, hyphen-separated).')
-}).describe('Body for the platform-invite-gated admin\/owner signup endpoint. Creates one user and one brand-new organization together.')
+  "organizationSlug": zod.string().regex(signupBodyOrganizationSlugRegExp).describe('URL-safe unique slug for the new organization (lowercase, hyphen-separated).'),
+  "businessAddress": zod.string().min(1).describe('The business\'s home base address, required at signup (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-3\/FR-11). Stored verbatim as `settings.homeAddress` for the new organization — not geocoded at signup time (FR-12); a future geocoding job is out of scope here.')
+}).describe('Body for the fully self-serve admin\/owner signup endpoint. Creates one user and one brand-new organization together — no invite token.')
 
 export const SignupResponse = zod.object({
   "user": zod.object({
@@ -51,7 +51,9 @@ export const SignupResponse = zod.object({
   "name": zod.string(),
   "slug": zod.string(),
   "createdAt": zod.coerce.date()
-})
+}),
+  "token": zod.string().describe('The raw session token, for non-cookie clients — mirrors `LoginResult.token`. Present because signup now also signs the caller in (see this operation\'s description).'),
+  "organizationId": zod.string().describe('The newly-created organization\'s id, set as this session\'s active organization. Unlike `LoginResult.organizationId`, this is never `null` — signup always activates the organization it just created.')
 })
 
 
@@ -113,19 +115,664 @@ export const GetAuthSessionResponse = zod.object({
 
 
 /**
- * Public, unauthenticated endpoint for the marketing/landing page's "request access" form — for visitors who don't have a platform invite token yet (see `POST /auth/signup`). Records interest for an operator to follow up on out-of-band (e.g. by issuing a real invite token); does not create a user, organization, or invite token itself, and does not require or check one.
- * Resubmitting the same email while a prior submission is still `pending` updates that existing request's timestamp rather than creating a duplicate row. Once a request has moved to `invited` or `declined`, resubmitting the same email creates a new `pending` row instead of touching the resolved one.
- * Carries a hidden honeypot field (`honeypot`) for spam filtering: real users never populate it (it should be rendered visually hidden and excluded from tab order in the form), so a non-empty value is assumed to be a bot. Submissions with a non-empty `honeypot` are silently accepted (always `200`, never a distinguishing error) and discarded without being recorded — this is deliberate, so an automated submitter has no signal to adapt to.
- * @summary Submit a public "request access" lead
+ * Requires an authenticated session with an active organization (session cookie). Returns the single settings row for that organization — created automatically at signup (`POST /auth/signup`) with the business address supplied there and sensible defaults for everything else (Gas Meter thresholds, commission rate, payment-processor flags); see `PRD_DetailHub_SelfServe_Signup_Trial.md` FR-11/FR-13.
+ * @summary Get the current organization's settings
  */
-export const RequestAccessBody = zod.object({
-  "email": zod.string().email().describe('The requester\'s email address, for an operator to follow up on.'),
-  "businessName": zod.string().nullish().describe('The requester\'s business name, if they gave one. Optional.'),
-  "honeypot": zod.string().optional().describe('Anti-spam honeypot field. Must be rendered visually hidden and left out of tab order in the form so real users never populate it — any non-empty value is treated as a bot and the submission is silently discarded (still responds `200`, see this operation\'s description). Omit or send empty for a real submission.')
-}).describe('Body for the public \"request access\" lead-capture endpoint. Submitted from a marketing\/landing page form by visitors without a platform invite token.')
+export const GetSettingsResponse = zod.object({
+  "homeAddress": zod.string().describe('The business\'s home base address (`AdminSettings.home_base_address` in the master PRD). Editable via `PATCH \/settings`.'),
+  "gasPrice": zod.number().describe('Assumed $\/gallon fuel price, for Gas Meter cost estimates.'),
+  "vehicleMpg": zod.number().describe('Assumed vehicle fuel economy, for Gas Meter cost estimates.'),
+  "gasThresholdGreen": zod.number().describe('Gas Meter \"green\" cost-ratio threshold (percent).'),
+  "gasThresholdAmber": zod.number().describe('Gas Meter \"amber\" cost-ratio threshold (percent).'),
+  "commissionRate": zod.number().describe('Default employee commission rate (percent), used by Payroll.'),
+  "fuelGaugeHalfMi": zod.number().describe('Fuel Gauge \"half\" band lower bound, $\/mile.'),
+  "fuelGaugeFullMi": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/mile.'),
+  "fuelGaugeHalfMin": zod.number().describe('Fuel Gauge \"half\" band lower bound, $\/minute.'),
+  "fuelGaugeFullMin": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/minute.'),
+  "paymentProcessorConnected": zod.boolean(),
+  "cardReaderPaired": zod.boolean()
+}).describe('Per-organization settings — one row per organization, created automatically at signup. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Settings` interface (see `PRD_MobileDetailingApp.md` Section 3.2\'s Gas Meter feature for what most of these beyond `homeAddress` are used for).')
 
-export const RequestAccessResponse = zod.object({
-  "success": zod.boolean()
+
+/**
+ * Requires an authenticated session with an active organization (session cookie). Partial update — any subset of fields may be sent; omitted fields are left unchanged. The primary use case for now is editing the business address later (`homeAddress`, FR-13), but every settings field is editable through this same endpoint.
+ * @summary Update the current organization's settings
+ */
+
+
+
+export const UpdateSettingsBody = zod.object({
+  "homeAddress": zod.string().min(1).optional(),
+  "gasPrice": zod.number().optional(),
+  "vehicleMpg": zod.number().optional(),
+  "gasThresholdGreen": zod.number().optional(),
+  "gasThresholdAmber": zod.number().optional(),
+  "commissionRate": zod.number().optional(),
+  "fuelGaugeHalfMi": zod.number().optional(),
+  "fuelGaugeFullMi": zod.number().optional(),
+  "fuelGaugeHalfMin": zod.number().optional(),
+  "fuelGaugeFullMin": zod.number().optional(),
+  "paymentProcessorConnected": zod.boolean().optional(),
+  "cardReaderPaired": zod.boolean().optional()
+}).describe('Partial update to the current organization\'s settings. All fields optional — omitted fields are left unchanged. Same field set as `SettingsResult`.')
+
+export const UpdateSettingsResponse = zod.object({
+  "homeAddress": zod.string().describe('The business\'s home base address (`AdminSettings.home_base_address` in the master PRD). Editable via `PATCH \/settings`.'),
+  "gasPrice": zod.number().describe('Assumed $\/gallon fuel price, for Gas Meter cost estimates.'),
+  "vehicleMpg": zod.number().describe('Assumed vehicle fuel economy, for Gas Meter cost estimates.'),
+  "gasThresholdGreen": zod.number().describe('Gas Meter \"green\" cost-ratio threshold (percent).'),
+  "gasThresholdAmber": zod.number().describe('Gas Meter \"amber\" cost-ratio threshold (percent).'),
+  "commissionRate": zod.number().describe('Default employee commission rate (percent), used by Payroll.'),
+  "fuelGaugeHalfMi": zod.number().describe('Fuel Gauge \"half\" band lower bound, $\/mile.'),
+  "fuelGaugeFullMi": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/mile.'),
+  "fuelGaugeHalfMin": zod.number().describe('Fuel Gauge \"half\" band lower bound, $\/minute.'),
+  "fuelGaugeFullMin": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/minute.'),
+  "paymentProcessorConnected": zod.boolean(),
+  "cardReaderPaired": zod.boolean()
+}).describe('Per-organization settings — one row per organization, created automatically at signup. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Settings` interface (see `PRD_MobileDetailingApp.md` Section 3.2\'s Gas Meter feature for what most of these beyond `homeAddress` are used for).')
+
+
+/**
+ * Requires an authenticated session with an active organization. Excludes archived (soft-deleted) clients by default — pass `includeArchived=true` to include them too (e.g. a client-detail page reached from an old booking).
+ * @summary List the current organization's clients
+ */
+export const listClientsQueryIncludeArchivedDefault = false;
+
+export const ListClientsQueryParams = zod.object({
+  "includeArchived": zod.coerce.boolean().default(listClientsQueryIncludeArchivedDefault)
 })
+
+export const ListClientsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string(),
+  "address": zod.string(),
+  "notes": zod.string().nullish(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A customer\/client record. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Client` interface, plus `archived`\/`createdAt`\/`updatedAt` (formalized here, not present on the mock interface).')
+export const ListClientsResponse = zod.array(ListClientsResponseItem)
+
+
+/**
+ * Requires an authenticated session with an active organization.
+ * @summary Create a client
+ */
+
+
+
+
+
+export const CreateClientBody = zod.object({
+  "name": zod.string().min(1),
+  "phone": zod.string().min(1),
+  "email": zod.string().email(),
+  "address": zod.string().min(1),
+  "notes": zod.string().nullish()
+})
+
+export const CreateClientResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string(),
+  "address": zod.string(),
+  "notes": zod.string().nullish(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A customer\/client record. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Client` interface, plus `archived`\/`createdAt`\/`updatedAt` (formalized here, not present on the mock interface).')
+
+
+/**
+ * @summary Get a client by id
+ */
+export const GetClientParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const GetClientResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string(),
+  "address": zod.string(),
+  "notes": zod.string().nullish(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A customer\/client record. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Client` interface, plus `archived`\/`createdAt`\/`updatedAt` (formalized here, not present on the mock interface).')
+
+
+/**
+ * Partial update — any subset of fields may be sent; omitted fields are left unchanged.
+ * @summary Update a client
+ */
+export const UpdateClientParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+
+
+
+
+
+export const UpdateClientBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "phone": zod.string().min(1).optional(),
+  "email": zod.string().email().optional(),
+  "address": zod.string().min(1).optional(),
+  "notes": zod.string().nullish()
+}).describe('Partial update — all fields optional.')
+
+export const UpdateClientResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string(),
+  "address": zod.string(),
+  "notes": zod.string().nullish(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A customer\/client record. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Client` interface, plus `archived`\/`createdAt`\/`updatedAt` (formalized here, not present on the mock interface).')
+
+
+/**
+ * Marks the client archived rather than removing the row, so any booking that already references it keeps a valid `clientId` (`PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 10/Edge Cases). The archived client no longer appears in `GET /clients` unless `includeArchived=true` is passed.
+ * @summary Archive (soft-delete) a client
+ */
+export const ArchiveClientParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const ArchiveClientResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string(),
+  "address": zod.string(),
+  "notes": zod.string().nullish(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A customer\/client record. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Client` interface, plus `archived`\/`createdAt`\/`updatedAt` (formalized here, not present on the mock interface).')
+
+
+/**
+ * Excludes archived (soft-deleted) packages by default — pass `includeArchived=true` to include retired packages still referenced by historical bookings.
+ * @summary List the current organization's packages
+ */
+export const listPackagesQueryIncludeArchivedDefault = false;
+
+export const ListPackagesQueryParams = zod.object({
+  "includeArchived": zod.coerce.boolean().default(listPackagesQueryIncludeArchivedDefault)
+})
+
+export const ListPackagesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "category": zod.enum(['Exterior', 'Interior', 'Full', 'Add-on']),
+  "description": zod.string(),
+  "price": zod.number(),
+  "durationMinutes": zod.number().int(),
+  "isAddon": zod.boolean(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A service package\/add-on. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Package` interface (including `durationMinutes`, not `durationEstimate` — the mock interface is the source of truth per `PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 7), plus `createdAt`\/`updatedAt`.')
+export const ListPackagesResponse = zod.array(ListPackagesResponseItem)
+
+
+/**
+ * @summary Create a package
+ */
+
+
+export const createPackageBodyPriceMin = 0;
+
+
+
+
+export const CreatePackageBody = zod.object({
+  "name": zod.string().min(1),
+  "category": zod.enum(['Exterior', 'Interior', 'Full', 'Add-on']),
+  "description": zod.string().min(1),
+  "price": zod.number().min(createPackageBodyPriceMin),
+  "durationMinutes": zod.number().int().min(1),
+  "isAddon": zod.boolean()
+})
+
+export const CreatePackageResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "category": zod.enum(['Exterior', 'Interior', 'Full', 'Add-on']),
+  "description": zod.string(),
+  "price": zod.number(),
+  "durationMinutes": zod.number().int(),
+  "isAddon": zod.boolean(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A service package\/add-on. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Package` interface (including `durationMinutes`, not `durationEstimate` — the mock interface is the source of truth per `PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 7), plus `createdAt`\/`updatedAt`.')
+
+
+/**
+ * @summary Get a package by id
+ */
+export const GetPackageParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const GetPackageResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "category": zod.enum(['Exterior', 'Interior', 'Full', 'Add-on']),
+  "description": zod.string(),
+  "price": zod.number(),
+  "durationMinutes": zod.number().int(),
+  "isAddon": zod.boolean(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A service package\/add-on. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Package` interface (including `durationMinutes`, not `durationEstimate` — the mock interface is the source of truth per `PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 7), plus `createdAt`\/`updatedAt`.')
+
+
+/**
+ * Partial update — any subset of fields may be sent; omitted fields are left unchanged.
+ * @summary Update a package
+ */
+export const UpdatePackageParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+
+
+export const updatePackageBodyPriceMin = 0;
+
+
+
+
+export const UpdatePackageBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "category": zod.enum(['Exterior', 'Interior', 'Full', 'Add-on']).optional(),
+  "description": zod.string().min(1).optional(),
+  "price": zod.number().min(updatePackageBodyPriceMin).optional(),
+  "durationMinutes": zod.number().int().min(1).optional(),
+  "isAddon": zod.boolean().optional()
+}).describe('Partial update — all fields optional.')
+
+export const UpdatePackageResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "category": zod.enum(['Exterior', 'Interior', 'Full', 'Add-on']),
+  "description": zod.string(),
+  "price": zod.number(),
+  "durationMinutes": zod.number().int(),
+  "isAddon": zod.boolean(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A service package\/add-on. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Package` interface (including `durationMinutes`, not `durationEstimate` — the mock interface is the source of truth per `PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 7), plus `createdAt`\/`updatedAt`.')
+
+
+/**
+ * Marks the package archived rather than removing the row, so any booking that already references it keeps a valid `packageId`. The archived package no longer appears in `GET /packages` unless `includeArchived=true` is passed.
+ * @summary Archive (soft-delete) a package
+ */
+export const ArchivePackageParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const ArchivePackageResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "category": zod.enum(['Exterior', 'Interior', 'Full', 'Add-on']),
+  "description": zod.string(),
+  "price": zod.number(),
+  "durationMinutes": zod.number().int(),
+  "isAddon": zod.boolean(),
+  "archived": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A service package\/add-on. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Package` interface (including `durationMinutes`, not `durationEstimate` — the mock interface is the source of truth per `PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 7), plus `createdAt`\/`updatedAt`.')
+
+
+/**
+ * Minimal employee records (`PRD_DetailHub_Real_Bookings_Clients_Backend.md` FR-2/FR-9) — just enough to assign a booking and show a name/color on the calendar. Excludes inactive (soft-deleted) employees by default — pass `includeInactive=true` to include them too.
+ * @summary List the current organization's employees
+ */
+export const listEmployeesQueryIncludeInactiveDefault = false;
+
+export const ListEmployeesQueryParams = zod.object({
+  "includeInactive": zod.coerce.boolean().default(listEmployeesQueryIncludeInactiveDefault)
+})
+
+export const ListEmployeesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+export const ListEmployeesResponse = zod.array(ListEmployeesResponseItem)
+
+
+/**
+ * Minimal create for v1 — `name`/`color` only, matching FR-9 ("create/update can be simple"). The full employee profile (worker type, pay rate, bank accounts) is a Payroll Module concern layered onto this same table later.
+ * @summary Create an employee
+ */
+
+
+
+
+export const CreateEmployeeBody = zod.object({
+  "name": zod.string().min(1),
+  "color": zod.string().min(1),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "active": zod.boolean().optional()
+})
+
+export const CreateEmployeeResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+
+
+/**
+ * @summary Get an employee by id
+ */
+export const GetEmployeeParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const GetEmployeeResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+
+
+/**
+ * Partial update — any subset of fields may be sent; omitted fields are left unchanged.
+ * @summary Update an employee
+ */
+export const UpdateEmployeeParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+
+
+
+
+export const UpdateEmployeeBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "color": zod.string().min(1).optional(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "active": zod.boolean().optional()
+}).describe('Partial update — all fields optional.')
+
+export const UpdateEmployeeResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+
+
+/**
+ * Marks the employee inactive rather than removing the row, so any booking/ employee-split that already references it keeps a valid `employeeId`. The archived employee no longer appears in `GET /employees` unless `includeInactive=true` is passed.
+ * @summary Archive (soft-delete) an employee
+ */
+export const ArchiveEmployeeParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const ArchiveEmployeeResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "color": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+
+
+/**
+ * Powers the calendar view (FR-10) — `start`/`end` (both `YYYY-MM-DD`, both optional, inclusive) filter on `date` rather than fetching every booking ever made. Omitting both returns every booking for the organization. `clientId` (Section 6.2 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md) further narrows the result to bookings for that client — it composes with (never replaces) the organization scope every request is already limited to, so a `clientId` belonging to a different organization returns an empty array rather than another organization's booking.
+ * @summary List bookings, optionally within a date range and/or for one client
+ */
+export const ListBookingsQueryParams = zod.object({
+  "start": zod.date().optional(),
+  "end": zod.date().optional(),
+  "clientId": zod.coerce.number().int().optional()
+})
+
+export const listBookingsResponseEmployeeSplitItemPercentageMin = 0;
+export const listBookingsResponseEmployeeSplitItemPercentageMax = 100;
+
+
+
+export const ListBookingsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "clientId": zod.number().int(),
+  "packageIds": zod.array(zod.number().int()),
+  "employeeIds": zod.array(zod.number().int()).describe('Derived from `employeeSplit` (every `employeeId` present in the split).'),
+  "employeeSplit": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "percentage": zod.number().min(listBookingsResponseEmployeeSplitItemPercentageMin).max(listBookingsResponseEmployeeSplitItemPercentageMax)
+}).describe('Matches `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split\'s `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.')),
+  "date": zod.coerce.date(),
+  "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
+  "address": zod.string(),
+  "depositAmount": zod.number(),
+  "parkingCost": zod.number(),
+  "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
+  "notes": zod.string().nullish(),
+  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
+  "paymentNote": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)')
+export const ListBookingsResponse = zod.array(ListBookingsResponseItem)
+
+
+/**
+ * `packageIds` and `employeeSplit` fully describe the booking's line items and employee revenue split in one call (a `booking_packages`/`employee_splits` join row is written per entry). `employeeSplit` may be empty (a booking can be created before an employee is assigned), but if non-empty every percentage must be in `(0, 100]` and the set must sum to exactly 100.
+ * @summary Create a booking
+ */
+export const createBookingBodyPackageIdsDefault = [];
+export const createBookingBodyEmployeeSplitItemPercentageMin = 0;
+export const createBookingBodyEmployeeSplitItemPercentageMax = 100;
+
+export const createBookingBodyEmployeeSplitDefault = [];
+export const createBookingBodyDepositAmountMin = 0;
+
+export const createBookingBodyParkingCostMin = 0;
+
+
+
+export const CreateBookingBody = zod.object({
+  "clientId": zod.number().int(),
+  "packageIds": zod.array(zod.number().int()).default(createBookingBodyPackageIdsDefault),
+  "employeeSplit": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "percentage": zod.number().min(createBookingBodyEmployeeSplitItemPercentageMin).max(createBookingBodyEmployeeSplitItemPercentageMax)
+}).describe('Matches `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split\'s `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.')).default(createBookingBodyEmployeeSplitDefault),
+  "date": zod.coerce.date(),
+  "startTime": zod.string(),
+  "address": zod.string().min(1),
+  "depositAmount": zod.number().min(createBookingBodyDepositAmountMin),
+  "parkingCost": zod.number().min(createBookingBodyParkingCostMin),
+  "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
+  "notes": zod.string().nullish(),
+  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
+  "paymentNote": zod.string().nullish()
+})
+
+export const createBookingResponseEmployeeSplitItemPercentageMin = 0;
+export const createBookingResponseEmployeeSplitItemPercentageMax = 100;
+
+
+
+export const CreateBookingResponse = zod.object({
+  "id": zod.number().int(),
+  "clientId": zod.number().int(),
+  "packageIds": zod.array(zod.number().int()),
+  "employeeIds": zod.array(zod.number().int()).describe('Derived from `employeeSplit` (every `employeeId` present in the split).'),
+  "employeeSplit": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "percentage": zod.number().min(createBookingResponseEmployeeSplitItemPercentageMin).max(createBookingResponseEmployeeSplitItemPercentageMax)
+}).describe('Matches `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split\'s `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.')),
+  "date": zod.coerce.date(),
+  "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
+  "address": zod.string(),
+  "depositAmount": zod.number(),
+  "parkingCost": zod.number(),
+  "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
+  "notes": zod.string().nullish(),
+  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
+  "paymentNote": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)')
+
+
+/**
+ * @summary Get a booking by id
+ */
+export const GetBookingParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const getBookingResponseEmployeeSplitItemPercentageMin = 0;
+export const getBookingResponseEmployeeSplitItemPercentageMax = 100;
+
+
+
+export const GetBookingResponse = zod.object({
+  "id": zod.number().int(),
+  "clientId": zod.number().int(),
+  "packageIds": zod.array(zod.number().int()),
+  "employeeIds": zod.array(zod.number().int()).describe('Derived from `employeeSplit` (every `employeeId` present in the split).'),
+  "employeeSplit": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "percentage": zod.number().min(getBookingResponseEmployeeSplitItemPercentageMin).max(getBookingResponseEmployeeSplitItemPercentageMax)
+}).describe('Matches `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split\'s `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.')),
+  "date": zod.coerce.date(),
+  "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
+  "address": zod.string(),
+  "depositAmount": zod.number(),
+  "parkingCost": zod.number(),
+  "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
+  "notes": zod.string().nullish(),
+  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
+  "paymentNote": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)')
+
+
+/**
+ * Partial update. Omitting `packageIds`/`employeeSplit` leaves them unchanged; passing either replaces the entire set (not a merge). Same `employeeSplit` validation as `POST /bookings`.
+ * @summary Update a booking
+ */
+export const UpdateBookingParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const updateBookingBodyEmployeeSplitItemPercentageMin = 0;
+export const updateBookingBodyEmployeeSplitItemPercentageMax = 100;
+
+
+export const updateBookingBodyDepositAmountMin = 0;
+
+export const updateBookingBodyParkingCostMin = 0;
+
+
+
+export const UpdateBookingBody = zod.object({
+  "clientId": zod.number().int().optional(),
+  "packageIds": zod.array(zod.number().int()).optional(),
+  "employeeSplit": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "percentage": zod.number().min(updateBookingBodyEmployeeSplitItemPercentageMin).max(updateBookingBodyEmployeeSplitItemPercentageMax)
+}).describe('Matches `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split\'s `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.')).optional(),
+  "date": zod.coerce.date().optional(),
+  "startTime": zod.string().optional(),
+  "address": zod.string().min(1).optional(),
+  "depositAmount": zod.number().min(updateBookingBodyDepositAmountMin).optional(),
+  "parkingCost": zod.number().min(updateBookingBodyParkingCostMin).optional(),
+  "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']).optional(),
+  "notes": zod.string().nullish(),
+  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
+  "paymentNote": zod.string().nullish()
+}).describe('Partial update — all fields optional. Omitting `packageIds`\/`employeeSplit` leaves them unchanged; passing either replaces the entire set.')
+
+export const updateBookingResponseEmployeeSplitItemPercentageMin = 0;
+export const updateBookingResponseEmployeeSplitItemPercentageMax = 100;
+
+
+
+export const UpdateBookingResponse = zod.object({
+  "id": zod.number().int(),
+  "clientId": zod.number().int(),
+  "packageIds": zod.array(zod.number().int()),
+  "employeeIds": zod.array(zod.number().int()).describe('Derived from `employeeSplit` (every `employeeId` present in the split).'),
+  "employeeSplit": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "percentage": zod.number().min(updateBookingResponseEmployeeSplitItemPercentageMin).max(updateBookingResponseEmployeeSplitItemPercentageMax)
+}).describe('Matches `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split\'s `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.')),
+  "date": zod.coerce.date(),
+  "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
+  "address": zod.string(),
+  "depositAmount": zod.number(),
+  "parkingCost": zod.number(),
+  "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
+  "notes": zod.string().nullish(),
+  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
+  "paymentNote": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)')
+
+
+/**
+ * Hard delete (unlike clients/packages/employees) — nothing else references a booking except its own `booking_packages`/`employee_splits` rows, which cascade. Prefer `PATCH /bookings/{id}` with `status: cancelled` for a normal cancellation; this is for genuine removal.
+ * @summary Delete a booking
+ */
+export const DeleteBookingParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const DeleteBookingResponse = zod.void()
 
 

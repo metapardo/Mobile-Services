@@ -324,7 +324,6 @@
 .site-shell .access-copy{position:relative;z-index:1}
 .site-shell .access-copy h2{font-size:clamp(2.5rem,5vw,5rem);letter-spacing:-.09em;line-height:.9;margin:14px 0 20px}
 .site-shell .access-copy p{color:hsl(var(--muted-foreground));line-height:1.6;max-width:330px;font-size:.9rem}
-.site-shell .invite-image{width:106px;height:148px;margin-top:23px;object-fit:cover;object-position:top;border-radius:10px;opacity:.8;border:1px solid rgba(255,255,255,.18);box-shadow:0 10px 30px rgba(0,0,0,.3);transform:rotate(-4deg)}
 .site-shell .access-form{display:grid;gap:13px;position:relative;z-index:1}
 .site-shell .field-group{display:grid;gap:7px}
 .site-shell .field-group label{font-family:var(--app-font-mono);color:hsl(var(--muted-foreground));font-size:.67rem;letter-spacing:.06em;text-transform:uppercase}
@@ -395,7 +394,6 @@
   .site-shell .feature-bento{grid-template-columns:1fr}
   .site-shell .bento-tall{grid-row:auto;min-height:350px}
   .site-shell .access-panel{padding:30px 22px}
-  .site-shell .invite-image{display:none}
   .site-shell .proof-grid{grid-template-columns:repeat(2,1fr)}
   .site-shell .proof-item:nth-child(2){border-right:0}
   .site-shell .proof-item:nth-child(-n+2){border-bottom:1px solid rgba(130,186,216,.17)}

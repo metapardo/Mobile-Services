@@ -7,14 +7,9 @@
  */
 
 /**
- * Body for the platform-invite-gated admin/owner signup endpoint. Creates one user and one brand-new organization together.
+ * Body for the fully self-serve admin/owner signup endpoint. Creates one user and one brand-new organization together — no invite token.
  */
 export interface SignupRequest {
-  /**
-     * Platform invite token issued out-of-band. Single-use.
-     * @minLength 1
-     */
-  inviteToken: string;
   /**
      * The admin/owner user's display name.
      * @minLength 1
@@ -37,4 +32,9 @@ export interface SignupRequest {
      * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
      */
   organizationSlug: string;
+  /**
+     * The business's home base address, required at signup (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-3/FR-11). Stored verbatim as `settings.homeAddress` for the new organization — not geocoded at signup time (FR-12); a future geocoding job is out of scope here.
+     * @minLength 1
+     */
+  businessAddress: string;
 }

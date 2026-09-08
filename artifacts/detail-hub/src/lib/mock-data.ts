@@ -54,8 +54,6 @@ export interface Settings {
   homeAddress: string;
   gasPrice: number;
   vehicleMpg: number;
-  gasThresholdGreen: number;
-  gasThresholdAmber: number;
   commissionRate: number;
   // Fuel Gauge thresholds — configurable in admin settings
   fuelGaugeHalfMi:  number;   // $/mile  — lower bound of Half band  (default 3)
@@ -65,31 +63,6 @@ export interface Settings {
   // Payment settings
   paymentProcessorConnected: boolean;
   cardReaderPaired: boolean;
-}
-
-export interface GasMeter {
-  distanceMiles: number;
-  roundTrip: number;
-  gasCost: number;
-  ratio: number;
-  status: 'green' | 'amber' | 'red';
-}
-
-export function getGasMeter(address: string, bookingPrice: number, settings: Settings): GasMeter {
-  const hash = address.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const distanceMiles = (hash % 38) + 3;
-  const roundTrip = distanceMiles * 2;
-  const gasCost = (roundTrip / settings.vehicleMpg) * settings.gasPrice;
-  const ratio = gasCost / bookingPrice;
-  const status = ratio <= settings.gasThresholdGreen / 100 ? 'green' : ratio <= settings.gasThresholdAmber / 100 ? 'amber' : 'red';
-  return { distanceMiles, roundTrip, gasCost, ratio, status };
-}
-
-export function getWeather(date: string): string {
-  const weatherOptions = ["Sunny 81°F", "Partly Cloudy 74°F", "Cloudy 67°F", "Light Rain 63°F", "Clear 88°F"];
-  const dateObj = new Date(date);
-  const dayOfYear = Math.floor((dateObj.getTime() - new Date(dateObj.getFullYear(), 0, 0).getTime()) / 86400000);
-  return weatherOptions[dayOfYear % 5];
 }
 
 // Mock data
@@ -482,8 +455,6 @@ export let settings: Settings = {
   homeAddress: '742 Evergreen Terrace, Springfield',
   gasPrice: 6.0,
   vehicleMpg: 28,
-  gasThresholdGreen: 10,
-  gasThresholdAmber: 20,
   commissionRate: 25,
   // Fuel Gauge defaults
   fuelGaugeHalfMi:  3,

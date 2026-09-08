@@ -3,8 +3,8 @@ import { employees } from '@/lib/mock-data';
 import { calcPayrollSummary, payrollRuns, savePayrollRun, MOCK_DEDUCTION_RATE, type DurationType } from '@/lib/payroll-data';
 import { ArrowLeft, ChevronRight, CheckCircle, FileText, Play } from 'lucide-react';
 import { Link } from 'wouter';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
 
 type Step = 1 | 2 | 3;

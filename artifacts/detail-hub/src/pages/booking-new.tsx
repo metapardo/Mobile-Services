@@ -1,19 +1,26 @@
-import { useState, useMemo } from 'react';
-import { useLocation } from 'wouter';
+import { useEffect, useState, useMemo } from 'react';
+import { useLocation, useSearch } from 'wouter';
+import { useQueryClient } from '@tanstack/react-query';
 import {
-  clients, packages, employees, bookings, createBooking, createClient,
-  getGasMeter, settings,
-} from '@/lib/mock-data';
+  useListClients, useListPackages, useListEmployees, useListBookings,
+  useCreateBooking, useCreateClient,
+  getListBookingsQueryKey, getListClientsQueryKey,
+  type CreateBookingRequestStatus,
+} from '@workspace/api-client-react';
+import { adaptBooking, evenSplit } from '@/lib/api-adapters';
+import { settings } from '@/lib/mock-data';
 import { getSetupProfile } from '@/lib/setup-store';
 import { suggestSlots, SuggestedSlot } from '@/lib/suggest-slots';
+import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import {
   X, Check, ChevronDown, ChevronRight, UserPlus, Plus,
-  Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Zap,
+  Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Zap, Loader2, PackageX, UserX,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@workspace/blue-glass-design-system/components/ui/tooltip';
 import { computeFuelGauge, type FuelGaugeResult } from '@/lib/fuel-gauge';
 import { format, parse } from 'date-fns';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ─── Bottom sheet wrapper ────────────────────────────────────────────────────
 function BottomSheet({ open, onClose, title, children }: {
@@ -59,6 +66,22 @@ function PillBtn({ label, onClick, icon: Icon }: { label: string; onClick: () =>
       {Icon && <Icon className="w-4 h-4" />}
       {label}
     </button>
+  );
+}
+
+// ─── "Nothing to pick from yet" prompt ────────────────────────────────────────
+// Per the PRD's edge-case guidance (Section 8): a brand-new account with zero
+// employees or packages shouldn't see a silently empty dropdown. There's no real
+// "add a package"/"add an employee" screen to deep-link to yet (full employee/package
+// management is Phase 3) — `packages.tsx` still writes to mock data, and there's no
+// employee-management UI at all — so this is an honest disabled state with
+// explanatory copy, not a fake link.
+function NothingToPickPrompt({ icon: Icon, message }: { icon: React.ElementType; message: string }) {
+  return (
+    <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-2xl bg-muted/50 text-[13px] text-muted-foreground">
+      <Icon className="w-4 h-4 shrink-0 mt-0.5" />
+      <span>{message}</span>
+    </div>
   );
 }
 
@@ -210,7 +233,31 @@ function FuelGaugeRow({ result, thresholds }: { result: FuelGaugeResult; thresho
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function BookingNew() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const setup = getSetupProfile();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // ── Real data ──────────────────────────────────────────────────────────────
+  const clientsQuery = useListClients();
+  const packagesQuery = useListPackages();
+  const employeesQuery = useListEmployees();
+  // Unscoped (deliberately not passing `clientId` here) — the fuel-gauge/
+  // suggested-slots engines below need visibility into every booking on whatever
+  // date the user ultimately picks, across all clients, not just a fixed nearby
+  // window for one client — same known scaling caveat as `clients.tsx`.
+  const bookingsQuery = useListBookings();
+
+  const clients = clientsQuery.data ?? [];
+  const packages = packagesQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
+  const bookings = useMemo(() => (bookingsQuery.data ?? []).map(adaptBooking), [bookingsQuery.data]);
+
+  const referenceDataLoading = clientsQuery.isLoading || packagesQuery.isLoading || employeesQuery.isLoading || bookingsQuery.isLoading;
+  const referenceDataFailed = clientsQuery.isError || packagesQuery.isError || employeesQuery.isError || bookingsQuery.isError;
+
+  const noPackagesYet = !packagesQuery.isLoading && packages.length === 0;
+  const noEmployeesYet = !employeesQuery.isLoading && employees.length === 0;
 
   // Form state
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
@@ -232,7 +279,18 @@ export default function BookingNew() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showTeam, setShowTeam] = useState(false);
-  const [showGasModal, setShowGasModal] = useState(false);
+
+  // Landing here from the clients page's "Add your first client" empty-state
+  // CTA (`?newClient=1`) — this page doubles as the only place a client can be
+  // created, so jump straight into the "new customer" step of the customer
+  // sheet instead of making the visitor rediscover it.
+  useEffect(() => {
+    if (new URLSearchParams(search).get('newClient') === '1') {
+      setShowCustomers(true);
+      setCreatingClient(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Search
   const [clientSearch, setClientSearch] = useState('');
@@ -251,7 +309,7 @@ export default function BookingNew() {
       return s + (pkg?.price ?? 0);
     }, 0);
     return suggestSlots(address, dur || 120, price || 0, bookings, packages, settings);
-  }, [address, selectedPackages]);
+  }, [address, selectedPackages, bookings, packages]);
 
   const applySuggestion = (slot: SuggestedSlot) => {
     const key = `${slot.date}|${slot.startTime}|${slot.employeeId}`;
@@ -268,7 +326,6 @@ export default function BookingNew() {
   const totalPrice = selectedPkgs.reduce((s, p) => s + p.price, 0);
   const totalDuration = selectedPkgs.reduce((s, p) => s + p.durationMinutes, 0);
 
-  const gasMeter = address && date ? getGasMeter(address, totalPrice || 1, settings) : null;
   const isMobile = !setup.isStorefront;
 
   // Fuel gauge — computed whenever address + packages are ready
@@ -278,7 +335,7 @@ export default function BookingNew() {
       id: -1,
       clientId: selectedClient ?? -1,
       packageIds: selectedPackages,
-      employeeIds: selectedEmployees.length > 0 ? selectedEmployees : [employees[0]?.id ?? 1],
+      employeeIds: selectedEmployees.length > 0 ? selectedEmployees : [employees[0]?.id ?? -1],
       date: date || format(new Date(), 'yyyy-MM-dd'),
       startTime: time || '09:00',
       address,
@@ -294,7 +351,7 @@ export default function BookingNew() {
       fuelGaugeHalfMin: settings.fuelGaugeHalfMin,
       fuelGaugeFullMin: settings.fuelGaugeFullMin,
     });
-  }, [address, selectedPackages, selectedClient, selectedEmployees, date, time]);
+  }, [address, selectedPackages, selectedClient, selectedEmployees, date, time, bookings, packages, employees]);
 
   // Formatted display values
   const dateLabel = (() => {
@@ -302,35 +359,72 @@ export default function BookingNew() {
     catch { return date; }
   })();
 
+  const createBookingMutation = useCreateBooking({
+    mutation: {
+      onSuccess: async (created) => {
+        await queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() });
+        toast({ title: 'Appointment booked' });
+        setLocation(`/booking/${created.id}`);
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong booking this appointment. Please try again.';
+        toast({ title: 'Booking failed', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
   const handleSave = () => {
-    if (!canSave) return;
-    const split = selectedEmployees.map(id => ({
-      employeeId: id,
-      percentage: Math.floor(100 / selectedEmployees.length),
-    }));
-    const booking = createBooking({
-      clientId: selectedClient!,
-      packageIds: selectedPackages,
-      employeeIds: selectedEmployees,
-      date, startTime: time, address,
-      depositAmount: parseFloat(deposit) || 0,
-      parkingCost: parseFloat(parking) || 0,
-      status: parseFloat(deposit) > 0 ? 'confirmed' : 'pending',
-      notes,
-      employeeSplit: split,
+    if (!canSave || createBookingMutation.isPending) return;
+    createBookingMutation.mutate({
+      data: {
+        clientId: selectedClient!,
+        packageIds: selectedPackages,
+        employeeSplit: evenSplit(selectedEmployees),
+        date,
+        startTime: time,
+        address,
+        depositAmount: parseFloat(deposit) || 0,
+        parkingCost: parseFloat(parking) || 0,
+        status: (parseFloat(deposit) > 0 ? 'confirmed' : 'pending') as CreateBookingRequestStatus,
+        notes: notes.trim() ? notes.trim() : null,
+      },
     });
-    setLocation(`/booking/${booking.id}`);
   };
 
+  const createClientMutation = useCreateClient({
+    mutation: {
+      onSuccess: async (created) => {
+        await queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
+        setSelectedClient(created.id);
+        if (created.address) setAddress(created.address);
+        setShowCustomers(false);
+        setCreatingClient(false);
+        setNewClient({ firstName: '', lastName: '', phone: '', email: '', address: '' });
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong creating this client. Please try again.';
+        toast({ title: 'Couldn’t create client', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  const newClientValid =
+    newClient.firstName.trim().length > 0 &&
+    newClient.phone.trim().length > 0 &&
+    EMAIL_RE.test(newClient.email.trim()) &&
+    newClient.address.trim().length > 0;
+
   const handleCreateClient = () => {
+    if (!newClientValid || createClientMutation.isPending) return;
     const full = `${newClient.firstName} ${newClient.lastName}`.trim();
-    if (!full || !newClient.phone) return;
-    const c = createClient({ name: full, phone: newClient.phone, email: newClient.email, address: newClient.address });
-    setSelectedClient(c.id);
-    if (newClient.address) setAddress(newClient.address);
-    setShowCustomers(false);
-    setCreatingClient(false);
-    setNewClient({ firstName: '', lastName: '', phone: '', email: '', address: '' });
+    createClientMutation.mutate({
+      data: {
+        name: full,
+        phone: newClient.phone.trim(),
+        email: newClient.email.trim(),
+        address: newClient.address.trim(),
+      },
+    });
   };
 
   const filteredClients = clients.filter(c =>
@@ -343,6 +437,23 @@ export default function BookingNew() {
     acc[pkg.category].push(pkg);
     return acc;
   }, {});
+
+  if (referenceDataFailed) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-3 px-4 text-center bg-background" data-testid="status-booking-new-error">
+        <p className="text-[15px] font-semibold">Couldn't load booking data</p>
+        <p className="text-[13px] text-muted-foreground max-w-[280px]">Check your connection and try again.</p>
+      </div>
+    );
+  }
+
+  if (referenceDataLoading) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background" data-testid="status-booking-new-loading">
+        <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] pb-48 md:pb-24 bg-background">
@@ -357,12 +468,12 @@ export default function BookingNew() {
         <p className="flex-1 text-center text-[16px] font-semibold">Create appointment</p>
         <button
           onClick={handleSave}
-          disabled={!canSave}
+          disabled={!canSave || createBookingMutation.isPending}
           className={`px-4 py-1.5 rounded-2xl text-[15px] font-semibold transition-all ${
-            canSave ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground cursor-not-allowed'
+            canSave && !createBookingMutation.isPending ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground cursor-not-allowed'
           }`}
         >
-          Save
+          {createBookingMutation.isPending ? 'Saving…' : 'Save'}
         </button>
       </div>
 
@@ -415,7 +526,14 @@ export default function BookingNew() {
             </div>
           </div>
         )}
-        <PillBtn label="Add service" icon={Plus} onClick={() => setShowServices(true)} />
+        {noPackagesYet ? (
+          <NothingToPickPrompt
+            icon={PackageX}
+            message="No packages yet. Add a package before booking a job — package management isn't built in this app yet, so ask an admin to add one directly for now."
+          />
+        ) : (
+          <PillBtn label="Add service" icon={Plus} onClick={() => setShowServices(true)} />
+        )}
       </Section>
 
       {/* ── Location ── */}
@@ -476,7 +594,7 @@ export default function BookingNew() {
                     {dateShort}
                   </span>
                   <span className={`text-[10px] font-semibold leading-none mt-1 ${isSelected ? 'text-white' : 'text-foreground'}`}>
-                    {timeLabel.replace(' ', '\u00A0')}
+                    {timeLabel.replace(' ', ' ')}
                   </span>
                   {emp && (
                     <span
@@ -547,13 +665,20 @@ export default function BookingNew() {
             })}
           </div>
         ) : null}
-        <button
-          onClick={() => setShowTeam(true)}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-muted hover:bg-muted/70 transition-colors text-[15px] font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          {selectedEmployees.length > 0 ? 'Add another' : 'Assign team member'}
-        </button>
+        {noEmployeesYet ? (
+          <NothingToPickPrompt
+            icon={UserX}
+            message="No employees yet. Add an employee to assign this job to — employee management isn't built in this app yet, so ask an admin to add one directly for now."
+          />
+        ) : (
+          <button
+            onClick={() => setShowTeam(true)}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-muted hover:bg-muted/70 transition-colors text-[15px] font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            {selectedEmployees.length > 0 ? 'Add another' : 'Assign team member'}
+          </button>
+        )}
       </Section>
 
       {/* ── Deposit & extras ── */}
@@ -600,14 +725,16 @@ export default function BookingNew() {
       <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-20 bg-background/95 backdrop-blur-md border-t border-border/40 px-5 py-4">
         <button
           onClick={handleSave}
-          disabled={!canSave}
+          disabled={!canSave || createBookingMutation.isPending}
           className={`w-full py-4 rounded-2xl text-[17px] font-semibold transition-all ${
-            canSave ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground cursor-not-allowed'
+            canSave && !createBookingMutation.isPending ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground cursor-not-allowed'
           }`}
         >
-          {canSave
-            ? (parseFloat(deposit) > 0 ? `Charge $${parseFloat(deposit).toFixed(2)} Deposit` : 'Book Appointment')
-            : 'Fill in details to book'}
+          {createBookingMutation.isPending
+            ? 'Booking…'
+            : canSave
+              ? (parseFloat(deposit) > 0 ? `Charge $${parseFloat(deposit).toFixed(2)} Deposit` : 'Book Appointment')
+              : 'Fill in details to book'}
         </button>
       </div>
 
@@ -675,7 +802,7 @@ export default function BookingNew() {
               { key: 'lastName',  placeholder: 'Last name'  },
               { key: 'phone',     placeholder: 'Phone number' },
               { key: 'email',     placeholder: 'Email address' },
-              { key: 'address',   placeholder: 'Address (optional)' },
+              { key: 'address',   placeholder: 'Address' },
             ].map(f => (
               <input
                 key={f.key}
@@ -688,12 +815,12 @@ export default function BookingNew() {
             ))}
             <button
               onClick={handleCreateClient}
-              disabled={!newClient.firstName || !newClient.phone}
+              disabled={!newClientValid || createClientMutation.isPending}
               className={`w-full py-4 mt-2 rounded-2xl text-[15px] font-semibold transition-all ${
-                newClient.firstName && newClient.phone ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground'
+                newClientValid && !createClientMutation.isPending ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground'
               }`}
             >
-              Save customer
+              {createClientMutation.isPending ? 'Saving…' : 'Save customer'}
             </button>
             <div className="h-8" />
           </div>
@@ -826,40 +953,6 @@ export default function BookingNew() {
           </div>
         </div>
       </BottomSheet>
-
-      {/* ── Gas breakdown dialog ── */}
-      {gasMeter && (
-        <Dialog open={showGasModal} onOpenChange={setShowGasModal}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Fuel ROI Breakdown</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 pt-2">
-              {[
-                ['Distance (one way)', `${gasMeter.distanceMiles} mi`],
-                ['Round trip', `${gasMeter.roundTrip} mi`],
-                ['Gas cost', `$${gasMeter.gasCost.toFixed(2)}`],
-                ['Job value', `$${totalPrice || '—'}`],
-                ['Gas as % of job', `${(gasMeter.ratio * 100).toFixed(1)}%`],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between text-[14px]">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="font-medium tabular-nums">{value}</span>
-                </div>
-              ))}
-              <div className={`mt-2 p-3 rounded-xl text-[13px] font-medium ${
-                gasMeter.status === 'green' ? 'bg-green-100 text-green-700' :
-                gasMeter.status === 'amber' ? 'bg-amber-100 text-amber-700' :
-                'bg-red-100 text-red-700'
-              }`}>
-                {gasMeter.status === 'green' ? '✅ Profitable distance' :
-                 gasMeter.status === 'amber' ? '⚠️ Getting expensive — consider a travel fee' :
-                 '🚨 Fuel cost is eating your margin — raise price or skip this job'}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useLocation } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLogout as useLogoutMutation } from '@workspace/api-client-react';
 import { getGetAuthSessionQueryKey } from '@/hooks/use-session';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 
 /**
  * Shared logout action for every entry point (sidebar, mobile "More" menu, settings, etc.)

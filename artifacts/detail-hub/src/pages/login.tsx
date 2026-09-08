@@ -6,10 +6,10 @@ import { z } from 'zod';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useLogin, getGetAuthSessionQueryKey } from '@workspace/api-client-react';
 import { AuthShell } from '@/components/auth-shell';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { useToast } from '@/hooks/use-toast';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
+import { Input } from '@workspace/blue-glass-design-system/components/ui/input';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/blue-glass-design-system/components/ui/form';
+import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { useSession } from '@/hooks/use-session';
 import { useQueryClient } from '@tanstack/react-query';
 

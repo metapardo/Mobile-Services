@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'wouter';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subWeeks, addDays } from 'date-fns';
 import { Users, Clock, CalendarOff, DollarSign, ChevronRight, Play } from 'lucide-react';
-import { Card } from '@/components/ui/card';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
 import { calcPayrollSummary, payrollRuns, pendingTimeOffCount } from '@/lib/payroll-data';
 
 type Period = 'current-week' | 'last-week' | 'month';

@@ -29,15 +29,13 @@ export * from "./auth-organization";
 export * from "./auth-member";
 export * from "./auth-invitation";
 
-// Platform-level signup gate (NOT Better Auth's `invitation` table above — see the
-// header comment in this file for the distinction). No `organizationId`/RLS here by
-// design: tokens are consumed before any organization exists.
-export * from "./platform-invite-tokens";
-
-// Public "request access" lead capture from the marketing landing page — upstream of
-// platform-invite-tokens above (a visitor lands here before they ever have a token).
-// Also no `organizationId`/RLS, same reasoning: no organization exists yet.
-export * from "./access-requests";
+// NOTE: this schema previously had a platform-level invite-token gate
+// (`platform-invite-tokens.ts`) and a public "request access" lead-capture table
+// (`access-requests.ts`) sitting here. Both were removed per
+// `PRD_DetailHub_SelfServe_Signup_Trial.md` Section 2 — signup is now fully
+// self-serve, there is no gate to hold a token for and no request to capture leads
+// for. See that PRD and the corresponding `platform_invite_tokens`/`access_requests`
+// table drops for the full removal.
 
 // Shared row-level-security helper used by every business-owned table below.
 export * from "./rls";

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { bookings, packages, employees, settings, clients } from '@/lib/mock-data';
 import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
 import { Link } from 'wouter';
-import { Card } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@workspace/blue-glass-design-system/components/ui/tabs';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subWeeks, format } from 'date-fns';
 
 export default function Payroll() {

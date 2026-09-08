@@ -11,4 +11,8 @@ import type { SignupOrganization } from './signupOrganization';
 export interface SignupResult {
   user: AuthUser;
   organization: SignupOrganization;
+  /** The raw session token, for non-cookie clients — mirrors `LoginResult.token`. Present because signup now also signs the caller in (see this operation's description). */
+  token: string;
+  /** The newly-created organization's id, set as this session's active organization. Unlike `LoginResult.organizationId`, this is never `null` — signup always activates the organization it just created. */
+  organizationId: string;
 }

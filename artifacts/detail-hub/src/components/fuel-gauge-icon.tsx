@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/blue-glass-design-system/components/ui/dialog';
 import type { FuelGaugeResult } from '@/lib/fuel-gauge';
 
 // ── Gauge SVG ──────────────────────────────────────────────────────────────────

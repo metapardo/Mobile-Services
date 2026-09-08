@@ -3,8 +3,8 @@ import { employees } from '@/lib/mock-data';
 import { timeOffRequests, approveTimeOffRequest, denyTimeOffRequest } from '@/lib/payroll-data';
 import { ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
 import { Link } from 'wouter';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import { format, differenceInCalendarDays } from 'date-fns';
 
 type Tab = 'pending' | 'history';

@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { packages, createPackage, updatePackage, Package } from '@/lib/mock-data';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { Link } from 'wouter';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Input } from '@workspace/blue-glass-design-system/components/ui/input';
+import { Label } from '@workspace/blue-glass-design-system/components/ui/label';
+import { Textarea } from '@workspace/blue-glass-design-system/components/ui/textarea';
+import { Switch } from '@workspace/blue-glass-design-system/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/blue-glass-design-system/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@workspace/blue-glass-design-system/components/ui/dialog';
 
 export default function Packages() {
   const [editOpen, setEditOpen] = useState(false);

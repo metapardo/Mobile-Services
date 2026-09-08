@@ -3,8 +3,8 @@ import { employees } from '@/lib/mock-data';
 import { timeLogs, approveTimeLog, approveBulkTimeLogs } from '@/lib/payroll-data';
 import { ArrowLeft, CheckCircle, Briefcase, Filter } from 'lucide-react';
 import { Link } from 'wouter';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import { format } from 'date-fns';
 
 export default function PayrollTimeTracking() {
