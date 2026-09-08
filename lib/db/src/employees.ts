@@ -2,15 +2,21 @@ import { and, eq } from "drizzle-orm";
 import { employeesTable, type InsertEmployee, type Employee } from "./schema";
 import { withOrganization } from "./tenant";
 
-// FR-2/FR-9: minimal on purpose — `name`/`color` is enough to assign a booking and
+// FR-2/FR-9: `name`/`color` is the only required pair — enough to assign a booking and
 // render it on the calendar. `workerType`/`paymentMethod`/`bankAccounts` are Payroll
-// Module fields that already have DB-level defaults (see ../schema/employees.ts) so
-// they can be omitted here; a future Payroll route is the intended place to set them
-// for real.
+// Module fields (docs/prds/PRD_DetailHub_Payroll_Module.md Section 2.1/7) that already
+// have DB-level defaults (see ../schema/employees.ts) so they can still be omitted at
+// creation — but are now settable both at create and via `PATCH /employees/:id`
+// (Phase A of PRD_DetailHub_After_Package_Work.md, Workstream 1 item 5), now that a
+// real Payroll surface consumes them. `employees.ts` route's `toWire` controls what's
+// actually exposed on the wire.
 export type CreateEmployeeInput = Pick<InsertEmployee, "name" | "color"> &
-  Partial<Pick<InsertEmployee, "email" | "phone" | "active">>;
+  Partial<Pick<InsertEmployee, "email" | "phone" | "active" | "workerType" | "paymentMethod" | "bankAccounts">>;
 export type UpdateEmployeeInput = Partial<
-  Pick<InsertEmployee, "name" | "color" | "email" | "phone" | "active">
+  Pick<
+    InsertEmployee,
+    "name" | "color" | "email" | "phone" | "active" | "workerType" | "paymentMethod" | "bankAccounts"
+  >
 >;
 
 /**

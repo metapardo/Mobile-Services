@@ -5,6 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BankAccount } from './bankAccount';
+import type { UpdateEmployeeRequestPaymentMethod } from './updateEmployeeRequestPaymentMethod';
+import type { UpdateEmployeeRequestWorkerType } from './updateEmployeeRequestWorkerType';
 
 /**
  * Partial update — all fields optional.
@@ -17,4 +20,7 @@ export interface UpdateEmployeeRequest {
   email?: string | null;
   phone?: string | null;
   active?: boolean;
+  workerType?: UpdateEmployeeRequestWorkerType;
+  paymentMethod?: UpdateEmployeeRequestPaymentMethod;
+  bankAccounts?: BankAccount[];
 }

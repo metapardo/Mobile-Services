@@ -25,26 +25,46 @@ import type {
   CreateBookingRequest,
   CreateClientRequest,
   CreateEmployeeRequest,
+  CreateEmployeeRoleRequest,
   CreatePackageRequest,
+  CreatePayrollRunRequest,
+  CreateTimeLogRequest,
+  CreateTimeOffRequestRequest,
   EmployeeResult,
+  EmployeeRoleResult,
   ErrorResponse,
+  FinancialReportResult,
+  GetFinancialReportParams,
+  GetPayrollSummaryParams,
   HealthStatus,
   ListBookingsParams,
   ListClientsParams,
   ListEmployeesParams,
   ListPackagesParams,
+  ListPayrollRunsParams,
+  ListTimeLogsParams,
+  ListTimeOffRequestsParams,
   LoginRequest,
   LoginResult,
   LogoutResult,
   PackageResult,
+  PayrollRunResult,
+  PayrollSummaryResult,
+  RecordBookingPaymentRequest,
+  RefundBookingRequest,
+  ReviewTimeOffRequestRequest,
   SessionResult,
   SettingsResult,
   SignupRequest,
   SignupResult,
+  TimeLogResult,
+  TimeOffRequestResult,
   UpdateBookingRequest,
   UpdateClientRequest,
   UpdateEmployeeRequest,
+  UpdateEmployeeRoleRequest,
   UpdatePackageRequest,
+  UpdatePayrollRunRequest,
   UpdateSettingsRequest
 } from './api.schemas';
 
@@ -1739,6 +1759,1227 @@ export const useArchiveEmployee = <TError = ErrorType<ErrorResponse>,
       return useMutation(getArchiveEmployeeMutationOptions(options));
     }
 
+export const getListEmployeeRolesUrl = (employeeId: number,) => {
+
+
+
+
+  return `/api/employees/${employeeId}/roles`
+}
+
+/**
+ * An employee can hold more than one role, each with its own pay type (hourly/commission) and rate (PRD Section 2.2/3) — e.g. "Front Desk $15/hr" and "Detailer 30% commission" on the same employee.
+ * @summary List an employee's pay roles
+ */
+export const listEmployeeRoles = async (employeeId: number, options?: Parameters<typeof customFetch>[1]): Promise<EmployeeRoleResult[]> => {
+
+  return customFetch<EmployeeRoleResult[]>(getListEmployeeRolesUrl(employeeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEmployeeRolesQueryKey = (employeeId: number,) => {
+    return [
+    `/api/employees/${employeeId}/roles`
+    ] as const;
+    }
+
+
+export const getListEmployeeRolesQueryOptions = <TData = Awaited<ReturnType<typeof listEmployeeRoles>>, TError = ErrorType<ErrorResponse>>(employeeId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEmployeeRoles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEmployeeRolesQueryKey(employeeId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEmployeeRoles>>> = ({ signal }) => listEmployeeRoles(employeeId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: employeeId !== null && employeeId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEmployeeRoles>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEmployeeRolesQueryResult = NonNullable<Awaited<ReturnType<typeof listEmployeeRoles>>>
+export type ListEmployeeRolesQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List an employee's pay roles
+ */
+
+export function useListEmployeeRoles<TData = Awaited<ReturnType<typeof listEmployeeRoles>>, TError = ErrorType<ErrorResponse>>(
+ employeeId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEmployeeRoles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEmployeeRolesQueryOptions(employeeId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateEmployeeRoleUrl = (employeeId: number,) => {
+
+
+
+
+  return `/api/employees/${employeeId}/roles`
+}
+
+/**
+ * `hourlyRate` is required (and `commissionRate` must be omitted) when `payType` is `hourly`; `commissionRate` is required (and `hourlyRate` must be omitted) when `payType` is `commission`.
+ * @summary Add a pay role to an employee
+ */
+export const createEmployeeRole = async (employeeId: number,
+    createEmployeeRoleRequest: CreateEmployeeRoleRequest, options?: Parameters<typeof customFetch>[1]): Promise<EmployeeRoleResult> => {
+
+  return customFetch<EmployeeRoleResult>(getCreateEmployeeRoleUrl(employeeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createEmployeeRoleRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateEmployeeRoleMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEmployeeRole>>, TError,{employeeId: number;data: BodyType<CreateEmployeeRoleRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createEmployeeRole>>, TError,{employeeId: number;data: BodyType<CreateEmployeeRoleRequest>}, TContext> => {
+
+const mutationKey = ['createEmployeeRole'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEmployeeRole>>, {employeeId: number;data: BodyType<CreateEmployeeRoleRequest>}> = (props) => {
+          const {employeeId,data} = props ?? {};
+
+          return  createEmployeeRole(employeeId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateEmployeeRoleMutationResult = NonNullable<Awaited<ReturnType<typeof createEmployeeRole>>>
+    export type CreateEmployeeRoleMutationBody = BodyType<CreateEmployeeRoleRequest>
+    export type CreateEmployeeRoleMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Add a pay role to an employee
+ */
+export const useCreateEmployeeRole = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEmployeeRole>>, TError,{employeeId: number;data: BodyType<CreateEmployeeRoleRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createEmployeeRole>>,
+        TError,
+        {employeeId: number;data: BodyType<CreateEmployeeRoleRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateEmployeeRoleMutationOptions(options));
+    }
+
+export const getUpdateEmployeeRoleUrl = (employeeId: number,
+    roleId: number,) => {
+
+
+
+
+  return `/api/employees/${employeeId}/roles/${roleId}`
+}
+
+/**
+ * Partial update — any subset of fields may be sent; omitted fields are left unchanged.
+ * @summary Update an employee's pay role
+ */
+export const updateEmployeeRole = async (employeeId: number,
+    roleId: number,
+    updateEmployeeRoleRequest: UpdateEmployeeRoleRequest, options?: Parameters<typeof customFetch>[1]): Promise<EmployeeRoleResult> => {
+
+  return customFetch<EmployeeRoleResult>(getUpdateEmployeeRoleUrl(employeeId,roleId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateEmployeeRoleRequest)
+  }
+);}
+
+
+
+
+
+export const getUpdateEmployeeRoleMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEmployeeRole>>, TError,{employeeId: number;roleId: number;data: BodyType<UpdateEmployeeRoleRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateEmployeeRole>>, TError,{employeeId: number;roleId: number;data: BodyType<UpdateEmployeeRoleRequest>}, TContext> => {
+
+const mutationKey = ['updateEmployeeRole'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateEmployeeRole>>, {employeeId: number;roleId: number;data: BodyType<UpdateEmployeeRoleRequest>}> = (props) => {
+          const {employeeId,roleId,data} = props ?? {};
+
+          return  updateEmployeeRole(employeeId,roleId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateEmployeeRoleMutationResult = NonNullable<Awaited<ReturnType<typeof updateEmployeeRole>>>
+    export type UpdateEmployeeRoleMutationBody = BodyType<UpdateEmployeeRoleRequest>
+    export type UpdateEmployeeRoleMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update an employee's pay role
+ */
+export const useUpdateEmployeeRole = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEmployeeRole>>, TError,{employeeId: number;roleId: number;data: BodyType<UpdateEmployeeRoleRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateEmployeeRole>>,
+        TError,
+        {employeeId: number;roleId: number;data: BodyType<UpdateEmployeeRoleRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdateEmployeeRoleMutationOptions(options));
+    }
+
+export const getDeleteEmployeeRoleUrl = (employeeId: number,
+    roleId: number,) => {
+
+
+
+
+  return `/api/employees/${employeeId}/roles/${roleId}`
+}
+
+/**
+ * @summary Remove an employee's pay role
+ */
+export const deleteEmployeeRole = async (employeeId: number,
+    roleId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteEmployeeRoleUrl(employeeId,roleId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteEmployeeRoleMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEmployeeRole>>, TError,{employeeId: number;roleId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteEmployeeRole>>, TError,{employeeId: number;roleId: number}, TContext> => {
+
+const mutationKey = ['deleteEmployeeRole'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteEmployeeRole>>, {employeeId: number;roleId: number}> = (props) => {
+          const {employeeId,roleId} = props ?? {};
+
+          return  deleteEmployeeRole(employeeId,roleId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteEmployeeRoleMutationResult = NonNullable<Awaited<ReturnType<typeof deleteEmployeeRole>>>
+
+    export type DeleteEmployeeRoleMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Remove an employee's pay role
+ */
+export const useDeleteEmployeeRole = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEmployeeRole>>, TError,{employeeId: number;roleId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteEmployeeRole>>,
+        TError,
+        {employeeId: number;roleId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteEmployeeRoleMutationOptions(options));
+    }
+
+export const getListTimeLogsUrl = (params?: ListTimeLogsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/time-logs?${stringifiedParams}` : `/api/time-logs`
+}
+
+/**
+ * Powers the Time Tracking hub (PRD Section 4) — Date/Employee/Role/Hours table. `start`/`end` (both `YYYY-MM-DD`, both optional, inclusive) filter on `date`.
+ * @summary List time logs, optionally filtered by employee and/or date range
+ */
+export const listTimeLogs = async (params?: ListTimeLogsParams, options?: Parameters<typeof customFetch>[1]): Promise<TimeLogResult[]> => {
+
+  return customFetch<TimeLogResult[]>(getListTimeLogsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTimeLogsQueryKey = (params?: ListTimeLogsParams,) => {
+    return [
+    `/api/time-logs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTimeLogsQueryOptions = <TData = Awaited<ReturnType<typeof listTimeLogs>>, TError = ErrorType<ErrorResponse>>(params?: ListTimeLogsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTimeLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTimeLogsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTimeLogs>>> = ({ signal }) => listTimeLogs(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTimeLogs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTimeLogsQueryResult = NonNullable<Awaited<ReturnType<typeof listTimeLogs>>>
+export type ListTimeLogsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List time logs, optionally filtered by employee and/or date range
+ */
+
+export function useListTimeLogs<TData = Awaited<ReturnType<typeof listTimeLogs>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListTimeLogsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTimeLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTimeLogsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateTimeLogUrl = () => {
+
+
+
+
+  return `/api/time-logs`
+}
+
+/**
+ * Manual entry only for v1 (PRD Open Question #11's decided default: "manual entry with admin approval," no clock-in/out). Always created unapproved — see `POST /time-logs/{id}/approve`.
+ * @summary Manually log hours for an employee/role/day
+ */
+export const createTimeLog = async (createTimeLogRequest: CreateTimeLogRequest, options?: Parameters<typeof customFetch>[1]): Promise<TimeLogResult> => {
+
+  return customFetch<TimeLogResult>(getCreateTimeLogUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createTimeLogRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateTimeLogMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeLog>>, TError,{data: BodyType<CreateTimeLogRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTimeLog>>, TError,{data: BodyType<CreateTimeLogRequest>}, TContext> => {
+
+const mutationKey = ['createTimeLog'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTimeLog>>, {data: BodyType<CreateTimeLogRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTimeLog(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTimeLogMutationResult = NonNullable<Awaited<ReturnType<typeof createTimeLog>>>
+    export type CreateTimeLogMutationBody = BodyType<CreateTimeLogRequest>
+    export type CreateTimeLogMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Manually log hours for an employee/role/day
+ */
+export const useCreateTimeLog = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeLog>>, TError,{data: BodyType<CreateTimeLogRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTimeLog>>,
+        TError,
+        {data: BodyType<CreateTimeLogRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateTimeLogMutationOptions(options));
+    }
+
+export const getApproveTimeLogUrl = (id: number,) => {
+
+
+
+
+  return `/api/time-logs/${id}/approve`
+}
+
+/**
+ * Admin review/lock step ahead of a payroll run (PRD Section 4) — only approved logs feed a payroll run's `hourly_pay`.
+ * @summary Approve a time log
+ */
+export const approveTimeLog = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<TimeLogResult> => {
+
+  return customFetch<TimeLogResult>(getApproveTimeLogUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getApproveTimeLogMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveTimeLog>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveTimeLog>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['approveTimeLog'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveTimeLog>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  approveTimeLog(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveTimeLogMutationResult = NonNullable<Awaited<ReturnType<typeof approveTimeLog>>>
+
+    export type ApproveTimeLogMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Approve a time log
+ */
+export const useApproveTimeLog = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveTimeLog>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveTimeLog>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getApproveTimeLogMutationOptions(options));
+    }
+
+export const getDeleteTimeLogUrl = (id: number,) => {
+
+
+
+
+  return `/api/time-logs/${id}`
+}
+
+/**
+ * Removes a mis-entered manual log — typically before it's approved.
+ * @summary Delete a time log
+ */
+export const deleteTimeLog = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteTimeLogUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteTimeLogMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTimeLog>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTimeLog>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteTimeLog'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTimeLog>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteTimeLog(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTimeLogMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTimeLog>>>
+
+    export type DeleteTimeLogMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a time log
+ */
+export const useDeleteTimeLog = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTimeLog>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTimeLog>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteTimeLogMutationOptions(options));
+    }
+
+export const getListTimeOffRequestsUrl = (params?: ListTimeOffRequestsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/time-off-requests?${stringifiedParams}` : `/api/time-off-requests`
+}
+
+/**
+ * @summary List time-off requests, optionally filtered by status and/or employee
+ */
+export const listTimeOffRequests = async (params?: ListTimeOffRequestsParams, options?: Parameters<typeof customFetch>[1]): Promise<TimeOffRequestResult[]> => {
+
+  return customFetch<TimeOffRequestResult[]>(getListTimeOffRequestsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTimeOffRequestsQueryKey = (params?: ListTimeOffRequestsParams,) => {
+    return [
+    `/api/time-off-requests`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTimeOffRequestsQueryOptions = <TData = Awaited<ReturnType<typeof listTimeOffRequests>>, TError = ErrorType<ErrorResponse>>(params?: ListTimeOffRequestsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTimeOffRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTimeOffRequestsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTimeOffRequests>>> = ({ signal }) => listTimeOffRequests(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTimeOffRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTimeOffRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof listTimeOffRequests>>>
+export type ListTimeOffRequestsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List time-off requests, optionally filtered by status and/or employee
+ */
+
+export function useListTimeOffRequests<TData = Awaited<ReturnType<typeof listTimeOffRequests>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListTimeOffRequestsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTimeOffRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTimeOffRequestsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateTimeOffRequestUrl = () => {
+
+
+
+
+  return `/api/time-off-requests`
+}
+
+/**
+ * Created with `status: pending` (PRD Section 5). Approved time off is informational only in v1 (Open Question #12) — it never blocks or warns against new booking assignments in that date range.
+ * @summary Submit a time-off request
+ */
+export const createTimeOffRequest = async (createTimeOffRequestRequest: CreateTimeOffRequestRequest, options?: Parameters<typeof customFetch>[1]): Promise<TimeOffRequestResult> => {
+
+  return customFetch<TimeOffRequestResult>(getCreateTimeOffRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createTimeOffRequestRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateTimeOffRequestMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeOffRequest>>, TError,{data: BodyType<CreateTimeOffRequestRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTimeOffRequest>>, TError,{data: BodyType<CreateTimeOffRequestRequest>}, TContext> => {
+
+const mutationKey = ['createTimeOffRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTimeOffRequest>>, {data: BodyType<CreateTimeOffRequestRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTimeOffRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTimeOffRequestMutationResult = NonNullable<Awaited<ReturnType<typeof createTimeOffRequest>>>
+    export type CreateTimeOffRequestMutationBody = BodyType<CreateTimeOffRequestRequest>
+    export type CreateTimeOffRequestMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Submit a time-off request
+ */
+export const useCreateTimeOffRequest = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeOffRequest>>, TError,{data: BodyType<CreateTimeOffRequestRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTimeOffRequest>>,
+        TError,
+        {data: BodyType<CreateTimeOffRequestRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateTimeOffRequestMutationOptions(options));
+    }
+
+export const getReviewTimeOffRequestUrl = (id: number,) => {
+
+
+
+
+  return `/api/time-off-requests/${id}/review`
+}
+
+/**
+ * Matches the "Approve Time Off Request" confirmation modal (PRD Section 5). `reviewedByEmployeeId` is optional — v1 has no reliable mapping from the authenticated admin user to an `employees` row (no employee login yet).
+ * @summary Approve or deny a time-off request
+ */
+export const reviewTimeOffRequest = async (id: number,
+    reviewTimeOffRequestRequest: ReviewTimeOffRequestRequest, options?: Parameters<typeof customFetch>[1]): Promise<TimeOffRequestResult> => {
+
+  return customFetch<TimeOffRequestResult>(getReviewTimeOffRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(reviewTimeOffRequestRequest)
+  }
+);}
+
+
+
+
+
+export const getReviewTimeOffRequestMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewTimeOffRequest>>, TError,{id: number;data: BodyType<ReviewTimeOffRequestRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewTimeOffRequest>>, TError,{id: number;data: BodyType<ReviewTimeOffRequestRequest>}, TContext> => {
+
+const mutationKey = ['reviewTimeOffRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewTimeOffRequest>>, {id: number;data: BodyType<ReviewTimeOffRequestRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reviewTimeOffRequest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewTimeOffRequestMutationResult = NonNullable<Awaited<ReturnType<typeof reviewTimeOffRequest>>>
+    export type ReviewTimeOffRequestMutationBody = BodyType<ReviewTimeOffRequestRequest>
+    export type ReviewTimeOffRequestMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Approve or deny a time-off request
+ */
+export const useReviewTimeOffRequest = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewTimeOffRequest>>, TError,{id: number;data: BodyType<ReviewTimeOffRequestRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewTimeOffRequest>>,
+        TError,
+        {id: number;data: BodyType<ReviewTimeOffRequestRequest>},
+        TContext
+      > => {
+      return useMutation(getReviewTimeOffRequestMutationOptions(options));
+    }
+
+export const getGetPayrollSummaryUrl = (params?: GetPayrollSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/payroll/summary?${stringifiedParams}` : `/api/payroll/summary`
+}
+
+/**
+ * The "Run Report" / draft-review step (PRD Section 6) — computes the same per-employee breakdown a `POST /payroll/runs` would store, without persisting anything. `period` is a shorthand (`this_week`/`last_week`/`this_month`, mirroring `artifacts/detail-hub/src/lib/payroll-data.ts`'s `getPeriodRange`); explicit `periodStart`+`periodEnd` win over `period` if both are given.
+ * @summary Preview a payroll calculation for a period, without creating a run
+ */
+export const getPayrollSummary = async (params?: GetPayrollSummaryParams, options?: Parameters<typeof customFetch>[1]): Promise<PayrollSummaryResult> => {
+
+  return customFetch<PayrollSummaryResult>(getGetPayrollSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPayrollSummaryQueryKey = (params?: GetPayrollSummaryParams,) => {
+    return [
+    `/api/payroll/summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPayrollSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getPayrollSummary>>, TError = ErrorType<ErrorResponse>>(params?: GetPayrollSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPayrollSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPayrollSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPayrollSummary>>> = ({ signal }) => getPayrollSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPayrollSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPayrollSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getPayrollSummary>>>
+export type GetPayrollSummaryQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Preview a payroll calculation for a period, without creating a run
+ */
+
+export function useGetPayrollSummary<TData = Awaited<ReturnType<typeof getPayrollSummary>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetPayrollSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPayrollSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPayrollSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListPayrollRunsUrl = (params?: ListPayrollRunsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/payroll/runs?${stringifiedParams}` : `/api/payroll/runs`
+}
+
+/**
+ * Ordered most-recent-first. `limit` powers the Team hub's "3 most recent" view.
+ * @summary List recent payroll runs
+ */
+export const listPayrollRuns = async (params?: ListPayrollRunsParams, options?: Parameters<typeof customFetch>[1]): Promise<PayrollRunResult[]> => {
+
+  return customFetch<PayrollRunResult[]>(getListPayrollRunsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPayrollRunsQueryKey = (params?: ListPayrollRunsParams,) => {
+    return [
+    `/api/payroll/runs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPayrollRunsQueryOptions = <TData = Awaited<ReturnType<typeof listPayrollRuns>>, TError = ErrorType<ErrorResponse>>(params?: ListPayrollRunsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPayrollRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPayrollRunsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPayrollRuns>>> = ({ signal }) => listPayrollRuns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPayrollRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPayrollRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listPayrollRuns>>>
+export type ListPayrollRunsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List recent payroll runs
+ */
+
+export function useListPayrollRuns<TData = Awaited<ReturnType<typeof listPayrollRuns>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListPayrollRunsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPayrollRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPayrollRunsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePayrollRunUrl = () => {
+
+
+
+
+  return `/api/payroll/runs`
+}
+
+/**
+ * Computes and stores line items for the resolved period as a new `status: draft` run (PRD Section 6) — review-before-pay, nothing is actually paid out yet. See `PATCH /payroll/runs/{id}` to finalize.
+ * @summary Run payroll for a period
+ */
+export const createPayrollRun = async (createPayrollRunRequest: CreatePayrollRunRequest, options?: Parameters<typeof customFetch>[1]): Promise<PayrollRunResult> => {
+
+  return customFetch<PayrollRunResult>(getCreatePayrollRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createPayrollRunRequest)
+  }
+);}
+
+
+
+
+
+export const getCreatePayrollRunMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPayrollRun>>, TError,{data: BodyType<CreatePayrollRunRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPayrollRun>>, TError,{data: BodyType<CreatePayrollRunRequest>}, TContext> => {
+
+const mutationKey = ['createPayrollRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPayrollRun>>, {data: BodyType<CreatePayrollRunRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPayrollRun(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePayrollRunMutationResult = NonNullable<Awaited<ReturnType<typeof createPayrollRun>>>
+    export type CreatePayrollRunMutationBody = BodyType<CreatePayrollRunRequest>
+    export type CreatePayrollRunMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Run payroll for a period
+ */
+export const useCreatePayrollRun = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPayrollRun>>, TError,{data: BodyType<CreatePayrollRunRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPayrollRun>>,
+        TError,
+        {data: BodyType<CreatePayrollRunRequest>},
+        TContext
+      > => {
+      return useMutation(getCreatePayrollRunMutationOptions(options));
+    }
+
+export const getGetPayrollRunUrl = (id: number,) => {
+
+
+
+
+  return `/api/payroll/runs/${id}`
+}
+
+/**
+ * @summary Get a payroll run by id
+ */
+export const getPayrollRun = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<PayrollRunResult> => {
+
+  return customFetch<PayrollRunResult>(getGetPayrollRunUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPayrollRunQueryKey = (id: number,) => {
+    return [
+    `/api/payroll/runs/${id}`
+    ] as const;
+    }
+
+
+export const getGetPayrollRunQueryOptions = <TData = Awaited<ReturnType<typeof getPayrollRun>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPayrollRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPayrollRunQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPayrollRun>>> = ({ signal }) => getPayrollRun(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPayrollRun>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPayrollRunQueryResult = NonNullable<Awaited<ReturnType<typeof getPayrollRun>>>
+export type GetPayrollRunQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a payroll run by id
+ */
+
+export function useGetPayrollRun<TData = Awaited<ReturnType<typeof getPayrollRun>>, TError = ErrorType<ErrorResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPayrollRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPayrollRunQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdatePayrollRunUrl = (id: number,) => {
+
+
+
+
+  return `/api/payroll/runs/${id}`
+}
+
+/**
+ * `draft` -> `paid` only. This is a bookkeeping status flip, NOT a real payment execution — no direct deposit/check/ACH transfer actually happens (no payroll processor is connected anywhere in this codebase, PRD Section 9).
+ * @summary Finalize a payroll run (mark it paid)
+ */
+export const updatePayrollRun = async (id: number,
+    updatePayrollRunRequest: UpdatePayrollRunRequest, options?: Parameters<typeof customFetch>[1]): Promise<PayrollRunResult> => {
+
+  return customFetch<PayrollRunResult>(getUpdatePayrollRunUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updatePayrollRunRequest)
+  }
+);}
+
+
+
+
+
+export const getUpdatePayrollRunMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePayrollRun>>, TError,{id: number;data: BodyType<UpdatePayrollRunRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePayrollRun>>, TError,{id: number;data: BodyType<UpdatePayrollRunRequest>}, TContext> => {
+
+const mutationKey = ['updatePayrollRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePayrollRun>>, {id: number;data: BodyType<UpdatePayrollRunRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePayrollRun(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePayrollRunMutationResult = NonNullable<Awaited<ReturnType<typeof updatePayrollRun>>>
+    export type UpdatePayrollRunMutationBody = BodyType<UpdatePayrollRunRequest>
+    export type UpdatePayrollRunMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Finalize a payroll run (mark it paid)
+ */
+export const useUpdatePayrollRun = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePayrollRun>>, TError,{id: number;data: BodyType<UpdatePayrollRunRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePayrollRun>>,
+        TError,
+        {id: number;data: BodyType<UpdatePayrollRunRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdatePayrollRunMutationOptions(options));
+    }
+
 export const getListBookingsUrl = (params?: ListBookingsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -2117,4 +3358,235 @@ export const useDeleteBooking = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getDeleteBookingMutationOptions(options));
     }
+
+export const getRecordBookingPaymentUrl = (id: number,) => {
+
+
+
+
+  return `/api/bookings/${id}/payment`
+}
+
+/**
+ * PRD_DetailHub_Payment_Methods.md FR-1/FR-2/FR-5. Selecting `zelle`/`venmo`/ `cash` marks the booking paid via that method, timestamps it (`paymentRecordedAt`), and stores an optional free-text `paymentReference`. Selecting `credit_card` ALWAYS fails with 422 `card_processing_not_available` — no payment processor is connected in this codebase; this never charges a card, real or simulated.
+ * @summary Record how a booking was paid
+ */
+export const recordBookingPayment = async (id: number,
+    recordBookingPaymentRequest: RecordBookingPaymentRequest, options?: Parameters<typeof customFetch>[1]): Promise<BookingResult> => {
+
+  return customFetch<BookingResult>(getRecordBookingPaymentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recordBookingPaymentRequest)
+  }
+);}
+
+
+
+
+
+export const getRecordBookingPaymentMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordBookingPayment>>, TError,{id: number;data: BodyType<RecordBookingPaymentRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordBookingPayment>>, TError,{id: number;data: BodyType<RecordBookingPaymentRequest>}, TContext> => {
+
+const mutationKey = ['recordBookingPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordBookingPayment>>, {id: number;data: BodyType<RecordBookingPaymentRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  recordBookingPayment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordBookingPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof recordBookingPayment>>>
+    export type RecordBookingPaymentMutationBody = BodyType<RecordBookingPaymentRequest>
+    export type RecordBookingPaymentMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Record how a booking was paid
+ */
+export const useRecordBookingPayment = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordBookingPayment>>, TError,{id: number;data: BodyType<RecordBookingPaymentRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordBookingPayment>>,
+        TError,
+        {id: number;data: BodyType<RecordBookingPaymentRequest>},
+        TContext
+      > => {
+      return useMutation(getRecordBookingPaymentMutationOptions(options));
+    }
+
+export const getRefundBookingUrl = (id: number,) => {
+
+
+
+
+  return `/api/bookings/${id}/refund`
+}
+
+/**
+ * FR-8/Section 6.2 of PRD_DetailHub_Payment_Methods.md. Always a manual reversal record — sets `refundStatus: completed` and stores an optional free-text `refundReference`. Never calls a real processor refund API for any tender type; the money movement (if any) happens outside the app, same as the original Zelle/Venmo/Cash payment itself.
+ * @summary Record a refund against a booking
+ */
+export const refundBooking = async (id: number,
+    refundBookingRequest: RefundBookingRequest, options?: Parameters<typeof customFetch>[1]): Promise<BookingResult> => {
+
+  return customFetch<BookingResult>(getRefundBookingUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(refundBookingRequest)
+  }
+);}
+
+
+
+
+
+export const getRefundBookingMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refundBooking>>, TError,{id: number;data: BodyType<RefundBookingRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refundBooking>>, TError,{id: number;data: BodyType<RefundBookingRequest>}, TContext> => {
+
+const mutationKey = ['refundBooking'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refundBooking>>, {id: number;data: BodyType<RefundBookingRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  refundBooking(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefundBookingMutationResult = NonNullable<Awaited<ReturnType<typeof refundBooking>>>
+    export type RefundBookingMutationBody = BodyType<RefundBookingRequest>
+    export type RefundBookingMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Record a refund against a booking
+ */
+export const useRefundBooking = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refundBooking>>, TError,{id: number;data: BodyType<RefundBookingRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refundBooking>>,
+        TError,
+        {id: number;data: BodyType<RefundBookingRequest>},
+        TContext
+      > => {
+      return useMutation(getRefundBookingMutationOptions(options));
+    }
+
+export const getGetFinancialReportUrl = (params: GetFinancialReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/financials?${stringifiedParams}` : `/api/reports/financials`
+}
+
+/**
+ * FR-10/FR-11/FR-13 of PRD_DetailHub_After_Package_Work.md Section 6.2. Computes an income statement (revenue -> COGS -> gross profit -> opex -> operating income -> interest/tax -> net income), a balance sheet, a cash flow statement, package mix, revenue-by-employee, and a trailing-6-calendar-month revenue/net-income trend (ending with the month containing `end`) for one `[start, end]` period. This is a deliberate hybrid: revenue, jobs, labor (real payroll gross for the period), package mix, revenue-by-employee, and accounts receivable are computed from real bookings/payroll/packages/ employees data; fixed overhead, loan interest, depreciation, the illustrative 25% tax rate, and every balance-sheet field without a real underlying ledger are ported verbatim as constants from the app's original mock financial model (`artifacts/detail-hub/src/lib/reporting-data.ts`) — see `calculateFinancialReport` in `@workspace/db` for the exact breakdown. Every ratio is guarded against a zero-revenue/zero-jobs period (FR-13): `0`, never `NaN`/`Infinity`.
+ * @summary Full financial statement set for a period (Monthly/Quarterly/Annual Financial View)
+ */
+export const getFinancialReport = async (params: GetFinancialReportParams, options?: Parameters<typeof customFetch>[1]): Promise<FinancialReportResult> => {
+
+  return customFetch<FinancialReportResult>(getGetFinancialReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFinancialReportQueryKey = (params?: GetFinancialReportParams,) => {
+    return [
+    `/api/reports/financials`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFinancialReportQueryOptions = <TData = Awaited<ReturnType<typeof getFinancialReport>>, TError = ErrorType<ErrorResponse>>(params: GetFinancialReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFinancialReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFinancialReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFinancialReport>>> = ({ signal }) => getFinancialReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFinancialReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFinancialReportQueryResult = NonNullable<Awaited<ReturnType<typeof getFinancialReport>>>
+export type GetFinancialReportQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Full financial statement set for a period (Monthly/Quarterly/Annual Financial View)
+ */
+
+export function useGetFinancialReport<TData = Awaited<ReturnType<typeof getFinancialReport>>, TError = ErrorType<ErrorResponse>>(
+ params: GetFinancialReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFinancialReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFinancialReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

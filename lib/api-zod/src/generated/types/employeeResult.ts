@@ -5,9 +5,12 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BankAccount } from './bankAccount';
+import type { EmployeeResultPaymentMethod } from './employeeResultPaymentMethod';
+import type { EmployeeResultWorkerType } from './employeeResultWorkerType';
 
 /**
- * Minimal employee record — `id`/`name`/`color` match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Employee` interface exactly; `active`/`email`/`phone`/`createdAt`/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.
+ * `id`/`name`/`color` match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Employee` interface exactly; the rest are formalized additions, including the full Payroll Module pay profile (`workerType`/`paymentMethod`/`bankAccounts`, `docs/prds/PRD_DetailHub_Payroll_Module.md` Section 2.1) — previously excluded from this API on purpose while only the minimal booking-assignment surface existed, now exposed for the Payroll routes.
  */
 export interface EmployeeResult {
   id: number;
@@ -16,6 +19,9 @@ export interface EmployeeResult {
   email?: string | null;
   phone?: string | null;
   active: boolean;
+  workerType: EmployeeResultWorkerType;
+  paymentMethod: EmployeeResultPaymentMethod;
+  bankAccounts: BankAccount[];
   createdAt: Date;
   updatedAt: Date;
 }

@@ -31,7 +31,14 @@ export interface EmployeeSplit {
   percentage: number;
 }
 
-export type PaymentMethodId = 'cash' | 'zelle' | 'venmo' | 'card' | 'tap';
+// Matches the real backend enum (`BookingResultPaymentMethod`/
+// `RecordBookingPaymentRequestPaymentMethod` in `@workspace/api-client-react`) —
+// see `docs/prds/PRD_DetailHub_Payment_Methods.md` Section 7. `'card'`/`'tap'` never
+// shipped as real tender types; `credit_card` is recorded the same as the other three,
+// it just can't actually be charged yet (no processor connected — see FR-5).
+export type PaymentMethodId = 'zelle' | 'venmo' | 'cash' | 'credit_card';
+
+export type RefundStatus = 'none' | 'requested' | 'completed';
 
 export interface Booking {
   id: number;
@@ -47,7 +54,7 @@ export interface Booking {
   notes?: string;
   employeeSplit: EmployeeSplit[];
   paymentMethod?: PaymentMethodId;
-  paymentNote?: string;
+  paymentReference?: string;
 }
 
 export interface Settings {

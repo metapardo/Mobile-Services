@@ -6,11 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { BookingResultPaymentMethod } from './bookingResultPaymentMethod';
+import type { BookingResultRefundStatus } from './bookingResultRefundStatus';
 import type { BookingResultStatus } from './bookingResultStatus';
 import type { EmployeeSplit } from './employeeSplit';
 
 /**
- * Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD's `scheduledDate`/`scheduledStartTime`/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`/`updatedAt`/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)
+ * Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD's `scheduledDate`/`scheduledStartTime`/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`/`updatedAt`/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.) `paymentMethod`/`paymentReference`/ `paymentRecordedAt`/`refundStatus`/`refundReference` match `PRD_DetailHub_Payment_Methods.md` Section 7 exactly (superseding the earlier, rougher `paymentMethod`/`paymentNote` shape this API had before that PRD was reviewed — see `../../lib/db/src/schema/bookings.ts` for why) — settable only via `POST /bookings/{id}/payment` and `POST /bookings/{id}/refund`, never through `POST`/`PATCH /bookings`.
  */
 export interface BookingResult {
   id: number;
@@ -28,7 +29,10 @@ export interface BookingResult {
   status: BookingResultStatus;
   notes?: string | null;
   paymentMethod?: BookingResultPaymentMethod;
-  paymentNote?: string | null;
+  paymentReference?: string | null;
+  paymentRecordedAt?: Date | null;
+  refundStatus?: BookingResultRefundStatus;
+  refundReference?: string | null;
   createdAt: Date;
   updatedAt: Date;
   /** id of the admin/owner user who created this booking. */

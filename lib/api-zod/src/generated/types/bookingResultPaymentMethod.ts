@@ -10,9 +10,8 @@ export type BookingResultPaymentMethod = typeof BookingResultPaymentMethod[keyof
 
 
 export const BookingResultPaymentMethod = {
-  cash: 'cash',
   zelle: 'zelle',
   venmo: 'venmo',
-  card: 'card',
-  tap: 'tap',
+  cash: 'cash',
+  credit_card: 'credit_card',
 } as const;

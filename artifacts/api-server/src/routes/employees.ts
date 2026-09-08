@@ -19,10 +19,12 @@ import { captureAndFlush } from "../lib/sentry";
 const router: IRouter = Router();
 
 /**
- * Minimal wire shape (FR-2/FR-9) — deliberately does NOT expose `workerType`/
- * `paymentMethod`/`bankAccounts`, which already exist as DB columns for the Payroll
- * Module (with defaults so this minimal API can ignore them entirely, see
- * `../../../../lib/db/src/schema/employees.ts`).
+ * Wire shape now includes the Payroll Module's pay-profile fields (`workerType`/
+ * `paymentMethod`/`bankAccounts`) — previously deliberately excluded here per FR-2/FR-9
+ * while only the minimal booking-assignment surface existed (see git history). Now
+ * that Payroll routes (`../payroll.ts`, `../employee-roles.ts`) consume them for real,
+ * `docs/prds/PRD_DetailHub_Payroll_Module.md` Section 2.1's `Employee` shape is
+ * exposed in full.
  */
 function toWire(row: Employee) {
   return {
@@ -32,6 +34,9 @@ function toWire(row: Employee) {
     email: row.email,
     phone: row.phone,
     active: row.active,
+    workerType: row.workerType,
+    paymentMethod: row.paymentMethod,
+    bankAccounts: row.bankAccounts,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

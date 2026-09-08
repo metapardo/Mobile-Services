@@ -26,12 +26,33 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "no-show",
 ]);
 
+// PRD_DetailHub_Payment_Methods.md Section 7 "Data Requirements" is the authoritative
+// shape for this feature (Checkout backend, Phase A of
+// PRD_DetailHub_After_Package_Work.md) — it supersedes the earlier, rougher
+// `["cash","zelle","venmo","card","tap"]` enum + `paymentNote` column that
+// `PRD_DetailHub_Real_Bookings_Clients_Backend.md` had put here before this PRD was
+// reviewed. `card`/`tap` collapse into the single `credit_card` tender type the
+// Payment Methods PRD actually defines (tap-to-pay vs. manual card entry is a card
+// *reader* detail per that PRD's FR-10/Section 8, not a distinct tender type); no real
+// booking rows exist yet with the old values, so this is a clean redefinition, not a
+// breaking migration of live data.
 export const bookingPaymentMethodEnum = pgEnum("booking_payment_method", [
-  "cash",
   "zelle",
   "venmo",
-  "card",
-  "tap",
+  "cash",
+  "credit_card",
+]);
+
+// FR-8 / Section 6.2: Zelle/Venmo/Cash refunds are always a manual reversal record
+// (no processor API call for any of these three tender types in v1 — see
+// `POST /bookings/:id/refund` in `../../artifacts/api-server/src/routes/bookings.ts`).
+// `requested` is included for schema completeness / a future state (e.g. "customer
+// asked for a refund, not yet actioned") even though nothing in this pass ever sets it
+// — the only state transition built here is direct-to-`completed`.
+export const bookingRefundStatusEnum = pgEnum("booking_refund_status", [
+  "none",
+  "requested",
+  "completed",
 ]);
 
 export const bookingsTable = pgTable(
@@ -52,7 +73,23 @@ export const bookingsTable = pgTable(
     status: bookingStatusEnum("status").notNull(),
     notes: text("notes"),
     paymentMethod: bookingPaymentMethodEnum("payment_method"),
-    paymentNote: text("payment_note"),
+    // Free-text confirmation note for manual tender types (e.g. last 4 of a Zelle
+    // confirmation, "exact change") or the processor transaction id for a card charge
+    // once a processor exists (FR-6) — named to match
+    // `PRD_DetailHub_Payment_Methods.md` Section 7's `Booking.payment_reference`
+    // exactly (renamed from the earlier `paymentNote` column, see the enum comment
+    // above for why).
+    paymentReference: text("payment_reference"),
+    // Set when a payment is actually recorded via `POST /bookings/:id/payment`
+    // (FR-2) — null until then, distinct from `createdAt` (when the booking itself
+    // was scheduled, which can be well before payment is collected).
+    paymentRecordedAt: timestamp("payment_recorded_at"),
+    // FR-8: null until a refund is ever recorded against this booking (most bookings
+    // never have one) — `none` is a distinct, explicit "no refund" value for a
+    // booking that HAS had refund activity looked at, reserved for future use; nothing
+    // in this pass sets `none` today, only leaves this column null or sets `completed`.
+    refundStatus: bookingRefundStatusEnum("refund_status"),
+    refundReference: text("refund_reference"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
     // Who created this booking (always the authenticated admin/owner — v1 has no

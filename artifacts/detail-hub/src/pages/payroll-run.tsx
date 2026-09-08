@@ -1,16 +1,27 @@
 import { useState } from 'react';
-import { employees } from '@/lib/mock-data';
-import { calcPayrollSummary, payrollRuns, savePayrollRun, MOCK_DEDUCTION_RATE, type DurationType } from '@/lib/payroll-data';
-import { ArrowLeft, ChevronRight, CheckCircle, FileText, Play } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useListEmployees,
+  useGetPayrollSummary,
+  useCreatePayrollRun,
+  useUpdatePayrollRun,
+  useListPayrollRuns,
+  getListPayrollRunsQueryKey,
+  getGetPayrollSummaryQueryKey,
+  type PayrollRunResult,
+} from '@workspace/api-client-react';
+import { ArrowLeft, ChevronRight, CheckCircle, FileText, Loader2, AlertTriangle } from 'lucide-react';
 import { Link } from 'wouter';
 import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
 import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
-import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
+import { Label } from '@workspace/blue-glass-design-system/components/ui/label';
+import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
+import { format } from 'date-fns';
+import { PAYROLL_PERIODS, PAYROLL_PERIOD_LABELS, getPayrollPeriodDateRange, type PayrollPeriod } from '@/lib/payroll-period';
 
 type Step = 1 | 2 | 3;
-
-const today = new Date();
-const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+type RangeMode = PayrollPeriod | 'custom';
+type DurationType = 'weekly' | 'biweekly' | 'monthly' | 'custom';
 
 function DateInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
@@ -26,47 +37,98 @@ function DateInput({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
+function RunStatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+      status === 'paid' ? 'bg-green-100 text-green-700' :
+      status === 'draft' ? 'bg-muted text-muted-foreground' :
+      'bg-blue-100 text-blue-700'
+    }`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
 export default function PayrollRun() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>(1);
-  const [, rerender] = useState(0);
 
-  // Step 1 state
-  const [periodStart, setPeriodStart] = useState(fmtDate(startOfWeek(subDays(today, 7), { weekStartsOn: 1 })));
-  const [periodEnd, setPeriodEnd]     = useState(fmtDate(endOfWeek(subDays(today, 7), { weekStartsOn: 1 })));
+  const lastWeek = getPayrollPeriodDateRange('last_week');
+  const [rangeMode, setRangeMode] = useState<RangeMode>('last_week');
+  const [periodStart, setPeriodStart] = useState(lastWeek.start);
+  const [periodEnd, setPeriodEnd] = useState(lastWeek.end);
   const [durationType, setDurationType] = useState<DurationType>('weekly');
+  const [runByEmployeeId, setRunByEmployeeId] = useState<number | ''>('');
 
-  // Step 3 state
-  const [runResult, setRunResult] = useState<typeof payrollRuns[0] | null>(null);
-  const [runMode, setRunMode] = useState<'payroll' | 'report'>('payroll');
+  const [draftRun, setDraftRun] = useState<PayrollRunResult | null>(null);
 
-  const summaries = calcPayrollSummary(new Date(periodStart), new Date(periodEnd));
-  const totalGross = summaries.reduce((s, e) => s + e.gross_pay, 0);
-  const totalNet   = summaries.reduce((s, e) => s + e.net_pay, 0);
-  const hasActivity = summaries.some(s => s.gross_pay > 0);
+  const employeesQuery = useListEmployees();
+  const employees = employeesQuery.data ?? [];
 
-  const handleRunPayroll = () => {
-    const run = savePayrollRun({
-      period_start: periodStart,
-      period_end: periodEnd,
-      duration_type: durationType,
-      status: runMode === 'payroll' ? 'paid' : 'report',
-      total_paid: runMode === 'payroll' ? totalNet : 0,
-      created_at: new Date().toISOString(),
-      report_url: runMode === 'report' ? `https://reports.detailhub.app/${Date.now()}.pdf` : undefined,
-      employee_summaries: summaries.map(s => ({
-        employee_id: s.employee_id,
-        hourly_pay: s.hourly_pay,
-        commission_pay: s.commission_pay,
-        tips: s.tips,
-        gross_pay: s.gross_pay,
-        net_pay: s.net_pay,
-      })),
-    });
-    setRunResult(run);
-    setStep(3);
+  const invalidateRuns = () => queryClient.invalidateQueries({ queryKey: getListPayrollRunsQueryKey() });
+
+  const runsQuery = useListPayrollRuns();
+  const sortedRuns = [...(runsQuery.data ?? [])].sort((a, b) => b.id - a.id);
+
+  const summaryQuery = useGetPayrollSummary(
+    { periodStart, periodEnd },
+    { query: { queryKey: getGetPayrollSummaryQueryKey({ periodStart, periodEnd }), enabled: step === 2 } },
+  );
+  const summary = summaryQuery.data;
+  const hasActivity = (summary?.lines ?? []).some(l => l.gross_pay > 0);
+
+  const createRunMutation = useCreatePayrollRun({
+    mutation: {
+      onSuccess: async (run) => {
+        await invalidateRuns();
+        setDraftRun(run);
+        setStep(3);
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong creating this payroll run. Please try again.';
+        toast({ title: 'Create run failed', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  const markPaidMutation = useUpdatePayrollRun({
+    mutation: {
+      onSuccess: async (run) => {
+        await invalidateRuns();
+        setDraftRun(run);
+        toast({ title: 'Payroll run marked as paid' });
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong marking this run as paid.';
+        toast({ title: 'Mark paid failed', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  const applyRangeMode = (mode: RangeMode) => {
+    setRangeMode(mode);
+    if (mode === 'custom') return;
+    const { start, end } = getPayrollPeriodDateRange(mode);
+    setPeriodStart(start);
+    setPeriodEnd(end);
+    setDurationType(mode === 'this_month' ? 'monthly' : 'weekly');
   };
 
-  const sortedRuns = [...payrollRuns].sort((a, b) => b.id - a.id);
+  const handleCreateRun = () => {
+    if (runByEmployeeId === '') return;
+    createRunMutation.mutate({
+      data: { periodStart, periodEnd, durationType, runByEmployeeId },
+    });
+  };
+
+  const handleRunAnother = () => {
+    setStep(1);
+    setDraftRun(null);
+  };
+
+  const employeeName = (id: number) => employees.find(e => e.id === id)?.name ?? `Employee #${id}`;
+  const employeeColor = (id: number) => employees.find(e => e.id === id)?.color ?? '#999';
 
   return (
     <div className="min-h-[100dvh] pb-24 md:pb-8">
@@ -97,17 +159,34 @@ export default function PayrollRun() {
           <div className="space-y-5">
             <Card className="p-5 space-y-4">
               <div>
+                <p className="text-[12px] text-muted-foreground uppercase tracking-wide mb-2">Period</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {[...PAYROLL_PERIODS, 'custom' as const].map(p => (
+                    <button
+                      key={p}
+                      onClick={() => applyRangeMode(p)}
+                      className={`py-2 rounded-xl text-[12px] font-medium transition-colors ${
+                        rangeMode === p ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {p === 'custom' ? 'Custom' : PAYROLL_PERIOD_LABELS[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <DateInput label="Payroll Period Start" value={periodStart} onChange={v => { setPeriodStart(v); setRangeMode('custom'); }} />
+                <DateInput label="Payroll Period End"   value={periodEnd}   onChange={v => { setPeriodEnd(v); setRangeMode('custom'); }} />
+              </div>
+
+              <div>
                 <p className="text-[12px] text-muted-foreground uppercase tracking-wide mb-2">Payroll Duration</p>
                 <div className="grid grid-cols-4 gap-2">
                   {(['weekly', 'biweekly', 'monthly', 'custom'] as DurationType[]).map(d => (
                     <button
                       key={d}
-                      onClick={() => {
-                        setDurationType(d);
-                        if (d === 'weekly') { setPeriodStart(fmtDate(startOfWeek(subDays(today, 7), { weekStartsOn: 1 }))); setPeriodEnd(fmtDate(endOfWeek(subDays(today, 7), { weekStartsOn: 1 }))); }
-                        if (d === 'biweekly') { setPeriodStart(fmtDate(subDays(today, 14))); setPeriodEnd(fmtDate(subDays(today, 1))); }
-                        if (d === 'monthly') { setPeriodStart(fmtDate(new Date(today.getFullYear(), today.getMonth() - 1, 1))); setPeriodEnd(fmtDate(new Date(today.getFullYear(), today.getMonth(), 0))); }
-                      }}
+                      onClick={() => setDurationType(d)}
                       className={`py-2 rounded-xl text-[12px] font-medium capitalize transition-colors ${
                         durationType === d ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'
                       }`}
@@ -118,45 +197,34 @@ export default function PayrollRun() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <DateInput label="Payroll Period Start" value={periodStart} onChange={setPeriodStart} />
-                <DateInput label="Payroll Period End"   value={periodEnd}   onChange={setPeriodEnd}   />
+              <div>
+                <Label htmlFor="run-by">Run By</Label>
+                <select
+                  id="run-by"
+                  className="w-full text-[14px] bg-background border border-border rounded-xl px-3 py-2 focus:outline-none mt-1"
+                  value={runByEmployeeId}
+                  onChange={e => setRunByEmployeeId(e.target.value ? parseInt(e.target.value) : '')}
+                >
+                  <option value="">Select who's running this…</option>
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Required — attributes this run to a team member record (there's no separate admin-login mapping yet).
+                </p>
+                {employees.length === 0 && !employeesQuery.isLoading && (
+                  <p className="text-[12px] text-destructive mt-1">
+                    No team members yet — <Link href="/more/payroll/team" className="underline">add one first</Link>.
+                  </p>
+                )}
               </div>
             </Card>
 
-            {/* Action type */}
-            <Card className="p-5">
-              <p className="text-[12px] text-muted-foreground uppercase tracking-wide mb-3">Action</p>
-              <div className="space-y-2">
-                {([['payroll', 'Run Payroll', 'Mark employees as paid for this period', Play],
-                   ['report',  'Run Report',  'Generate a report without marking as paid', FileText]] as const).map(([val, label, sub, Icon]) => (
-                  <button
-                    key={val}
-                    onClick={() => setRunMode(val)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-colors text-left ${
-                      runMode === val ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                      runMode === val ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
-                    }`}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-semibold">{label}</p>
-                      <p className="text-[12px] text-muted-foreground">{sub}</p>
-                    </div>
-                    <div className={`ml-auto w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                      runMode === val ? 'border-primary' : 'border-muted-foreground/40'
-                    }`}>
-                      {runMode === val && <div className="w-2 h-2 rounded-full bg-primary" />}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </Card>
-
-            <Button className="w-full gradient-btn" size="lg" onClick={() => setStep(2)}>
+            <Button
+              className="w-full gradient-btn"
+              size="lg"
+              onClick={() => setStep(2)}
+              disabled={runByEmployeeId === '' || periodStart > periodEnd}
+            >
               Review Draft <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -165,125 +233,146 @@ export default function PayrollRun() {
         {/* ── STEP 2: Draft review ── */}
         {step === 2 && (
           <div className="space-y-4">
-            <Card className="overflow-hidden">
-              <div className="px-4 py-3 border-b border-border/50 bg-muted/20">
-                <p className="text-[13px] font-semibold">
-                  {format(new Date(periodStart), 'MMM d')} – {format(new Date(periodEnd), 'MMM d, yyyy')}
-                  <span className="ml-2 text-muted-foreground font-normal capitalize">{durationType}</span>
-                </p>
+            {summaryQuery.isError ? (
+              <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
+                <AlertTriangle className="w-8 h-8 text-destructive" />
+                <p className="text-[15px] font-semibold">Couldn't load this period's summary</p>
               </div>
-
-              {/* Column headers */}
-              <div className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-2 border-b border-border/30 bg-muted/10">
-                {['Employee', 'Hourly', 'Commission', 'Gross', 'Net'].map(h => (
-                  <p key={h} className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</p>
-                ))}
+            ) : summaryQuery.isLoading || !summary ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
               </div>
+            ) : (
+              <>
+                <Card className="overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border/50 bg-muted/20">
+                    <p className="text-[13px] font-semibold">
+                      {format(new Date(periodStart), 'MMM d')} – {format(new Date(periodEnd), 'MMM d, yyyy')}
+                      <span className="ml-2 text-muted-foreground font-normal capitalize">{durationType}</span>
+                    </p>
+                  </div>
 
-              <div className="divide-y divide-border/40">
-                {summaries.map(s => {
-                  const e = employees.find(emp => emp.id === s.employee_id);
-                  return (
-                    <div key={s.employee_id} className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                        <p className="text-[13px] font-medium truncate">{e?.name}</p>
+                  <div className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-2 border-b border-border/30 bg-muted/10">
+                    {['Employee', 'Hourly', 'Commission', 'Gross', 'Net'].map(h => (
+                      <p key={h} className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</p>
+                    ))}
+                  </div>
+
+                  <div className="divide-y divide-border/40">
+                    {summary.lines.map(line => (
+                      <div key={line.employee_id} className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: employeeColor(line.employee_id) }} />
+                          <p className="text-[13px] font-medium truncate">{employeeName(line.employee_id)}</p>
+                        </div>
+                        <p className={`text-[13px] tabular-nums ${line.hourly_pay === 0 ? 'text-muted-foreground' : ''}`}>
+                          {line.hourly_pay > 0 ? `$${line.hourly_pay.toFixed(0)}` : '—'}
+                        </p>
+                        <p className={`text-[13px] tabular-nums ${line.commission_pay === 0 ? 'text-muted-foreground' : ''}`}>
+                          {line.commission_pay > 0 ? `$${line.commission_pay.toFixed(0)}` : '—'}
+                        </p>
+                        <p className="text-[13px] font-medium tabular-nums">${line.gross_pay.toFixed(0)}</p>
+                        <p className="text-[13px] font-semibold tabular-nums text-primary">${line.net_pay.toFixed(0)}</p>
                       </div>
-                      <p className={`text-[13px] tabular-nums ${s.hourly_pay === 0 ? 'text-muted-foreground' : ''}`}>
-                        {s.hourly_pay > 0 ? `$${s.hourly_pay.toFixed(0)}` : '—'}
-                      </p>
-                      <p className={`text-[13px] tabular-nums ${s.commission_pay === 0 ? 'text-muted-foreground' : ''}`}>
-                        {s.commission_pay > 0 ? `$${s.commission_pay.toFixed(0)}` : '—'}
-                      </p>
-                      <p className="text-[13px] font-medium tabular-nums">${s.gross_pay.toFixed(0)}</p>
-                      <p className="text-[13px] font-semibold tabular-nums text-primary">${s.net_pay.toFixed(0)}</p>
-                    </div>
-                  );
-                })}
-              </div>
+                    ))}
+                  </div>
 
-              {/* Totals row */}
-              <div className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-3 border-t border-border/60 bg-muted/20">
-                <p className="text-[13px] font-semibold">Total</p>
-                <p className="text-[13px]" />
-                <p className="text-[13px]" />
-                <p className="text-[13px] font-semibold tabular-nums">${totalGross.toFixed(0)}</p>
-                <p className="text-[13px] font-semibold tabular-nums text-primary">${totalNet.toFixed(0)}</p>
-              </div>
-            </Card>
+                  <div className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-3 border-t border-border/60 bg-muted/20">
+                    <p className="text-[13px] font-semibold">Total</p>
+                    <p className="text-[13px]" />
+                    <p className="text-[13px]" />
+                    <p className="text-[13px] font-semibold tabular-nums">${summary.grossTotal.toFixed(0)}</p>
+                    <p className="text-[13px] font-semibold tabular-nums text-primary">${summary.netTotal.toFixed(0)}</p>
+                  </div>
+                </Card>
 
-            <Card className="p-3 bg-amber-50 border-amber-200">
-              <p className="text-[12px] text-amber-700">
-                ⚠️ Net pay uses a flat {Math.round(MOCK_DEDUCTION_RATE * 100)}% illustrative deduction. This is not real tax withholding logic.
-              </p>
-            </Card>
+                <Card className="p-3 bg-amber-50 border-amber-200">
+                  <p className="text-[12px] text-amber-700">
+                    Net pay is an estimated withholding calculation, not real tax withholding or filing — confirm with a real
+                    payroll/tax provider before relying on these numbers for compliance.
+                  </p>
+                </Card>
 
-            {!hasActivity && (
-              <Card className="p-3 bg-muted/50">
-                <p className="text-[13px] text-muted-foreground text-center">No activity found in this period. Adjust the dates and try again.</p>
-              </Card>
+                {!hasActivity && (
+                  <Card className="p-3 bg-muted/50">
+                    <p className="text-[13px] text-muted-foreground text-center">No activity found in this period. Adjust the dates and try again.</p>
+                  </Card>
+                )}
+
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>Back</Button>
+                  <Button
+                    className="flex-1 gradient-btn"
+                    size="lg"
+                    disabled={!hasActivity || createRunMutation.isPending}
+                    onClick={handleCreateRun}
+                  >
+                    {createRunMutation.isPending ? 'Creating…' : 'Create Payroll Run'}
+                  </Button>
+                </div>
+              </>
             )}
-
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>Back</Button>
-              <Button
-                className="flex-1 gradient-btn"
-                size="lg"
-                disabled={!hasActivity}
-                onClick={handleRunPayroll}
-              >
-                {runMode === 'payroll' ? 'Run Payroll' : 'Run Report'}
-              </Button>
-            </div>
           </div>
         )}
 
-        {/* ── STEP 3: Confirmation ── */}
-        {step === 3 && runResult && (
+        {/* ── STEP 3: Draft created / paid confirmation ── */}
+        {step === 3 && draftRun && (
           <div className="space-y-4">
             <Card className="p-6 text-center">
-              <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-                {runResult.status === 'paid'
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                draftRun.status === 'paid' ? 'bg-green-100' : 'bg-blue-100'
+              }`}>
+                {draftRun.status === 'paid'
                   ? <CheckCircle className="w-8 h-8 text-green-500" />
                   : <FileText className="w-8 h-8 text-blue-500" />
                 }
               </div>
               <h2 className="text-[20px] font-semibold mb-1">
-                {runResult.status === 'paid' ? 'Payroll Complete' : 'Report Generated'}
+                {draftRun.status === 'paid' ? 'Marked as Paid' : 'Payroll Run Created'}
               </h2>
               <p className="text-[14px] text-muted-foreground mb-4">
-                {format(new Date(runResult.period_start), 'MMM d')} – {format(new Date(runResult.period_end), 'MMM d, yyyy')}
+                {format(new Date(draftRun.periodStart), 'MMM d')} – {format(new Date(draftRun.periodEnd), 'MMM d, yyyy')}
               </p>
-              {runResult.status === 'paid' && (
-                <p className="text-3xl font-bold tabular-nums text-primary">${runResult.total_paid.toFixed(2)}</p>
-              )}
-              {runResult.report_url && (
-                <p className="text-[12px] text-muted-foreground mt-2 break-all">{runResult.report_url}</p>
+              <p className="text-3xl font-bold tabular-nums text-primary">
+                ${draftRun.lineItems.reduce((s, l) => s + l.net_pay, 0).toFixed(2)}
+              </p>
+              {draftRun.status === 'paid' && (
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Bookkeeping status update only — no funds were actually transferred (no payment processor is connected).
+                </p>
               )}
             </Card>
 
-            {runResult.status === 'paid' && (
-              <div className="space-y-2">
-                {runResult.employee_summaries.filter(s => s.net_pay > 0).map(s => {
-                  const e = employees.find(emp => emp.id === s.employee_id);
-                  return (
-                    <Card key={s.employee_id} className="px-4 py-3 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-                        style={{ backgroundColor: e?.color }}>
-                        {e?.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-[14px] font-semibold">{e?.name}</p>
-                        <p className="text-[12px] text-muted-foreground">You Got Paid 🎉</p>
-                      </div>
-                      <p className="text-[16px] font-bold tabular-nums text-primary">${s.net_pay.toFixed(2)}</p>
-                    </Card>
-                  );
-                })}
-              </div>
+            <div className="space-y-2">
+              {draftRun.lineItems.filter(l => l.net_pay > 0).map(l => (
+                <Card key={l.employee_id} className="px-4 py-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
+                    style={{ backgroundColor: employeeColor(l.employee_id) }}>
+                    {employeeName(l.employee_id).split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold">{employeeName(l.employee_id)}</p>
+                    <p className="text-[12px] text-muted-foreground">
+                      {draftRun.status === 'paid' ? 'Marked as paid' : 'Pending — still a draft'}
+                    </p>
+                  </div>
+                  <p className="text-[16px] font-bold tabular-nums text-primary">${l.net_pay.toFixed(2)}</p>
+                </Card>
+              ))}
+            </div>
+
+            {draftRun.status === 'draft' && (
+              <Button
+                className="w-full gradient-btn"
+                size="lg"
+                onClick={() => markPaidMutation.mutate({ id: draftRun.id, data: { status: 'paid' } })}
+                disabled={markPaidMutation.isPending}
+              >
+                {markPaidMutation.isPending ? 'Marking as Paid…' : 'Mark as Paid'}
+              </Button>
             )}
 
-            <Button className="w-full gradient-btn" size="lg" onClick={() => { setStep(1); setRunResult(null); rerender(n => n + 1); }}>
+            <Button className="w-full" variant="outline" size="lg" onClick={handleRunAnother}>
               Run Another Period
             </Button>
           </div>
@@ -294,33 +383,45 @@ export default function PayrollRun() {
           <div className="mt-8">
             <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">Run History</p>
             <Card className="overflow-hidden">
-              {sortedRuns.length === 0 && (
+              {runsQuery.isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+                </div>
+              ) : sortedRuns.length === 0 ? (
                 <div className="p-6 text-center text-[14px] text-muted-foreground">No runs yet</div>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {sortedRuns.map(run => {
+                    const totalNetForRun = run.lineItems.reduce((s, l) => s + l.net_pay, 0);
+                    return (
+                      <div key={run.id} className="px-4 py-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-[14px] font-medium">
+                            {format(new Date(run.periodStart), 'MMM d')} – {format(new Date(run.periodEnd), 'MMM d, yyyy')}
+                          </p>
+                          <p className="text-[12px] text-muted-foreground capitalize">{run.durationType}</p>
+                        </div>
+                        <div className="text-right flex items-center gap-2">
+                          <div>
+                            <p className="text-[14px] font-semibold tabular-nums">${totalNetForRun.toFixed(2)}</p>
+                            <RunStatusBadge status={run.status} />
+                          </div>
+                          {run.status === 'draft' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => markPaidMutation.mutate({ id: run.id, data: { status: 'paid' } })}
+                              disabled={markPaidMutation.isPending}
+                            >
+                              Mark Paid
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-              <div className="divide-y divide-border/50">
-                {sortedRuns.map(run => (
-                  <div key={run.id} className="px-4 py-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-[14px] font-medium">
-                        {format(new Date(run.period_start), 'MMM d')} – {format(new Date(run.period_end), 'MMM d, yyyy')}
-                      </p>
-                      <p className="text-[12px] text-muted-foreground capitalize">{run.duration_type}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[14px] font-semibold tabular-nums">
-                        {run.status === 'paid' ? `$${run.total_paid.toFixed(2)}` : 'Report'}
-                      </p>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                        run.status === 'paid'   ? 'bg-green-100 text-green-700' :
-                        run.status === 'report' ? 'bg-blue-100 text-blue-700' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        {run.status.charAt(0).toUpperCase() + run.status.slice(1)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </Card>
           </div>
         )}

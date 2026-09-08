@@ -11,7 +11,7 @@
  * need adapters: their fields are a structural superset of `Package`/`Client`/
  * `Employee` (same names/types, plus extras like `archived`/`createdAt`), so
  * TypeScript accepts them directly wherever the mock type is expected. `BookingResult`
- * is the one exception — `notes`/`paymentMethod`/`paymentNote` are `| null` on the
+ * is the one exception — `notes`/`paymentMethod`/`paymentReference` are `| null` on the
  * wire vs. `| undefined` on the mock type, and `date` needs normalizing (see
  * `isoDateOnly` below).
  *
@@ -57,7 +57,7 @@ export function adaptBooking(b: BookingResult): Booking {
     notes: b.notes ?? undefined,
     employeeSplit: b.employeeSplit,
     paymentMethod: b.paymentMethod ?? undefined,
-    paymentNote: b.paymentNote ?? undefined,
+    paymentReference: b.paymentReference ?? undefined,
   };
 }
 

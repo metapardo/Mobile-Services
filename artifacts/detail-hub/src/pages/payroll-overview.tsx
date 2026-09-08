@@ -1,33 +1,36 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subWeeks, addDays } from 'date-fns';
-import { Users, Clock, CalendarOff, DollarSign, ChevronRight, Play } from 'lucide-react';
+import { format } from 'date-fns';
+import { Users, Clock, CalendarOff, ChevronRight, Play, Loader2, AlertTriangle, Wallet } from 'lucide-react';
 import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
-import { calcPayrollSummary, payrollRuns, pendingTimeOffCount } from '@/lib/payroll-data';
-
-type Period = 'current-week' | 'last-week' | 'month';
-
-function getPeriodRange(period: Period) {
-  const now = new Date();
-  if (period === 'current-week') return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
-  if (period === 'last-week') { const lw = subWeeks(now, 1); return { start: startOfWeek(lw, { weekStartsOn: 1 }), end: endOfWeek(lw, { weekStartsOn: 1 }) }; }
-  return { start: startOfMonth(now), end: endOfMonth(now) };
-}
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from '@workspace/blue-glass-design-system/components/ui/empty';
+import { useGetPayrollSummary, useListEmployees, useListPayrollRuns } from '@workspace/api-client-react';
+import { PAYROLL_PERIODS, PAYROLL_PERIOD_LABELS, formatPayrollPeriodLabel, type PayrollPeriod } from '@/lib/payroll-period';
 
 export default function PayrollOverview() {
-  const [period, setPeriod] = useState<Period>('current-week');
-  const { start, end } = getPeriodRange(period);
-  const [, rerender] = useState(0);
-  const pendingCount = pendingTimeOffCount();
+  const [period, setPeriod] = useState<PayrollPeriod>('this_week');
 
-  const summaries = calcPayrollSummary(start, end);
-  const totalGross = summaries.reduce((s, e) => s + e.gross_pay, 0);
-  const totalNet   = summaries.reduce((s, e) => s + e.net_pay, 0);
+  const summaryQuery = useGetPayrollSummary({ period });
+  const employeesQuery = useListEmployees({ includeInactive: true });
+  const runsQuery = useListPayrollRuns({ limit: 3 });
 
-  const periodLabel =
-    period === 'current-week' ? `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}` :
-    period === 'last-week'    ? `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}` :
-    format(start, 'MMMM yyyy');
+  const employees = employeesQuery.data ?? [];
+  const lines = summaryQuery.data?.lines ?? [];
+  const totalGross = summaryQuery.data?.grossTotal ?? 0;
+  const totalNet = summaryQuery.data?.netTotal ?? 0;
+  const pendingCount = summaryQuery.data?.pendingTimeOffCount ?? 0;
+  const recentRuns = runsQuery.data ?? [];
+
+  const employeeById = (id: number) => employees.find(e => e.id === id);
+
+  const isLoading = summaryQuery.isLoading || employeesQuery.isLoading || runsQuery.isLoading;
+  const isError = summaryQuery.isError || employeesQuery.isError || runsQuery.isError;
 
   const hubs = [
     { label: 'Team & Pay',    sub: 'Roles and pay rates',       icon: Users,       href: '/more/payroll/team'          },
@@ -36,134 +39,171 @@ export default function PayrollOverview() {
     { label: 'Run Payroll',   sub: 'Pay your team',             icon: Play,        href: '/more/payroll/run'           },
   ];
 
-  const recentRuns = [...payrollRuns].sort((a, b) => b.id - a.id).slice(0, 3);
-
   return (
     <div className="min-h-[100dvh] pb-24 md:pb-8">
       <div className="max-w-2xl mx-auto px-4 pt-6">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-semibold">Team Payroll</h1>
-          <p className="text-[14px] text-muted-foreground mt-0.5">{periodLabel}</p>
+          <p className="text-[14px] text-muted-foreground mt-0.5">{formatPayrollPeriodLabel(period)}</p>
         </div>
 
         {/* Period tabs */}
         <div className="flex gap-2 mb-6">
-          {(['current-week', 'last-week', 'month'] as Period[]).map(p => (
+          {PAYROLL_PERIODS.map(p => (
             <button
               key={p}
-              onClick={() => { setPeriod(p); rerender(n => n + 1); }}
+              onClick={() => setPeriod(p)}
               className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
                 period === p ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'
               }`}
+              data-testid={`period-${p}`}
             >
-              {p === 'current-week' ? 'This Week' : p === 'last-week' ? 'Last Week' : 'This Month'}
+              {PAYROLL_PERIOD_LABELS[p]}
             </button>
           ))}
         </div>
 
-        {/* Totals */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <Card className="p-4">
-            <p className="text-[12px] text-muted-foreground mb-1 uppercase tracking-wide">Gross Payroll</p>
-            <p className="text-2xl font-semibold tabular-nums">${totalGross.toFixed(2)}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-[12px] text-muted-foreground mb-1 uppercase tracking-wide">Net Payroll</p>
-            <p className="text-2xl font-semibold tabular-nums">${totalNet.toFixed(2)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">After 20% illustrative deduction</p>
-          </Card>
-        </div>
-
-        {/* Per-employee summary */}
-        <Card className="mb-6 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border/50">
-            <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">Employee Summary</p>
+        {isError ? (
+          <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center" data-testid="status-payroll-error">
+            <AlertTriangle className="w-8 h-8 text-destructive" />
+            <p className="text-[15px] font-semibold">Couldn't load payroll</p>
+            <p className="text-[13px] text-muted-foreground max-w-[280px]">Check your connection and try again.</p>
           </div>
-          <div className="divide-y divide-border/50">
-            {summaries.map(s => (
-              <div key={s.employee_id} className="px-4 py-3 flex items-center gap-3">
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-medium truncate">{s.name}</p>
-                </div>
-                <div className="text-right shrink-0 space-y-0.5">
-                  {s.hourly_pay > 0 && (
-                    <p className="text-[12px] text-muted-foreground tabular-nums">
-                      Hourly ${s.hourly_pay.toFixed(2)}
-                    </p>
-                  )}
-                  {s.commission_pay > 0 && (
-                    <p className="text-[12px] text-muted-foreground tabular-nums">
-                      Commission ${s.commission_pay.toFixed(2)}
-                    </p>
-                  )}
-                  <p className="text-[14px] font-semibold tabular-nums">${s.gross_pay.toFixed(2)}</p>
-                </div>
-              </div>
-            ))}
+        ) : isLoading ? (
+          <div className="flex items-center justify-center py-16" data-testid="status-payroll-loading">
+            <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
           </div>
-        </Card>
-
-        {/* Hub entry cards */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          {hubs.map(h => {
-            const Icon = h.icon;
-            return (
-              <Link key={h.href} href={h.href}>
-                <Card className="p-4 hover:brightness-95 transition-all cursor-pointer">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <Icon className="w-4.5 h-4.5 text-primary" style={{ width: 18, height: 18 }} />
-                    </div>
-                    {h.badge && h.badge > 0 ? (
-                      <span className="text-[11px] font-semibold bg-primary text-white rounded-full w-5 h-5 flex items-center justify-center">
-                        {h.badge}
-                      </span>
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    )}
-                  </div>
-                  <p className="text-[14px] font-semibold">{h.label}</p>
-                  <p className="text-[12px] text-muted-foreground mt-0.5">{h.sub}</p>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Run history */}
-        {recentRuns.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">Recent Runs</p>
-              <Link href="/more/payroll/run" className="text-[13px] text-primary">View all</Link>
+        ) : (
+          <>
+            {/* Totals */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <Card className="p-4">
+                <p className="text-[12px] text-muted-foreground mb-1 uppercase tracking-wide">Gross Payroll</p>
+                <p className="text-2xl font-semibold tabular-nums">${totalGross.toFixed(2)}</p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-[12px] text-muted-foreground mb-1 uppercase tracking-wide">Est. Net Payroll</p>
+                <p className="text-2xl font-semibold tabular-nums">${totalNet.toFixed(2)}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Estimated withholding — not a substitute for real payroll tax filing
+                </p>
+              </Card>
             </div>
-            <Card className="overflow-hidden">
-              <div className="divide-y divide-border/50">
-                {recentRuns.map(run => (
-                  <div key={run.id} className="px-4 py-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-[14px] font-medium">
-                        {format(new Date(run.period_start), 'MMM d')} – {format(new Date(run.period_end), 'MMM d, yyyy')}
-                      </p>
-                      <p className="text-[12px] text-muted-foreground capitalize">{run.duration_type}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[14px] font-semibold tabular-nums">${run.total_paid.toFixed(2)}</p>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                        run.status === 'paid' ? 'bg-green-100 text-green-700' :
-                        run.status === 'report' ? 'bg-blue-100 text-blue-700' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        {run.status === 'paid' ? 'Paid' : run.status === 'report' ? 'Report' : 'Draft'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+
+            {/* Per-employee summary */}
+            <Card className="mb-6 overflow-hidden">
+              <div className="px-4 py-3 border-b border-border/50">
+                <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">Employee Summary</p>
               </div>
+              {lines.length === 0 ? (
+                <Empty data-testid="empty-state-employee-summary">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <Wallet />
+                    </EmptyMedia>
+                    <EmptyTitle>No pay activity yet</EmptyTitle>
+                    <EmptyDescription>
+                      Add team members and pay rates, then log hours or complete bookings to see payroll here.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {lines.map(line => {
+                    const emp = employeeById(line.employee_id);
+                    return (
+                      <div key={line.employee_id} className="px-4 py-3 flex items-center gap-3">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: emp?.color ?? '#999' }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-medium truncate">{emp?.name ?? `Employee #${line.employee_id}`}</p>
+                        </div>
+                        <div className="text-right shrink-0 space-y-0.5">
+                          {line.hourly_pay > 0 && (
+                            <p className="text-[12px] text-muted-foreground tabular-nums">
+                              Hourly ${line.hourly_pay.toFixed(2)}
+                            </p>
+                          )}
+                          {line.commission_pay > 0 && (
+                            <p className="text-[12px] text-muted-foreground tabular-nums">
+                              Commission ${line.commission_pay.toFixed(2)}
+                            </p>
+                          )}
+                          <p className="text-[14px] font-semibold tabular-nums">${line.gross_pay.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </Card>
-          </div>
+
+            {/* Hub entry cards */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              {hubs.map(h => {
+                const Icon = h.icon;
+                return (
+                  <Link key={h.href} href={h.href}>
+                    <Card className="p-4 hover:brightness-95 transition-all cursor-pointer">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                          <Icon className="w-4.5 h-4.5 text-primary" style={{ width: 18, height: 18 }} />
+                        </div>
+                        {h.badge && h.badge > 0 ? (
+                          <span className="text-[11px] font-semibold bg-primary text-white rounded-full w-5 h-5 flex items-center justify-center">
+                            {h.badge}
+                          </span>
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <p className="text-[14px] font-semibold">{h.label}</p>
+                      <p className="text-[12px] text-muted-foreground mt-0.5">{h.sub}</p>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Run history */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">Recent Runs</p>
+                <Link href="/more/payroll/run" className="text-[13px] text-primary">View all</Link>
+              </div>
+              <Card className="overflow-hidden">
+                {recentRuns.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-[14px] text-muted-foreground">No payroll runs yet</div>
+                ) : (
+                  <div className="divide-y divide-border/50">
+                    {recentRuns.map(run => {
+                      const totalNetForRun = run.lineItems.reduce((s, l) => s + l.net_pay, 0);
+                      return (
+                        <div key={run.id} className="px-4 py-3 flex items-center justify-between">
+                          <div>
+                            <p className="text-[14px] font-medium">
+                              {format(new Date(run.periodStart), 'MMM d')} – {format(new Date(run.periodEnd), 'MMM d, yyyy')}
+                            </p>
+                            <p className="text-[12px] text-muted-foreground capitalize">{run.durationType}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[14px] font-semibold tabular-nums">${totalNetForRun.toFixed(2)}</p>
+                            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                              run.status === 'paid' ? 'bg-green-100 text-green-700' :
+                              run.status === 'draft' ? 'bg-muted text-muted-foreground' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              {run.status.charAt(0).toUpperCase() + run.status.slice(1)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            </div>
+          </>
         )}
       </div>
     </div>

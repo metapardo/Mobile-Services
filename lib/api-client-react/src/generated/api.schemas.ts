@@ -267,7 +267,33 @@ export interface UpdatePackageRequest {
 }
 
 /**
- * Minimal employee record — `id`/`name`/`color` match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Employee` interface exactly; `active`/`email`/`phone`/`createdAt`/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.
+ * `docs/prds/PRD_DetailHub_Payroll_Module.md` Section 2.1/7: only the bank name and last 4 of the account are ever stored — never a real account/routing number (that requires a hosted, PCI/NACHA-compliant bank-linking flow from a real payroll processor, not built here — see that PRD's Section 7).
+ */
+export interface BankAccount {
+  id: string;
+  bank_name: string;
+  account_last4: string;
+  is_default: boolean;
+}
+
+export type EmployeeResultWorkerType = typeof EmployeeResultWorkerType[keyof typeof EmployeeResultWorkerType];
+
+
+export const EmployeeResultWorkerType = {
+  w2_employee: 'w2_employee',
+  '1099_contractor': '1099_contractor',
+} as const;
+
+export type EmployeeResultPaymentMethod = typeof EmployeeResultPaymentMethod[keyof typeof EmployeeResultPaymentMethod];
+
+
+export const EmployeeResultPaymentMethod = {
+  direct_deposit: 'direct_deposit',
+  check: 'check',
+} as const;
+
+/**
+ * `id`/`name`/`color` match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Employee` interface exactly; the rest are formalized additions, including the full Payroll Module pay profile (`workerType`/`paymentMethod`/`bankAccounts`, `docs/prds/PRD_DetailHub_Payroll_Module.md` Section 2.1) — previously excluded from this API on purpose while only the minimal booking-assignment surface existed, now exposed for the Payroll routes.
  */
 export interface EmployeeResult {
   id: number;
@@ -276,9 +302,28 @@ export interface EmployeeResult {
   email?: string | null;
   phone?: string | null;
   active: boolean;
+  workerType: EmployeeResultWorkerType;
+  paymentMethod: EmployeeResultPaymentMethod;
+  bankAccounts: BankAccount[];
   createdAt: string;
   updatedAt: string;
 }
+
+export type CreateEmployeeRequestWorkerType = typeof CreateEmployeeRequestWorkerType[keyof typeof CreateEmployeeRequestWorkerType];
+
+
+export const CreateEmployeeRequestWorkerType = {
+  w2_employee: 'w2_employee',
+  '1099_contractor': '1099_contractor',
+} as const;
+
+export type CreateEmployeeRequestPaymentMethod = typeof CreateEmployeeRequestPaymentMethod[keyof typeof CreateEmployeeRequestPaymentMethod];
+
+
+export const CreateEmployeeRequestPaymentMethod = {
+  direct_deposit: 'direct_deposit',
+  check: 'check',
+} as const;
 
 export interface CreateEmployeeRequest {
   /** @minLength 1 */
@@ -288,7 +333,26 @@ export interface CreateEmployeeRequest {
   email?: string | null;
   phone?: string | null;
   active?: boolean;
+  workerType?: CreateEmployeeRequestWorkerType;
+  paymentMethod?: CreateEmployeeRequestPaymentMethod;
+  bankAccounts?: BankAccount[];
 }
+
+export type UpdateEmployeeRequestWorkerType = typeof UpdateEmployeeRequestWorkerType[keyof typeof UpdateEmployeeRequestWorkerType];
+
+
+export const UpdateEmployeeRequestWorkerType = {
+  w2_employee: 'w2_employee',
+  '1099_contractor': '1099_contractor',
+} as const;
+
+export type UpdateEmployeeRequestPaymentMethod = typeof UpdateEmployeeRequestPaymentMethod[keyof typeof UpdateEmployeeRequestPaymentMethod];
+
+
+export const UpdateEmployeeRequestPaymentMethod = {
+  direct_deposit: 'direct_deposit',
+  check: 'check',
+} as const;
 
 /**
  * Partial update — all fields optional.
@@ -301,6 +365,9 @@ export interface UpdateEmployeeRequest {
   email?: string | null;
   phone?: string | null;
   active?: boolean;
+  workerType?: UpdateEmployeeRequestWorkerType;
+  paymentMethod?: UpdateEmployeeRequestPaymentMethod;
+  bankAccounts?: BankAccount[];
 }
 
 /**
@@ -313,6 +380,267 @@ export interface EmployeeSplit {
      * @maximum 100
      */
   percentage: number;
+}
+
+export type EmployeeRoleResultPayType = typeof EmployeeRoleResultPayType[keyof typeof EmployeeRoleResultPayType];
+
+
+export const EmployeeRoleResultPayType = {
+  hourly: 'hourly',
+  commission: 'commission',
+} as const;
+
+/**
+ * `docs/prds/PRD_DetailHub_Payroll_Module.md` Section 2.2. `hourlyRate` is non-null iff `payType` is `hourly`; `commissionRate` is non-null iff `payType` is `commission`.
+ */
+export interface EmployeeRoleResult {
+  id: number;
+  employeeId: number;
+  roleName: string;
+  payType: EmployeeRoleResultPayType;
+  hourlyRate: number | null;
+  commissionRate: number | null;
+}
+
+export type CreateEmployeeRoleRequestPayType = typeof CreateEmployeeRoleRequestPayType[keyof typeof CreateEmployeeRoleRequestPayType];
+
+
+export const CreateEmployeeRoleRequestPayType = {
+  hourly: 'hourly',
+  commission: 'commission',
+} as const;
+
+export interface CreateEmployeeRoleRequest {
+  /** @minLength 1 */
+  roleName: string;
+  payType: CreateEmployeeRoleRequestPayType;
+  /** @minimum 0 */
+  hourlyRate?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  commissionRate?: number | null;
+}
+
+export type UpdateEmployeeRoleRequestPayType = typeof UpdateEmployeeRoleRequestPayType[keyof typeof UpdateEmployeeRoleRequestPayType];
+
+
+export const UpdateEmployeeRoleRequestPayType = {
+  hourly: 'hourly',
+  commission: 'commission',
+} as const;
+
+/**
+ * Partial update — all fields optional.
+ */
+export interface UpdateEmployeeRoleRequest {
+  /** @minLength 1 */
+  roleName?: string;
+  payType?: UpdateEmployeeRoleRequestPayType;
+  /** @minimum 0 */
+  hourlyRate?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  commissionRate?: number | null;
+}
+
+export type TimeLogResultSource = typeof TimeLogResultSource[keyof typeof TimeLogResultSource];
+
+
+export const TimeLogResultSource = {
+  manual_entry: 'manual_entry',
+  derived_from_booking: 'derived_from_booking',
+} as const;
+
+/**
+ * `docs/prds/PRD_DetailHub_Payroll_Module.md` Section 2.4. `source`/ `linkedBookingId` stay schema-supported for a future auto-derive-from-booking path, but every row created through this API today is `manual_entry` with `linkedBookingId: null` (Open Question #11's decided v1 default).
+ */
+export interface TimeLogResult {
+  id: number;
+  employeeId: number;
+  roleName: string;
+  date: string;
+  hours: number;
+  source: TimeLogResultSource;
+  linkedBookingId: number | null;
+  approved: boolean;
+}
+
+/**
+ * Manual entry only — always created with `source: manual_entry`, `approved: false`.
+ */
+export interface CreateTimeLogRequest {
+  employeeId: number;
+  /** @minLength 1 */
+  roleName: string;
+  date: string;
+  /** @minimum 0 */
+  hours: number;
+}
+
+export type TimeOffRequestResultStatus = typeof TimeOffRequestResultStatus[keyof typeof TimeOffRequestResultStatus];
+
+
+export const TimeOffRequestResultStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  denied: 'denied',
+} as const;
+
+/**
+ * `docs/prds/PRD_DetailHub_Payroll_Module.md` Section 2.5. Per Open Question #12's decided default, an `approved` request is informational only — this API never blocks/warns against new booking assignments in that date range.
+ */
+export interface TimeOffRequestResult {
+  id: number;
+  employeeId: number;
+  startDate: string;
+  endDate: string;
+  status: TimeOffRequestResultStatus;
+  requestedAt: string;
+  reviewedBy: number | null;
+  reviewedAt: string | null;
+  note?: string | null;
+}
+
+export interface CreateTimeOffRequestRequest {
+  employeeId: number;
+  startDate: string;
+  endDate: string;
+  note?: string | null;
+}
+
+export type ReviewTimeOffRequestRequestStatus = typeof ReviewTimeOffRequestRequestStatus[keyof typeof ReviewTimeOffRequestRequestStatus];
+
+
+export const ReviewTimeOffRequestRequestStatus = {
+  approved: 'approved',
+  denied: 'denied',
+} as const;
+
+export interface ReviewTimeOffRequestRequest {
+  status: ReviewTimeOffRequestRequestStatus;
+  /** Optional — no reliable mapping from the authenticated admin user to an `employees` row exists in v1 (no employee login yet). */
+  reviewedByEmployeeId?: number | null;
+}
+
+export type PayrollLineItemPaymentMethod = typeof PayrollLineItemPaymentMethod[keyof typeof PayrollLineItemPaymentMethod];
+
+
+export const PayrollLineItemPaymentMethod = {
+  direct_deposit: 'direct_deposit',
+  check: 'check',
+} as const;
+
+/**
+ * One employee's computed pay for a period — `docs/prds/PRD_DetailHub_Payroll_Module.md` Section 2.6. `net_pay` for `w2_employee`s is a SIMPLIFIED, ILLUSTRATIVE withholding estimate only (see `estimateWithholding` in `@workspace/db`'s `payroll-tax-estimate.ts`) — NOT real tax withholding. For `1099_contractor`s, `net_pay` equals `gross_pay` exactly (contractors self-remit).
+ */
+export interface PayrollLineItem {
+  employee_id: number;
+  hours: number;
+  hourly_pay: number;
+  commission_revenue: number;
+  commission_pay: number;
+  tips: number;
+  gross_pay: number;
+  net_pay: number;
+  payment_method: PayrollLineItemPaymentMethod;
+  bank_account_id: string | null;
+}
+
+/**
+ * Response of `GET /payroll/summary` — the same computation `POST /payroll/runs` stores, without persisting anything.
+ */
+export interface PayrollSummaryResult {
+  periodStart: string;
+  periodEnd: string;
+  lines: PayrollLineItem[];
+  grossTotal: number;
+  netTotal: number;
+  pendingTimeOffCount: number;
+}
+
+export type PayrollRunResultDurationType = typeof PayrollRunResultDurationType[keyof typeof PayrollRunResultDurationType];
+
+
+export const PayrollRunResultDurationType = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+  custom: 'custom',
+} as const;
+
+export type PayrollRunResultStatus = typeof PayrollRunResultStatus[keyof typeof PayrollRunResultStatus];
+
+
+export const PayrollRunResultStatus = {
+  draft: 'draft',
+  processing: 'processing',
+  paid: 'paid',
+  failed: 'failed',
+} as const;
+
+/**
+ * docs/prds/PRD_DetailHub_Payroll_Module.md Section 2.6.
+ */
+export interface PayrollRunResult {
+  id: number;
+  periodStart: string;
+  periodEnd: string;
+  durationType: PayrollRunResultDurationType;
+  status: PayrollRunResultStatus;
+  lineItems: PayrollLineItem[];
+  /** id of the employee record attributed as having run this payroll. */
+  runBy: number;
+  runAt: string;
+  reportUrl?: string | null;
+}
+
+export type CreatePayrollRunRequestPeriod = typeof CreatePayrollRunRequestPeriod[keyof typeof CreatePayrollRunRequestPeriod];
+
+
+export const CreatePayrollRunRequestPeriod = {
+  this_week: 'this_week',
+  last_week: 'last_week',
+  this_month: 'this_month',
+} as const;
+
+export type CreatePayrollRunRequestDurationType = typeof CreatePayrollRunRequestDurationType[keyof typeof CreatePayrollRunRequestDurationType];
+
+
+export const CreatePayrollRunRequestDurationType = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+  custom: 'custom',
+} as const;
+
+/**
+ * Either `period` (shorthand) or explicit `periodStart`+`periodEnd` must resolve to a valid range — see `GET /payroll/summary`'s description for the same resolution rule.
+ */
+export interface CreatePayrollRunRequest {
+  period?: CreatePayrollRunRequestPeriod;
+  periodStart?: string;
+  periodEnd?: string;
+  durationType: CreatePayrollRunRequestDurationType;
+  /** Required — see `PayrollRunResult.runBy`'s description and `createPayrollRun`'s doc comment in `@workspace/db` for why this can't be inferred automatically from the authenticated session in v1. */
+  runByEmployeeId: number;
+}
+
+export type UpdatePayrollRunRequestStatus = typeof UpdatePayrollRunRequestStatus[keyof typeof UpdatePayrollRunRequestStatus];
+
+
+export const UpdatePayrollRunRequestStatus = {
+  paid: 'paid',
+} as const;
+
+/**
+ * Only `status: paid` is accepted, and only from a `draft` run.
+ */
+export interface UpdatePayrollRunRequest {
+  status: UpdatePayrollRunRequestStatus;
 }
 
 export type BookingResultStatus = typeof BookingResultStatus[keyof typeof BookingResultStatus];
@@ -330,15 +658,23 @@ export type BookingResultPaymentMethod = typeof BookingResultPaymentMethod[keyof
 
 
 export const BookingResultPaymentMethod = {
-  cash: 'cash',
   zelle: 'zelle',
   venmo: 'venmo',
-  card: 'card',
-  tap: 'tap',
+  cash: 'cash',
+  credit_card: 'credit_card',
+} as const;
+
+export type BookingResultRefundStatus = typeof BookingResultRefundStatus[keyof typeof BookingResultRefundStatus] | null;
+
+
+export const BookingResultRefundStatus = {
+  none: 'none',
+  requested: 'requested',
+  completed: 'completed',
 } as const;
 
 /**
- * Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD's `scheduledDate`/`scheduledStartTime`/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`/`updatedAt`/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)
+ * Field names/shape match `artifacts/detail-hub/src/lib/mock-data.ts`'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD's `scheduledDate`/`scheduledStartTime`/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`/`updatedAt`/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.) `paymentMethod`/`paymentReference`/ `paymentRecordedAt`/`refundStatus`/`refundReference` match `PRD_DetailHub_Payment_Methods.md` Section 7 exactly (superseding the earlier, rougher `paymentMethod`/`paymentNote` shape this API had before that PRD was reviewed — see `../../lib/db/src/schema/bookings.ts` for why) — settable only via `POST /bookings/{id}/payment` and `POST /bookings/{id}/refund`, never through `POST`/`PATCH /bookings`.
  */
 export interface BookingResult {
   id: number;
@@ -356,7 +692,10 @@ export interface BookingResult {
   status: BookingResultStatus;
   notes?: string | null;
   paymentMethod?: BookingResultPaymentMethod;
-  paymentNote?: string | null;
+  paymentReference?: string | null;
+  paymentRecordedAt?: string | null;
+  refundStatus?: BookingResultRefundStatus;
+  refundReference?: string | null;
   createdAt: string;
   updatedAt: string;
   /** id of the admin/owner user who created this booking. */
@@ -374,17 +713,6 @@ export const CreateBookingRequestStatus = {
   'no-show': 'no-show',
 } as const;
 
-export type CreateBookingRequestPaymentMethod = typeof CreateBookingRequestPaymentMethod[keyof typeof CreateBookingRequestPaymentMethod] | null;
-
-
-export const CreateBookingRequestPaymentMethod = {
-  cash: 'cash',
-  zelle: 'zelle',
-  venmo: 'venmo',
-  card: 'card',
-  tap: 'tap',
-} as const;
-
 export interface CreateBookingRequest {
   clientId: number;
   packageIds?: number[];
@@ -399,8 +727,6 @@ export interface CreateBookingRequest {
   parkingCost: number;
   status: CreateBookingRequestStatus;
   notes?: string | null;
-  paymentMethod?: CreateBookingRequestPaymentMethod;
-  paymentNote?: string | null;
 }
 
 export type UpdateBookingRequestStatus = typeof UpdateBookingRequestStatus[keyof typeof UpdateBookingRequestStatus];
@@ -414,19 +740,8 @@ export const UpdateBookingRequestStatus = {
   'no-show': 'no-show',
 } as const;
 
-export type UpdateBookingRequestPaymentMethod = typeof UpdateBookingRequestPaymentMethod[keyof typeof UpdateBookingRequestPaymentMethod] | null;
-
-
-export const UpdateBookingRequestPaymentMethod = {
-  cash: 'cash',
-  zelle: 'zelle',
-  venmo: 'venmo',
-  card: 'card',
-  tap: 'tap',
-} as const;
-
 /**
- * Partial update — all fields optional. Omitting `packageIds`/`employeeSplit` leaves them unchanged; passing either replaces the entire set.
+ * Partial update — all fields optional. Omitting `packageIds`/`employeeSplit` leaves them unchanged; passing either replaces the entire set. Payment/refund fields are not editable here — see `POST /bookings/{id}/payment` and `POST /bookings/{id}/refund`.
  */
 export interface UpdateBookingRequest {
   clientId?: number;
@@ -442,8 +757,164 @@ export interface UpdateBookingRequest {
   parkingCost?: number;
   status?: UpdateBookingRequestStatus;
   notes?: string | null;
-  paymentMethod?: UpdateBookingRequestPaymentMethod;
-  paymentNote?: string | null;
+}
+
+export type RecordBookingPaymentRequestPaymentMethod = typeof RecordBookingPaymentRequestPaymentMethod[keyof typeof RecordBookingPaymentRequestPaymentMethod];
+
+
+export const RecordBookingPaymentRequestPaymentMethod = {
+  zelle: 'zelle',
+  venmo: 'venmo',
+  cash: 'cash',
+  credit_card: 'credit_card',
+} as const;
+
+export interface RecordBookingPaymentRequest {
+  paymentMethod: RecordBookingPaymentRequestPaymentMethod;
+  /** Confirmation note for manual methods (e.g. last 4 of a Zelle confirmation, "exact change"). */
+  paymentReference?: string | null;
+}
+
+export interface RefundBookingRequest {
+  refundReference?: string | null;
+}
+
+/**
+ * Real per-package booking counts/revenue for the report's period.
+ */
+export interface PackageMixEntry {
+  packageId: number;
+  name: string;
+  price: number;
+  jobs: number;
+  revenue: number;
+}
+
+/**
+ * Real revenue attributed to one employee via `employee_splits` on completed bookings in the period. Only employees with nonzero revenue are included.
+ */
+export interface RevenueByEmployeeEntry {
+  employeeId: number;
+  name: string;
+  revenue: number;
+}
+
+/**
+ * One month of the trailing-6-month revenue/net-income trend chart.
+ */
+export interface FinancialReportTrendPoint {
+  /** YYYY-MM */
+  ym: string;
+  /** Short month label, e.g. "Jul". */
+  month: string;
+  revenue: number;
+  netIncome: number;
+}
+
+/**
+ * `accountsReceivable` is real (unpaid completed bookings in the period); every other field is a fixed constant ported verbatim from `artifacts/detail-hub/src/lib/reporting-data.ts`'s `BALANCE_SHEET` (no real ledger exists yet for cash, prepaid expenses, vehicle/equipment net value, accounts payable, the vehicle loan balance, or owner's equity).
+ */
+export interface FinancialReportBalanceSheet {
+  asOf: string;
+  cash: number;
+  accountsReceivable: number;
+  prepaidExpenses: number;
+  totalCurrentAssets: number;
+  vehicleNet: number;
+  equipmentNet: number;
+  totalAssets: number;
+  accountsPayable: number;
+  vehicleLoanBalance: number;
+  totalLiabilities: number;
+  ownersEquity: number;
+}
+
+/**
+ * `netIncome`/`changeReceivables` are real (the latter is this period's real accounts receivable minus the previous equivalent period's); `depreciation`, `changePayables`, `loanPayments`, and `cashEnding` are fixed-formula/constant, ported verbatim from `reporting-data.ts`'s `getCashFlow`. `ownerDraws` is a fixed percentage (~55%) applied to the now-real `netIncome`.
+ */
+export interface FinancialReportCashFlow {
+  netIncome: number;
+  depreciation: number;
+  changeReceivables: number;
+  changePayables: number;
+  cashFromOperations: number;
+  loanPayments: number;
+  ownerDraws: number;
+  cashFromFinancing: number;
+  netChange: number;
+  cashBeginning: number;
+  cashEnding: number;
+}
+
+export type FinancialReportResultCogs = {
+  /** Real — total gross payroll for the period (`calculatePayrollSummary`'s `grossTotal`). */
+  labor: number;
+  /** Fixed rate (7.96%) applied to real revenue. */
+  materials: number;
+  /** Fixed rate ($11.833/job) applied to real jobs. */
+  gas: number;
+  total: number;
+};
+
+/**
+ * Fixed monthly overhead constants (insurance/vehicleMaint/software/ marketing/adminWages), scaled by the number of calendar months `months` spans. No real overhead tracking exists yet.
+ */
+export type FinancialReportResultOpex = {
+  insurance: number;
+  vehicleMaint: number;
+  software: number;
+  marketing: number;
+  adminWages: number;
+  total: number;
+};
+
+/**
+ * Fixed monthly depreciation constants, scaled by months spanned. Non-cash.
+ */
+export type FinancialReportResultDepreciation = {
+  vehicle: number;
+  equipment: number;
+  total: number;
+};
+
+/**
+ * Response of `GET /reports/financials`. See that path's own description, and `calculateFinancialReport` in `@workspace/db`'s `reports.ts`, for the exact real-data-vs-fixed-constant breakdown of every field below.
+ */
+export interface FinancialReportResult {
+  periodStart: string;
+  periodEnd: string;
+  /** Every "YYYY-MM" spanned by the requested period, inclusive. */
+  months: string[];
+  /** Real — completed bookings in the period x their assigned packages' current price. */
+  revenue: number;
+  /** Real — count of completed bookings in the period. */
+  jobs: number;
+  /** Real. Guarded against division by zero (FR-13): 0 when jobs is 0. */
+  avgTicket: number;
+  cogs: FinancialReportResultCogs;
+  grossProfit: number;
+  /** Guarded against division by zero (FR-13): 0 when revenue is 0. */
+  grossMarginPct: number;
+  /** Fixed monthly overhead constants (insurance/vehicleMaint/software/ marketing/adminWages), scaled by the number of calendar months `months` spans. No real overhead tracking exists yet. */
+  opex: FinancialReportResultOpex;
+  operatingIncome: number;
+  /** Guarded against division by zero (FR-13): 0 when revenue is 0. */
+  operatingMarginPct: number;
+  /** Fixed ($140/mo, scaled by months spanned) — loan interest. */
+  interest: number;
+  preTaxIncome: number;
+  /** Fixed illustrative 25% rate applied to real (max(0, ...)) pre-tax income. */
+  tax: number;
+  netIncome: number;
+  /** Guarded against division by zero (FR-13): 0 when revenue is 0. */
+  netMarginPct: number;
+  /** Fixed monthly depreciation constants, scaled by months spanned. Non-cash. */
+  depreciation: FinancialReportResultDepreciation;
+  packageMix: PackageMixEntry[];
+  revenueByEmployee: RevenueByEmployeeEntry[];
+  balanceSheet: FinancialReportBalanceSheet;
+  cashFlow: FinancialReportCashFlow;
+  trend: FinancialReportTrendPoint[];
 }
 
 export interface ErrorResponse {
@@ -465,9 +936,56 @@ export type ListEmployeesParams = {
 includeInactive?: boolean;
 };
 
+export type ListTimeLogsParams = {
+employeeId?: number;
+start?: string;
+end?: string;
+};
+
+export type ListTimeOffRequestsParams = {
+status?: ListTimeOffRequestsStatus;
+employeeId?: number;
+};
+
+export type ListTimeOffRequestsStatus = typeof ListTimeOffRequestsStatus[keyof typeof ListTimeOffRequestsStatus];
+
+
+export const ListTimeOffRequestsStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  denied: 'denied',
+} as const;
+
+export type GetPayrollSummaryParams = {
+period?: GetPayrollSummaryPeriod;
+periodStart?: string;
+periodEnd?: string;
+};
+
+export type GetPayrollSummaryPeriod = typeof GetPayrollSummaryPeriod[keyof typeof GetPayrollSummaryPeriod];
+
+
+export const GetPayrollSummaryPeriod = {
+  this_week: 'this_week',
+  last_week: 'last_week',
+  this_month: 'this_month',
+} as const;
+
+export type ListPayrollRunsParams = {
+/**
+ * @minimum 1
+ */
+limit?: number;
+};
+
 export type ListBookingsParams = {
 start?: string;
 end?: string;
 clientId?: number;
+};
+
+export type GetFinancialReportParams = {
+start: string;
+end: string;
 };
 

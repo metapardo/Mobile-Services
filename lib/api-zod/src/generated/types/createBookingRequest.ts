@@ -5,7 +5,6 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateBookingRequestPaymentMethod } from './createBookingRequestPaymentMethod';
 import type { CreateBookingRequestStatus } from './createBookingRequestStatus';
 import type { EmployeeSplit } from './employeeSplit';
 
@@ -23,6 +22,4 @@ export interface CreateBookingRequest {
   parkingCost: number;
   status: CreateBookingRequestStatus;
   notes?: string | null;
-  paymentMethod?: CreateBookingRequestPaymentMethod;
-  paymentNote?: string | null;
 }

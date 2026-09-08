@@ -457,9 +457,17 @@ export const ListEmployeesResponseItem = zod.object({
   "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "active": zod.boolean(),
+  "workerType": zod.enum(['w2_employee', '1099_contractor']),
+  "paymentMethod": zod.enum(['direct_deposit', 'check']),
+  "bankAccounts": zod.array(zod.object({
+  "id": zod.string(),
+  "bank_name": zod.string(),
+  "account_last4": zod.string(),
+  "is_default": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1\/7: only the bank name and last 4 of the account are ever stored — never a real account\/routing number (that requires a hosted, PCI\/NACHA-compliant bank-linking flow from a real payroll processor, not built here — see that PRD\'s Section 7).')),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
-}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+}).describe('`id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; the rest are formalized additions, including the full Payroll Module pay profile (`workerType`\/`paymentMethod`\/`bankAccounts`, `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1) — previously excluded from this API on purpose while only the minimal booking-assignment surface existed, now exposed for the Payroll routes.')
 export const ListEmployeesResponse = zod.array(ListEmployeesResponseItem)
 
 
@@ -476,7 +484,15 @@ export const CreateEmployeeBody = zod.object({
   "color": zod.string().min(1),
   "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
-  "active": zod.boolean().optional()
+  "active": zod.boolean().optional(),
+  "workerType": zod.enum(['w2_employee', '1099_contractor']).optional(),
+  "paymentMethod": zod.enum(['direct_deposit', 'check']).optional(),
+  "bankAccounts": zod.array(zod.object({
+  "id": zod.string(),
+  "bank_name": zod.string(),
+  "account_last4": zod.string(),
+  "is_default": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1\/7: only the bank name and last 4 of the account are ever stored — never a real account\/routing number (that requires a hosted, PCI\/NACHA-compliant bank-linking flow from a real payroll processor, not built here — see that PRD\'s Section 7).')).optional()
 })
 
 export const CreateEmployeeResponse = zod.object({
@@ -486,9 +502,17 @@ export const CreateEmployeeResponse = zod.object({
   "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "active": zod.boolean(),
+  "workerType": zod.enum(['w2_employee', '1099_contractor']),
+  "paymentMethod": zod.enum(['direct_deposit', 'check']),
+  "bankAccounts": zod.array(zod.object({
+  "id": zod.string(),
+  "bank_name": zod.string(),
+  "account_last4": zod.string(),
+  "is_default": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1\/7: only the bank name and last 4 of the account are ever stored — never a real account\/routing number (that requires a hosted, PCI\/NACHA-compliant bank-linking flow from a real payroll processor, not built here — see that PRD\'s Section 7).')),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
-}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+}).describe('`id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; the rest are formalized additions, including the full Payroll Module pay profile (`workerType`\/`paymentMethod`\/`bankAccounts`, `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1) — previously excluded from this API on purpose while only the minimal booking-assignment surface existed, now exposed for the Payroll routes.')
 
 
 /**
@@ -505,9 +529,17 @@ export const GetEmployeeResponse = zod.object({
   "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "active": zod.boolean(),
+  "workerType": zod.enum(['w2_employee', '1099_contractor']),
+  "paymentMethod": zod.enum(['direct_deposit', 'check']),
+  "bankAccounts": zod.array(zod.object({
+  "id": zod.string(),
+  "bank_name": zod.string(),
+  "account_last4": zod.string(),
+  "is_default": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1\/7: only the bank name and last 4 of the account are ever stored — never a real account\/routing number (that requires a hosted, PCI\/NACHA-compliant bank-linking flow from a real payroll processor, not built here — see that PRD\'s Section 7).')),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
-}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+}).describe('`id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; the rest are formalized additions, including the full Payroll Module pay profile (`workerType`\/`paymentMethod`\/`bankAccounts`, `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1) — previously excluded from this API on purpose while only the minimal booking-assignment surface existed, now exposed for the Payroll routes.')
 
 
 /**
@@ -527,7 +559,15 @@ export const UpdateEmployeeBody = zod.object({
   "color": zod.string().min(1).optional(),
   "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
-  "active": zod.boolean().optional()
+  "active": zod.boolean().optional(),
+  "workerType": zod.enum(['w2_employee', '1099_contractor']).optional(),
+  "paymentMethod": zod.enum(['direct_deposit', 'check']).optional(),
+  "bankAccounts": zod.array(zod.object({
+  "id": zod.string(),
+  "bank_name": zod.string(),
+  "account_last4": zod.string(),
+  "is_default": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1\/7: only the bank name and last 4 of the account are ever stored — never a real account\/routing number (that requires a hosted, PCI\/NACHA-compliant bank-linking flow from a real payroll processor, not built here — see that PRD\'s Section 7).')).optional()
 }).describe('Partial update — all fields optional.')
 
 export const UpdateEmployeeResponse = zod.object({
@@ -537,9 +577,17 @@ export const UpdateEmployeeResponse = zod.object({
   "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "active": zod.boolean(),
+  "workerType": zod.enum(['w2_employee', '1099_contractor']),
+  "paymentMethod": zod.enum(['direct_deposit', 'check']),
+  "bankAccounts": zod.array(zod.object({
+  "id": zod.string(),
+  "bank_name": zod.string(),
+  "account_last4": zod.string(),
+  "is_default": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1\/7: only the bank name and last 4 of the account are ever stored — never a real account\/routing number (that requires a hosted, PCI\/NACHA-compliant bank-linking flow from a real payroll processor, not built here — see that PRD\'s Section 7).')),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
-}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+}).describe('`id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; the rest are formalized additions, including the full Payroll Module pay profile (`workerType`\/`paymentMethod`\/`bankAccounts`, `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1) — previously excluded from this API on purpose while only the minimal booking-assignment surface existed, now exposed for the Payroll routes.')
 
 
 /**
@@ -557,9 +605,438 @@ export const ArchiveEmployeeResponse = zod.object({
   "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "active": zod.boolean(),
+  "workerType": zod.enum(['w2_employee', '1099_contractor']),
+  "paymentMethod": zod.enum(['direct_deposit', 'check']),
+  "bankAccounts": zod.array(zod.object({
+  "id": zod.string(),
+  "bank_name": zod.string(),
+  "account_last4": zod.string(),
+  "is_default": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1\/7: only the bank name and last 4 of the account are ever stored — never a real account\/routing number (that requires a hosted, PCI\/NACHA-compliant bank-linking flow from a real payroll processor, not built here — see that PRD\'s Section 7).')),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
-}).describe('Minimal employee record — `id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; `active`\/`email`\/`phone`\/`createdAt`\/`updatedAt` are formalized additions. Does NOT expose the full payroll profile (worker type, pay rate, bank accounts) that already exists at the DB layer for the Payroll Module — out of scope for this API surface per FR-2.')
+}).describe('`id`\/`name`\/`color` match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Employee` interface exactly; the rest are formalized additions, including the full Payroll Module pay profile (`workerType`\/`paymentMethod`\/`bankAccounts`, `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.1) — previously excluded from this API on purpose while only the minimal booking-assignment surface existed, now exposed for the Payroll routes.')
+
+
+/**
+ * An employee can hold more than one role, each with its own pay type (hourly/commission) and rate (PRD Section 2.2/3) — e.g. "Front Desk $15/hr" and "Detailer 30% commission" on the same employee.
+ * @summary List an employee's pay roles
+ */
+export const ListEmployeeRolesParams = zod.object({
+  "employeeId": zod.coerce.number().int()
+})
+
+export const ListEmployeeRolesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "roleName": zod.string(),
+  "payType": zod.enum(['hourly', 'commission']),
+  "hourlyRate": zod.number().nullable(),
+  "commissionRate": zod.number().nullable()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.2. `hourlyRate` is non-null iff `payType` is `hourly`; `commissionRate` is non-null iff `payType` is `commission`.')
+export const ListEmployeeRolesResponse = zod.array(ListEmployeeRolesResponseItem)
+
+
+/**
+ * `hourlyRate` is required (and `commissionRate` must be omitted) when `payType` is `hourly`; `commissionRate` is required (and `hourlyRate` must be omitted) when `payType` is `commission`.
+ * @summary Add a pay role to an employee
+ */
+export const CreateEmployeeRoleParams = zod.object({
+  "employeeId": zod.coerce.number().int()
+})
+
+
+export const createEmployeeRoleBodyHourlyRateMin = 0;
+
+export const createEmployeeRoleBodyCommissionRateMin = 0;
+export const createEmployeeRoleBodyCommissionRateMax = 100;
+
+
+
+export const CreateEmployeeRoleBody = zod.object({
+  "roleName": zod.string().min(1),
+  "payType": zod.enum(['hourly', 'commission']),
+  "hourlyRate": zod.number().min(createEmployeeRoleBodyHourlyRateMin).nullish(),
+  "commissionRate": zod.number().min(createEmployeeRoleBodyCommissionRateMin).max(createEmployeeRoleBodyCommissionRateMax).nullish()
+})
+
+export const CreateEmployeeRoleResponse = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "roleName": zod.string(),
+  "payType": zod.enum(['hourly', 'commission']),
+  "hourlyRate": zod.number().nullable(),
+  "commissionRate": zod.number().nullable()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.2. `hourlyRate` is non-null iff `payType` is `hourly`; `commissionRate` is non-null iff `payType` is `commission`.')
+
+
+/**
+ * Partial update — any subset of fields may be sent; omitted fields are left unchanged.
+ * @summary Update an employee's pay role
+ */
+export const UpdateEmployeeRoleParams = zod.object({
+  "employeeId": zod.coerce.number().int(),
+  "roleId": zod.coerce.number().int()
+})
+
+
+export const updateEmployeeRoleBodyHourlyRateMin = 0;
+
+export const updateEmployeeRoleBodyCommissionRateMin = 0;
+export const updateEmployeeRoleBodyCommissionRateMax = 100;
+
+
+
+export const UpdateEmployeeRoleBody = zod.object({
+  "roleName": zod.string().min(1).optional(),
+  "payType": zod.enum(['hourly', 'commission']).optional(),
+  "hourlyRate": zod.number().min(updateEmployeeRoleBodyHourlyRateMin).nullish(),
+  "commissionRate": zod.number().min(updateEmployeeRoleBodyCommissionRateMin).max(updateEmployeeRoleBodyCommissionRateMax).nullish()
+}).describe('Partial update — all fields optional.')
+
+export const UpdateEmployeeRoleResponse = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "roleName": zod.string(),
+  "payType": zod.enum(['hourly', 'commission']),
+  "hourlyRate": zod.number().nullable(),
+  "commissionRate": zod.number().nullable()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.2. `hourlyRate` is non-null iff `payType` is `hourly`; `commissionRate` is non-null iff `payType` is `commission`.')
+
+
+/**
+ * @summary Remove an employee's pay role
+ */
+export const DeleteEmployeeRoleParams = zod.object({
+  "employeeId": zod.coerce.number().int(),
+  "roleId": zod.coerce.number().int()
+})
+
+export const DeleteEmployeeRoleResponse = zod.void()
+
+
+/**
+ * Powers the Time Tracking hub (PRD Section 4) — Date/Employee/Role/Hours table. `start`/`end` (both `YYYY-MM-DD`, both optional, inclusive) filter on `date`.
+ * @summary List time logs, optionally filtered by employee and/or date range
+ */
+export const ListTimeLogsQueryParams = zod.object({
+  "employeeId": zod.coerce.number().int().optional(),
+  "start": zod.date().optional(),
+  "end": zod.date().optional()
+})
+
+export const ListTimeLogsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "roleName": zod.string(),
+  "date": zod.coerce.date(),
+  "hours": zod.number(),
+  "source": zod.enum(['manual_entry', 'derived_from_booking']),
+  "linkedBookingId": zod.number().int().nullable(),
+  "approved": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.4. `source`\/ `linkedBookingId` stay schema-supported for a future auto-derive-from-booking path, but every row created through this API today is `manual_entry` with `linkedBookingId: null` (Open Question #11\'s decided v1 default).')
+export const ListTimeLogsResponse = zod.array(ListTimeLogsResponseItem)
+
+
+/**
+ * Manual entry only for v1 (PRD Open Question #11's decided default: "manual entry with admin approval," no clock-in/out). Always created unapproved — see `POST /time-logs/{id}/approve`.
+ * @summary Manually log hours for an employee/role/day
+ */
+
+export const createTimeLogBodyHoursMin = 0;
+
+
+
+export const CreateTimeLogBody = zod.object({
+  "employeeId": zod.number().int(),
+  "roleName": zod.string().min(1),
+  "date": zod.coerce.date(),
+  "hours": zod.number().min(createTimeLogBodyHoursMin)
+}).describe('Manual entry only — always created with `source: manual_entry`, `approved: false`.')
+
+export const CreateTimeLogResponse = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "roleName": zod.string(),
+  "date": zod.coerce.date(),
+  "hours": zod.number(),
+  "source": zod.enum(['manual_entry', 'derived_from_booking']),
+  "linkedBookingId": zod.number().int().nullable(),
+  "approved": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.4. `source`\/ `linkedBookingId` stay schema-supported for a future auto-derive-from-booking path, but every row created through this API today is `manual_entry` with `linkedBookingId: null` (Open Question #11\'s decided v1 default).')
+
+
+/**
+ * Admin review/lock step ahead of a payroll run (PRD Section 4) — only approved logs feed a payroll run's `hourly_pay`.
+ * @summary Approve a time log
+ */
+export const ApproveTimeLogParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const ApproveTimeLogResponse = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "roleName": zod.string(),
+  "date": zod.coerce.date(),
+  "hours": zod.number(),
+  "source": zod.enum(['manual_entry', 'derived_from_booking']),
+  "linkedBookingId": zod.number().int().nullable(),
+  "approved": zod.boolean()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.4. `source`\/ `linkedBookingId` stay schema-supported for a future auto-derive-from-booking path, but every row created through this API today is `manual_entry` with `linkedBookingId: null` (Open Question #11\'s decided v1 default).')
+
+
+/**
+ * Removes a mis-entered manual log — typically before it's approved.
+ * @summary Delete a time log
+ */
+export const DeleteTimeLogParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const DeleteTimeLogResponse = zod.void()
+
+
+/**
+ * @summary List time-off requests, optionally filtered by status and/or employee
+ */
+export const ListTimeOffRequestsQueryParams = zod.object({
+  "status": zod.enum(['pending', 'approved', 'denied']).optional(),
+  "employeeId": zod.coerce.number().int().optional()
+})
+
+export const ListTimeOffRequestsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date(),
+  "status": zod.enum(['pending', 'approved', 'denied']),
+  "requestedAt": zod.coerce.date(),
+  "reviewedBy": zod.number().int().nullable(),
+  "reviewedAt": zod.coerce.date().nullable(),
+  "note": zod.string().nullish()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.5. Per Open Question #12\'s decided default, an `approved` request is informational only — this API never blocks\/warns against new booking assignments in that date range.')
+export const ListTimeOffRequestsResponse = zod.array(ListTimeOffRequestsResponseItem)
+
+
+/**
+ * Created with `status: pending` (PRD Section 5). Approved time off is informational only in v1 (Open Question #12) — it never blocks or warns against new booking assignments in that date range.
+ * @summary Submit a time-off request
+ */
+export const CreateTimeOffRequestBody = zod.object({
+  "employeeId": zod.number().int(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date(),
+  "note": zod.string().nullish()
+})
+
+export const CreateTimeOffRequestResponse = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date(),
+  "status": zod.enum(['pending', 'approved', 'denied']),
+  "requestedAt": zod.coerce.date(),
+  "reviewedBy": zod.number().int().nullable(),
+  "reviewedAt": zod.coerce.date().nullable(),
+  "note": zod.string().nullish()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.5. Per Open Question #12\'s decided default, an `approved` request is informational only — this API never blocks\/warns against new booking assignments in that date range.')
+
+
+/**
+ * Matches the "Approve Time Off Request" confirmation modal (PRD Section 5). `reviewedByEmployeeId` is optional — v1 has no reliable mapping from the authenticated admin user to an `employees` row (no employee login yet).
+ * @summary Approve or deny a time-off request
+ */
+export const ReviewTimeOffRequestParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const ReviewTimeOffRequestBody = zod.object({
+  "status": zod.enum(['approved', 'denied']),
+  "reviewedByEmployeeId": zod.number().int().nullish().describe('Optional — no reliable mapping from the authenticated admin user to an `employees` row exists in v1 (no employee login yet).')
+})
+
+export const ReviewTimeOffRequestResponse = zod.object({
+  "id": zod.number().int(),
+  "employeeId": zod.number().int(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date(),
+  "status": zod.enum(['pending', 'approved', 'denied']),
+  "requestedAt": zod.coerce.date(),
+  "reviewedBy": zod.number().int().nullable(),
+  "reviewedAt": zod.coerce.date().nullable(),
+  "note": zod.string().nullish()
+}).describe('`docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.5. Per Open Question #12\'s decided default, an `approved` request is informational only — this API never blocks\/warns against new booking assignments in that date range.')
+
+
+/**
+ * The "Run Report" / draft-review step (PRD Section 6) — computes the same per-employee breakdown a `POST /payroll/runs` would store, without persisting anything. `period` is a shorthand (`this_week`/`last_week`/`this_month`, mirroring `artifacts/detail-hub/src/lib/payroll-data.ts`'s `getPeriodRange`); explicit `periodStart`+`periodEnd` win over `period` if both are given.
+ * @summary Preview a payroll calculation for a period, without creating a run
+ */
+export const GetPayrollSummaryQueryParams = zod.object({
+  "period": zod.enum(['this_week', 'last_week', 'this_month']).optional(),
+  "periodStart": zod.date().optional(),
+  "periodEnd": zod.date().optional()
+})
+
+export const GetPayrollSummaryResponse = zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "lines": zod.array(zod.object({
+  "employee_id": zod.number().int(),
+  "hours": zod.number(),
+  "hourly_pay": zod.number(),
+  "commission_revenue": zod.number(),
+  "commission_pay": zod.number(),
+  "tips": zod.number(),
+  "gross_pay": zod.number(),
+  "net_pay": zod.number(),
+  "payment_method": zod.enum(['direct_deposit', 'check']),
+  "bank_account_id": zod.string().nullable()
+}).describe('One employee\'s computed pay for a period — `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.6. `net_pay` for `w2_employee`s is a SIMPLIFIED, ILLUSTRATIVE withholding estimate only (see `estimateWithholding` in `@workspace\/db`\'s `payroll-tax-estimate.ts`) — NOT real tax withholding. For `1099_contractor`s, `net_pay` equals `gross_pay` exactly (contractors self-remit).')),
+  "grossTotal": zod.number(),
+  "netTotal": zod.number(),
+  "pendingTimeOffCount": zod.number().int()
+}).describe('Response of `GET \/payroll\/summary` — the same computation `POST \/payroll\/runs` stores, without persisting anything.')
+
+
+/**
+ * Ordered most-recent-first. `limit` powers the Team hub's "3 most recent" view.
+ * @summary List recent payroll runs
+ */
+
+
+
+export const ListPayrollRunsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).optional()
+})
+
+export const ListPayrollRunsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "durationType": zod.enum(['weekly', 'biweekly', 'monthly', 'custom']),
+  "status": zod.enum(['draft', 'processing', 'paid', 'failed']),
+  "lineItems": zod.array(zod.object({
+  "employee_id": zod.number().int(),
+  "hours": zod.number(),
+  "hourly_pay": zod.number(),
+  "commission_revenue": zod.number(),
+  "commission_pay": zod.number(),
+  "tips": zod.number(),
+  "gross_pay": zod.number(),
+  "net_pay": zod.number(),
+  "payment_method": zod.enum(['direct_deposit', 'check']),
+  "bank_account_id": zod.string().nullable()
+}).describe('One employee\'s computed pay for a period — `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.6. `net_pay` for `w2_employee`s is a SIMPLIFIED, ILLUSTRATIVE withholding estimate only (see `estimateWithholding` in `@workspace\/db`\'s `payroll-tax-estimate.ts`) — NOT real tax withholding. For `1099_contractor`s, `net_pay` equals `gross_pay` exactly (contractors self-remit).')),
+  "runBy": zod.number().int().describe('id of the employee record attributed as having run this payroll.'),
+  "runAt": zod.coerce.date(),
+  "reportUrl": zod.string().nullish()
+}).describe('docs\/prds\/PRD_DetailHub_Payroll_Module.md Section 2.6.')
+export const ListPayrollRunsResponse = zod.array(ListPayrollRunsResponseItem)
+
+
+/**
+ * Computes and stores line items for the resolved period as a new `status: draft` run (PRD Section 6) — review-before-pay, nothing is actually paid out yet. See `PATCH /payroll/runs/{id}` to finalize.
+ * @summary Run payroll for a period
+ */
+export const CreatePayrollRunBody = zod.object({
+  "period": zod.enum(['this_week', 'last_week', 'this_month']).optional(),
+  "periodStart": zod.coerce.date().optional(),
+  "periodEnd": zod.coerce.date().optional(),
+  "durationType": zod.enum(['weekly', 'biweekly', 'monthly', 'custom']),
+  "runByEmployeeId": zod.number().int().describe('Required — see `PayrollRunResult.runBy`\'s description and `createPayrollRun`\'s doc comment in `@workspace\/db` for why this can\'t be inferred automatically from the authenticated session in v1.')
+}).describe('Either `period` (shorthand) or explicit `periodStart`+`periodEnd` must resolve to a valid range — see `GET \/payroll\/summary`\'s description for the same resolution rule.')
+
+export const CreatePayrollRunResponse = zod.object({
+  "id": zod.number().int(),
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "durationType": zod.enum(['weekly', 'biweekly', 'monthly', 'custom']),
+  "status": zod.enum(['draft', 'processing', 'paid', 'failed']),
+  "lineItems": zod.array(zod.object({
+  "employee_id": zod.number().int(),
+  "hours": zod.number(),
+  "hourly_pay": zod.number(),
+  "commission_revenue": zod.number(),
+  "commission_pay": zod.number(),
+  "tips": zod.number(),
+  "gross_pay": zod.number(),
+  "net_pay": zod.number(),
+  "payment_method": zod.enum(['direct_deposit', 'check']),
+  "bank_account_id": zod.string().nullable()
+}).describe('One employee\'s computed pay for a period — `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.6. `net_pay` for `w2_employee`s is a SIMPLIFIED, ILLUSTRATIVE withholding estimate only (see `estimateWithholding` in `@workspace\/db`\'s `payroll-tax-estimate.ts`) — NOT real tax withholding. For `1099_contractor`s, `net_pay` equals `gross_pay` exactly (contractors self-remit).')),
+  "runBy": zod.number().int().describe('id of the employee record attributed as having run this payroll.'),
+  "runAt": zod.coerce.date(),
+  "reportUrl": zod.string().nullish()
+}).describe('docs\/prds\/PRD_DetailHub_Payroll_Module.md Section 2.6.')
+
+
+/**
+ * @summary Get a payroll run by id
+ */
+export const GetPayrollRunParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const GetPayrollRunResponse = zod.object({
+  "id": zod.number().int(),
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "durationType": zod.enum(['weekly', 'biweekly', 'monthly', 'custom']),
+  "status": zod.enum(['draft', 'processing', 'paid', 'failed']),
+  "lineItems": zod.array(zod.object({
+  "employee_id": zod.number().int(),
+  "hours": zod.number(),
+  "hourly_pay": zod.number(),
+  "commission_revenue": zod.number(),
+  "commission_pay": zod.number(),
+  "tips": zod.number(),
+  "gross_pay": zod.number(),
+  "net_pay": zod.number(),
+  "payment_method": zod.enum(['direct_deposit', 'check']),
+  "bank_account_id": zod.string().nullable()
+}).describe('One employee\'s computed pay for a period — `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.6. `net_pay` for `w2_employee`s is a SIMPLIFIED, ILLUSTRATIVE withholding estimate only (see `estimateWithholding` in `@workspace\/db`\'s `payroll-tax-estimate.ts`) — NOT real tax withholding. For `1099_contractor`s, `net_pay` equals `gross_pay` exactly (contractors self-remit).')),
+  "runBy": zod.number().int().describe('id of the employee record attributed as having run this payroll.'),
+  "runAt": zod.coerce.date(),
+  "reportUrl": zod.string().nullish()
+}).describe('docs\/prds\/PRD_DetailHub_Payroll_Module.md Section 2.6.')
+
+
+/**
+ * `draft` -> `paid` only. This is a bookkeeping status flip, NOT a real payment execution — no direct deposit/check/ACH transfer actually happens (no payroll processor is connected anywhere in this codebase, PRD Section 9).
+ * @summary Finalize a payroll run (mark it paid)
+ */
+export const UpdatePayrollRunParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const UpdatePayrollRunBody = zod.object({
+  "status": zod.enum(['paid'])
+}).describe('Only `status: paid` is accepted, and only from a `draft` run.')
+
+export const UpdatePayrollRunResponse = zod.object({
+  "id": zod.number().int(),
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "durationType": zod.enum(['weekly', 'biweekly', 'monthly', 'custom']),
+  "status": zod.enum(['draft', 'processing', 'paid', 'failed']),
+  "lineItems": zod.array(zod.object({
+  "employee_id": zod.number().int(),
+  "hours": zod.number(),
+  "hourly_pay": zod.number(),
+  "commission_revenue": zod.number(),
+  "commission_pay": zod.number(),
+  "tips": zod.number(),
+  "gross_pay": zod.number(),
+  "net_pay": zod.number(),
+  "payment_method": zod.enum(['direct_deposit', 'check']),
+  "bank_account_id": zod.string().nullable()
+}).describe('One employee\'s computed pay for a period — `docs\/prds\/PRD_DetailHub_Payroll_Module.md` Section 2.6. `net_pay` for `w2_employee`s is a SIMPLIFIED, ILLUSTRATIVE withholding estimate only (see `estimateWithholding` in `@workspace\/db`\'s `payroll-tax-estimate.ts`) — NOT real tax withholding. For `1099_contractor`s, `net_pay` equals `gross_pay` exactly (contractors self-remit).')),
+  "runBy": zod.number().int().describe('id of the employee record attributed as having run this payroll.'),
+  "runAt": zod.coerce.date(),
+  "reportUrl": zod.string().nullish()
+}).describe('docs\/prds\/PRD_DetailHub_Payroll_Module.md Section 2.6.')
 
 
 /**
@@ -593,12 +1070,15 @@ export const ListBookingsResponseItem = zod.object({
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
   "notes": zod.string().nullish(),
-  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
-  "paymentNote": zod.string().nullish(),
+  "paymentMethod": zod.enum(['zelle', 'venmo', 'cash', 'credit_card']).nullish(),
+  "paymentReference": zod.string().nullish(),
+  "paymentRecordedAt": zod.coerce.date().nullish(),
+  "refundStatus": zod.enum(['none', 'requested', 'completed']).nullish(),
+  "refundReference": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
-}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.) `paymentMethod`\/`paymentReference`\/ `paymentRecordedAt`\/`refundStatus`\/`refundReference` match `PRD_DetailHub_Payment_Methods.md` Section 7 exactly (superseding the earlier, rougher `paymentMethod`\/`paymentNote` shape this API had before that PRD was reviewed — see `..\/..\/lib\/db\/src\/schema\/bookings.ts` for why) — settable only via `POST \/bookings\/{id}\/payment` and `POST \/bookings\/{id}\/refund`, never through `POST`\/`PATCH \/bookings`.')
 export const ListBookingsResponse = zod.array(ListBookingsResponseItem)
 
 
@@ -630,9 +1110,7 @@ export const CreateBookingBody = zod.object({
   "depositAmount": zod.number().min(createBookingBodyDepositAmountMin),
   "parkingCost": zod.number().min(createBookingBodyParkingCostMin),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
-  "notes": zod.string().nullish(),
-  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
-  "paymentNote": zod.string().nullish()
+  "notes": zod.string().nullish()
 })
 
 export const createBookingResponseEmployeeSplitItemPercentageMin = 0;
@@ -656,12 +1134,15 @@ export const CreateBookingResponse = zod.object({
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
   "notes": zod.string().nullish(),
-  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
-  "paymentNote": zod.string().nullish(),
+  "paymentMethod": zod.enum(['zelle', 'venmo', 'cash', 'credit_card']).nullish(),
+  "paymentReference": zod.string().nullish(),
+  "paymentRecordedAt": zod.coerce.date().nullish(),
+  "refundStatus": zod.enum(['none', 'requested', 'completed']).nullish(),
+  "refundReference": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
-}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.) `paymentMethod`\/`paymentReference`\/ `paymentRecordedAt`\/`refundStatus`\/`refundReference` match `PRD_DetailHub_Payment_Methods.md` Section 7 exactly (superseding the earlier, rougher `paymentMethod`\/`paymentNote` shape this API had before that PRD was reviewed — see `..\/..\/lib\/db\/src\/schema\/bookings.ts` for why) — settable only via `POST \/bookings\/{id}\/payment` and `POST \/bookings\/{id}\/refund`, never through `POST`\/`PATCH \/bookings`.')
 
 
 /**
@@ -692,12 +1173,15 @@ export const GetBookingResponse = zod.object({
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
   "notes": zod.string().nullish(),
-  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
-  "paymentNote": zod.string().nullish(),
+  "paymentMethod": zod.enum(['zelle', 'venmo', 'cash', 'credit_card']).nullish(),
+  "paymentReference": zod.string().nullish(),
+  "paymentRecordedAt": zod.coerce.date().nullish(),
+  "refundStatus": zod.enum(['none', 'requested', 'completed']).nullish(),
+  "refundReference": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
-}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.) `paymentMethod`\/`paymentReference`\/ `paymentRecordedAt`\/`refundStatus`\/`refundReference` match `PRD_DetailHub_Payment_Methods.md` Section 7 exactly (superseding the earlier, rougher `paymentMethod`\/`paymentNote` shape this API had before that PRD was reviewed — see `..\/..\/lib\/db\/src\/schema\/bookings.ts` for why) — settable only via `POST \/bookings\/{id}\/payment` and `POST \/bookings\/{id}\/refund`, never through `POST`\/`PATCH \/bookings`.')
 
 
 /**
@@ -731,10 +1215,8 @@ export const UpdateBookingBody = zod.object({
   "depositAmount": zod.number().min(updateBookingBodyDepositAmountMin).optional(),
   "parkingCost": zod.number().min(updateBookingBodyParkingCostMin).optional(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']).optional(),
-  "notes": zod.string().nullish(),
-  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
-  "paymentNote": zod.string().nullish()
-}).describe('Partial update — all fields optional. Omitting `packageIds`\/`employeeSplit` leaves them unchanged; passing either replaces the entire set.')
+  "notes": zod.string().nullish()
+}).describe('Partial update — all fields optional. Omitting `packageIds`\/`employeeSplit` leaves them unchanged; passing either replaces the entire set. Payment\/refund fields are not editable here — see `POST \/bookings\/{id}\/payment` and `POST \/bookings\/{id}\/refund`.')
 
 export const updateBookingResponseEmployeeSplitItemPercentageMin = 0;
 export const updateBookingResponseEmployeeSplitItemPercentageMax = 100;
@@ -757,12 +1239,15 @@ export const UpdateBookingResponse = zod.object({
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
   "notes": zod.string().nullish(),
-  "paymentMethod": zod.enum(['cash', 'zelle', 'venmo', 'card', 'tap']).nullish(),
-  "paymentNote": zod.string().nullish(),
+  "paymentMethod": zod.enum(['zelle', 'venmo', 'cash', 'credit_card']).nullish(),
+  "paymentReference": zod.string().nullish(),
+  "paymentRecordedAt": zod.coerce.date().nullish(),
+  "refundStatus": zod.enum(['none', 'requested', 'completed']).nullish(),
+  "refundReference": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
-}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.)')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.) `paymentMethod`\/`paymentReference`\/ `paymentRecordedAt`\/`refundStatus`\/`refundReference` match `PRD_DetailHub_Payment_Methods.md` Section 7 exactly (superseding the earlier, rougher `paymentMethod`\/`paymentNote` shape this API had before that PRD was reviewed — see `..\/..\/lib\/db\/src\/schema\/bookings.ts` for why) — settable only via `POST \/bookings\/{id}\/payment` and `POST \/bookings\/{id}\/refund`, never through `POST`\/`PATCH \/bookings`.')
 
 
 /**
@@ -774,5 +1259,186 @@ export const DeleteBookingParams = zod.object({
 })
 
 export const DeleteBookingResponse = zod.void()
+
+
+/**
+ * PRD_DetailHub_Payment_Methods.md FR-1/FR-2/FR-5. Selecting `zelle`/`venmo`/ `cash` marks the booking paid via that method, timestamps it (`paymentRecordedAt`), and stores an optional free-text `paymentReference`. Selecting `credit_card` ALWAYS fails with 422 `card_processing_not_available` — no payment processor is connected in this codebase; this never charges a card, real or simulated.
+ * @summary Record how a booking was paid
+ */
+export const RecordBookingPaymentParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const RecordBookingPaymentBody = zod.object({
+  "paymentMethod": zod.enum(['zelle', 'venmo', 'cash', 'credit_card']),
+  "paymentReference": zod.string().nullish().describe('Confirmation note for manual methods (e.g. last 4 of a Zelle confirmation, \"exact change\").')
+})
+
+export const recordBookingPaymentResponseEmployeeSplitItemPercentageMin = 0;
+export const recordBookingPaymentResponseEmployeeSplitItemPercentageMax = 100;
+
+
+
+export const RecordBookingPaymentResponse = zod.object({
+  "id": zod.number().int(),
+  "clientId": zod.number().int(),
+  "packageIds": zod.array(zod.number().int()),
+  "employeeIds": zod.array(zod.number().int()).describe('Derived from `employeeSplit` (every `employeeId` present in the split).'),
+  "employeeSplit": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "percentage": zod.number().min(recordBookingPaymentResponseEmployeeSplitItemPercentageMin).max(recordBookingPaymentResponseEmployeeSplitItemPercentageMax)
+}).describe('Matches `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split\'s `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.')),
+  "date": zod.coerce.date(),
+  "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
+  "address": zod.string(),
+  "depositAmount": zod.number(),
+  "parkingCost": zod.number(),
+  "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
+  "notes": zod.string().nullish(),
+  "paymentMethod": zod.enum(['zelle', 'venmo', 'cash', 'credit_card']).nullish(),
+  "paymentReference": zod.string().nullish(),
+  "paymentRecordedAt": zod.coerce.date().nullish(),
+  "refundStatus": zod.enum(['none', 'requested', 'completed']).nullish(),
+  "refundReference": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.) `paymentMethod`\/`paymentReference`\/ `paymentRecordedAt`\/`refundStatus`\/`refundReference` match `PRD_DetailHub_Payment_Methods.md` Section 7 exactly (superseding the earlier, rougher `paymentMethod`\/`paymentNote` shape this API had before that PRD was reviewed — see `..\/..\/lib\/db\/src\/schema\/bookings.ts` for why) — settable only via `POST \/bookings\/{id}\/payment` and `POST \/bookings\/{id}\/refund`, never through `POST`\/`PATCH \/bookings`.')
+
+
+/**
+ * FR-8/Section 6.2 of PRD_DetailHub_Payment_Methods.md. Always a manual reversal record — sets `refundStatus: completed` and stores an optional free-text `refundReference`. Never calls a real processor refund API for any tender type; the money movement (if any) happens outside the app, same as the original Zelle/Venmo/Cash payment itself.
+ * @summary Record a refund against a booking
+ */
+export const RefundBookingParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const RefundBookingBody = zod.object({
+  "refundReference": zod.string().nullish()
+})
+
+export const refundBookingResponseEmployeeSplitItemPercentageMin = 0;
+export const refundBookingResponseEmployeeSplitItemPercentageMax = 100;
+
+
+
+export const RefundBookingResponse = zod.object({
+  "id": zod.number().int(),
+  "clientId": zod.number().int(),
+  "packageIds": zod.array(zod.number().int()),
+  "employeeIds": zod.array(zod.number().int()).describe('Derived from `employeeSplit` (every `employeeId` present in the split).'),
+  "employeeSplit": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "percentage": zod.number().min(refundBookingResponseEmployeeSplitItemPercentageMin).max(refundBookingResponseEmployeeSplitItemPercentageMax)
+}).describe('Matches `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `EmployeeSplit` interface. `Booking.employeeIds` is folded into this (see `BookingResult`) — the split\'s `employeeId` list already implies assignment, so a separate raw id list would just be redundant data that could drift.')),
+  "date": zod.coerce.date(),
+  "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
+  "address": zod.string(),
+  "depositAmount": zod.number(),
+  "parkingCost": zod.number(),
+  "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
+  "notes": zod.string().nullish(),
+  "paymentMethod": zod.enum(['zelle', 'venmo', 'cash', 'credit_card']).nullish(),
+  "paymentReference": zod.string().nullish(),
+  "paymentRecordedAt": zod.coerce.date().nullish(),
+  "refundStatus": zod.enum(['none', 'requested', 'completed']).nullish(),
+  "refundReference": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "createdBy": zod.string().describe('id of the admin\/owner user who created this booking.')
+}).describe('Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Booking` interface (`date`, `startTime`, `address`, not the master PRD\'s `scheduledDate`\/`scheduledStartTime`\/`serviceAddress` — the mock interface is the source of truth per Section 7), plus `createdAt`\/`updatedAt`\/`createdBy`. `employeeIds` is derived from `employeeSplit` for convenience, not stored separately. (`gasMeterStatus`\/`weatherSnapshot` were removed per FR-9 of PRD_DetailHub_Signup_Copy_and_Packages_Hardening.md — dead placeholder columns never populated by a real integration; FR-11 says they come back for real later, see Fuel_Gauge_PRD.md.) `paymentMethod`\/`paymentReference`\/ `paymentRecordedAt`\/`refundStatus`\/`refundReference` match `PRD_DetailHub_Payment_Methods.md` Section 7 exactly (superseding the earlier, rougher `paymentMethod`\/`paymentNote` shape this API had before that PRD was reviewed — see `..\/..\/lib\/db\/src\/schema\/bookings.ts` for why) — settable only via `POST \/bookings\/{id}\/payment` and `POST \/bookings\/{id}\/refund`, never through `POST`\/`PATCH \/bookings`.')
+
+
+/**
+ * FR-10/FR-11/FR-13 of PRD_DetailHub_After_Package_Work.md Section 6.2. Computes an income statement (revenue -> COGS -> gross profit -> opex -> operating income -> interest/tax -> net income), a balance sheet, a cash flow statement, package mix, revenue-by-employee, and a trailing-6-calendar-month revenue/net-income trend (ending with the month containing `end`) for one `[start, end]` period. This is a deliberate hybrid: revenue, jobs, labor (real payroll gross for the period), package mix, revenue-by-employee, and accounts receivable are computed from real bookings/payroll/packages/ employees data; fixed overhead, loan interest, depreciation, the illustrative 25% tax rate, and every balance-sheet field without a real underlying ledger are ported verbatim as constants from the app's original mock financial model (`artifacts/detail-hub/src/lib/reporting-data.ts`) — see `calculateFinancialReport` in `@workspace/db` for the exact breakdown. Every ratio is guarded against a zero-revenue/zero-jobs period (FR-13): `0`, never `NaN`/`Infinity`.
+ * @summary Full financial statement set for a period (Monthly/Quarterly/Annual Financial View)
+ */
+export const GetFinancialReportQueryParams = zod.object({
+  "start": zod.date(),
+  "end": zod.date()
+})
+
+export const GetFinancialReportResponse = zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "months": zod.array(zod.string()).describe('Every \"YYYY-MM\" spanned by the requested period, inclusive.'),
+  "revenue": zod.number().describe('Real — completed bookings in the period x their assigned packages\' current price.'),
+  "jobs": zod.number().int().describe('Real — count of completed bookings in the period.'),
+  "avgTicket": zod.number().describe('Real. Guarded against division by zero (FR-13): 0 when jobs is 0.'),
+  "cogs": zod.object({
+  "labor": zod.number().describe('Real — total gross payroll for the period (`calculatePayrollSummary`\'s `grossTotal`).'),
+  "materials": zod.number().describe('Fixed rate (7.96%) applied to real revenue.'),
+  "gas": zod.number().describe('Fixed rate ($11.833\/job) applied to real jobs.'),
+  "total": zod.number()
+}),
+  "grossProfit": zod.number(),
+  "grossMarginPct": zod.number().describe('Guarded against division by zero (FR-13): 0 when revenue is 0.'),
+  "opex": zod.object({
+  "insurance": zod.number(),
+  "vehicleMaint": zod.number(),
+  "software": zod.number(),
+  "marketing": zod.number(),
+  "adminWages": zod.number(),
+  "total": zod.number()
+}).describe('Fixed monthly overhead constants (insurance\/vehicleMaint\/software\/ marketing\/adminWages), scaled by the number of calendar months `months` spans. No real overhead tracking exists yet.'),
+  "operatingIncome": zod.number(),
+  "operatingMarginPct": zod.number().describe('Guarded against division by zero (FR-13): 0 when revenue is 0.'),
+  "interest": zod.number().describe('Fixed ($140\/mo, scaled by months spanned) — loan interest.'),
+  "preTaxIncome": zod.number(),
+  "tax": zod.number().describe('Fixed illustrative 25% rate applied to real (max(0, ...)) pre-tax income.'),
+  "netIncome": zod.number(),
+  "netMarginPct": zod.number().describe('Guarded against division by zero (FR-13): 0 when revenue is 0.'),
+  "depreciation": zod.object({
+  "vehicle": zod.number(),
+  "equipment": zod.number(),
+  "total": zod.number()
+}).describe('Fixed monthly depreciation constants, scaled by months spanned. Non-cash.'),
+  "packageMix": zod.array(zod.object({
+  "packageId": zod.number().int(),
+  "name": zod.string(),
+  "price": zod.number(),
+  "jobs": zod.number().int(),
+  "revenue": zod.number()
+}).describe('Real per-package booking counts\/revenue for the report\'s period.')),
+  "revenueByEmployee": zod.array(zod.object({
+  "employeeId": zod.number().int(),
+  "name": zod.string(),
+  "revenue": zod.number()
+}).describe('Real revenue attributed to one employee via `employee_splits` on completed bookings in the period. Only employees with nonzero revenue are included.')),
+  "balanceSheet": zod.object({
+  "asOf": zod.coerce.date(),
+  "cash": zod.number(),
+  "accountsReceivable": zod.number(),
+  "prepaidExpenses": zod.number(),
+  "totalCurrentAssets": zod.number(),
+  "vehicleNet": zod.number(),
+  "equipmentNet": zod.number(),
+  "totalAssets": zod.number(),
+  "accountsPayable": zod.number(),
+  "vehicleLoanBalance": zod.number(),
+  "totalLiabilities": zod.number(),
+  "ownersEquity": zod.number()
+}).describe('`accountsReceivable` is real (unpaid completed bookings in the period); every other field is a fixed constant ported verbatim from `artifacts\/detail-hub\/src\/lib\/reporting-data.ts`\'s `BALANCE_SHEET` (no real ledger exists yet for cash, prepaid expenses, vehicle\/equipment net value, accounts payable, the vehicle loan balance, or owner\'s equity).'),
+  "cashFlow": zod.object({
+  "netIncome": zod.number(),
+  "depreciation": zod.number(),
+  "changeReceivables": zod.number(),
+  "changePayables": zod.number(),
+  "cashFromOperations": zod.number(),
+  "loanPayments": zod.number(),
+  "ownerDraws": zod.number(),
+  "cashFromFinancing": zod.number(),
+  "netChange": zod.number(),
+  "cashBeginning": zod.number(),
+  "cashEnding": zod.number()
+}).describe('`netIncome`\/`changeReceivables` are real (the latter is this period\'s real accounts receivable minus the previous equivalent period\'s); `depreciation`, `changePayables`, `loanPayments`, and `cashEnding` are fixed-formula\/constant, ported verbatim from `reporting-data.ts`\'s `getCashFlow`. `ownerDraws` is a fixed percentage (~55%) applied to the now-real `netIncome`.'),
+  "trend": zod.array(zod.object({
+  "ym": zod.string().describe('YYYY-MM'),
+  "month": zod.string().describe('Short month label, e.g. \"Jul\".'),
+  "revenue": zod.number(),
+  "netIncome": zod.number()
+}).describe('One month of the trailing-6-month revenue\/net-income trend chart.'))
+}).describe('Response of `GET \/reports\/financials`. See that path\'s own description, and `calculateFinancialReport` in `@workspace\/db`\'s `reports.ts`, for the exact real-data-vs-fixed-constant breakdown of every field below.')
 
 

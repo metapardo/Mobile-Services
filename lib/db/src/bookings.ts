@@ -270,3 +270,103 @@ export async function deleteBooking(organizationId: string, id: number): Promise
     return deleted.length > 0;
   });
 }
+
+/**
+ * Thrown by `recordBookingPayment` when `paymentMethod === "credit_card"`.
+ * `PRD_DetailHub_Payment_Methods.md` FR-5: card processing requires a connected
+ * processor (Stripe/Square — integrations-engineer's build), which doesn't exist yet.
+ * Routes should catch this specifically and respond 422 with a
+ * `card_processing_not_available` error code — never simulate or fake a card charge.
+ */
+export class CardProcessingUnavailableError extends Error {}
+
+export type RecordBookingPaymentInput = {
+  paymentMethod: "zelle" | "venmo" | "cash" | "credit_card";
+  paymentReference?: string | null;
+};
+
+/**
+ * `POST /bookings/:id/payment` (FR-2). For `zelle`/`venmo`/`cash`, records the tender
+ * type + optional free-text reference and timestamps it — this is *recording*, not
+ * processing (Section 6.2): the money already moved outside the app. `credit_card`
+ * always throws `CardProcessingUnavailableError` — no processor is connected in this
+ * codebase (Section 8), and this function must never fall through to any real or
+ * simulated charge logic for that case.
+ */
+export async function recordBookingPayment(
+  organizationId: string,
+  id: number,
+  input: RecordBookingPaymentInput,
+): Promise<BookingWithRelations | null> {
+  if (input.paymentMethod === "credit_card") {
+    throw new CardProcessingUnavailableError(
+      "Card processing isn't available yet — no payment processor is connected. See Settings once one is.",
+    );
+  }
+  return withOrganization(organizationId, async (tx) => {
+    const [updated] = await tx
+      .update(bookingsTable)
+      .set({
+        paymentMethod: input.paymentMethod,
+        paymentReference: input.paymentReference ?? null,
+        paymentRecordedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(bookingsTable.organizationId, organizationId), eq(bookingsTable.id, id)))
+      .returning();
+    if (!updated) return null;
+
+    const [packageRows, splitRows] = await Promise.all([
+      tx
+        .select({ packageId: bookingPackagesTable.packageId })
+        .from(bookingPackagesTable)
+        .where(and(eq(bookingPackagesTable.organizationId, organizationId), eq(bookingPackagesTable.bookingId, id))),
+      tx
+        .select({ employeeId: employeeSplitsTable.employeeId, percentage: employeeSplitsTable.percentage })
+        .from(employeeSplitsTable)
+        .where(and(eq(employeeSplitsTable.organizationId, organizationId), eq(employeeSplitsTable.bookingId, id))),
+    ]);
+    return { ...updated, packageIds: packageRows.map((r) => r.packageId), employeeSplit: splitRows };
+  });
+}
+
+export type RefundBookingInput = { refundReference?: string | null };
+
+/**
+ * `POST /bookings/:id/refund` (FR-8). Always a manual reversal record — per
+ * `PRD_DetailHub_Payment_Methods.md` Section 6.2/FR-8, none of Zelle/Venmo/Cash has a
+ * processor API to call for a real refund, and no card processor is connected either
+ * (Section 8), so this never calls any processor refund endpoint, real or simulated.
+ * Sets `refundStatus: "completed"` directly (no `"requested"` intermediate state is
+ * built in this pass — see the enum's own doc comment in `../schema/bookings.ts`).
+ */
+export async function refundBooking(
+  organizationId: string,
+  id: number,
+  input: RefundBookingInput = {},
+): Promise<BookingWithRelations | null> {
+  return withOrganization(organizationId, async (tx) => {
+    const [updated] = await tx
+      .update(bookingsTable)
+      .set({
+        refundStatus: "completed",
+        refundReference: input.refundReference ?? null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(bookingsTable.organizationId, organizationId), eq(bookingsTable.id, id)))
+      .returning();
+    if (!updated) return null;
+
+    const [packageRows, splitRows] = await Promise.all([
+      tx
+        .select({ packageId: bookingPackagesTable.packageId })
+        .from(bookingPackagesTable)
+        .where(and(eq(bookingPackagesTable.organizationId, organizationId), eq(bookingPackagesTable.bookingId, id))),
+      tx
+        .select({ employeeId: employeeSplitsTable.employeeId, percentage: employeeSplitsTable.percentage })
+        .from(employeeSplitsTable)
+        .where(and(eq(employeeSplitsTable.organizationId, organizationId), eq(employeeSplitsTable.bookingId, id))),
+    ]);
+    return { ...updated, packageIds: packageRows.map((r) => r.packageId), employeeSplit: splitRows };
+  });
+}

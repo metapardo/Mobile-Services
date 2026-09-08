@@ -5,7 +5,10 @@ import {
   createBooking,
   updateBooking,
   deleteBooking,
+  recordBookingPayment,
+  refundBooking,
   BookingValidationError,
+  CardProcessingUnavailableError,
   type BookingWithRelations,
 } from "@workspace/db";
 import {
@@ -18,6 +21,12 @@ import {
   UpdateBookingBody,
   UpdateBookingResponse,
   DeleteBookingParams,
+  RecordBookingPaymentParams,
+  RecordBookingPaymentBody,
+  RecordBookingPaymentResponse,
+  RefundBookingParams,
+  RefundBookingBody,
+  RefundBookingResponse,
 } from "@workspace/api-zod";
 import { requireOrgSession } from "../middlewares/require-org-session";
 import { logger } from "../lib/logger";
@@ -73,7 +82,10 @@ function toWire(row: BookingWithRelations) {
     status: row.status,
     notes: row.notes,
     paymentMethod: row.paymentMethod,
-    paymentNote: row.paymentNote,
+    paymentReference: row.paymentReference,
+    paymentRecordedAt: row.paymentRecordedAt,
+    refundStatus: row.refundStatus,
+    refundReference: row.refundReference,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
@@ -153,8 +165,14 @@ router.post("/bookings", requireOrgSession, async (req, res) => {
       parkingCost: String(body.parkingCost),
       status: body.status,
       notes: body.notes ?? null,
-      paymentMethod: body.paymentMethod ?? null,
-      paymentNote: body.paymentNote ?? null,
+      // `paymentMethod`/`paymentReference`/`refundStatus`/`refundReference` are
+      // deliberately NOT settable here — Payment Methods PRD FR-1/FR-2's checkout flow
+      // records payment as its own dedicated step (`POST /bookings/:id/payment`),
+      // after a booking already exists, not a field set at creation. Routing all
+      // payment writes through that one endpoint (and `POST /bookings/:id/refund`) is
+      // also what keeps FR-5's "credit_card must be rejected, no processor connected"
+      // guard as a single enforced choke point rather than something a generic
+      // `PATCH /bookings/:id` could quietly bypass.
     });
     const data = CreateBookingResponse.parse(toWire(row));
     res.status(201).json(data);
@@ -224,8 +242,8 @@ router.patch("/bookings/:id", requireOrgSession, async (req, res) => {
       ...(body.parkingCost !== undefined && { parkingCost: String(body.parkingCost) }),
       ...(body.status !== undefined && { status: body.status }),
       ...(body.notes !== undefined && { notes: body.notes }),
-      ...(body.paymentMethod !== undefined && { paymentMethod: body.paymentMethod }),
-      ...(body.paymentNote !== undefined && { paymentNote: body.paymentNote }),
+      // See `POST /bookings`'s comment above — payment/refund fields are only
+      // settable via `POST /bookings/:id/payment` and `POST /bookings/:id/refund`.
     });
     if (!row) {
       res.status(404).json({ error: "booking_not_found" });
@@ -271,6 +289,81 @@ router.delete("/bookings/:id", requireOrgSession, async (req, res) => {
     res.status(204).send();
   } catch (err) {
     logger.error({ err }, "DELETE /bookings/:id: unexpected failure");
+    await captureAndFlush(err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/**
+ * POST /bookings/:id/payment — PRD_DetailHub_Payment_Methods.md FR-1/FR-2/FR-5.
+ * `zelle`/`venmo`/`cash` record the tender type + optional reference note and
+ * timestamp it. `credit_card` ALWAYS fails with 422 `card_processing_not_available` —
+ * no processor is connected anywhere in this codebase (Section 8), and this route
+ * must never fall through to any real or simulated charge logic for that case.
+ */
+router.post("/bookings/:id/payment", requireOrgSession, async (req, res) => {
+  const parsedParams = RecordBookingPaymentParams.safeParse(req.params);
+  if (!parsedParams.success) {
+    res.status(400).json({ error: "invalid_request", message: parsedParams.error.message });
+    return;
+  }
+  const parsedBody = RecordBookingPaymentBody.safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({ error: "invalid_request", message: parsedBody.error.message });
+    return;
+  }
+  const body = parsedBody.data;
+  try {
+    const row = await recordBookingPayment(req.organizationId!, parsedParams.data.id, {
+      paymentMethod: body.paymentMethod,
+      paymentReference: body.paymentReference ?? null,
+    });
+    if (!row) {
+      res.status(404).json({ error: "booking_not_found" });
+      return;
+    }
+    const data = RecordBookingPaymentResponse.parse(toWire(row));
+    res.status(200).json(data);
+  } catch (err) {
+    if (err instanceof CardProcessingUnavailableError) {
+      res.status(422).json({ error: "card_processing_not_available", message: err.message });
+      return;
+    }
+    logger.error({ err }, "POST /bookings/:id/payment: unexpected failure");
+    await captureAndFlush(err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/**
+ * POST /bookings/:id/refund — FR-8/Section 6.2. Always a manual reversal record; no
+ * processor refund API is ever called here for any tender type (see
+ * `refundBooking`'s doc comment in `@workspace/db`).
+ */
+router.post("/bookings/:id/refund", requireOrgSession, async (req, res) => {
+  const parsedParams = RefundBookingParams.safeParse(req.params);
+  if (!parsedParams.success) {
+    res.status(400).json({ error: "invalid_request", message: parsedParams.error.message });
+    return;
+  }
+  const parsedBody = RefundBookingBody.safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({ error: "invalid_request", message: parsedBody.error.message });
+    return;
+  }
+  const body = parsedBody.data;
+  try {
+    const row = await refundBooking(req.organizationId!, parsedParams.data.id, {
+      refundReference: body.refundReference ?? null,
+    });
+    if (!row) {
+      res.status(404).json({ error: "booking_not_found" });
+      return;
+    }
+    const data = RefundBookingResponse.parse(toWire(row));
+    res.status(200).json(data);
+  } catch (err) {
+    logger.error({ err }, "POST /bookings/:id/refund: unexpected failure");
     await captureAndFlush(err);
     res.status(500).json({ error: "internal_error" });
   }

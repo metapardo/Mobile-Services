@@ -1,26 +1,68 @@
 import { useState } from 'react';
-import { bookings, packages, employees } from '@/lib/mock-data';
 import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Cell,
+  ResponsiveContainer, BarChart, Bar,
 } from 'recharts';
 import {
-  startOfWeek, endOfWeek, format, isToday,
+  startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, subMonths, format,
 } from 'date-fns';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import {
-  MONTHLY_SUMMARY, QUARTERLY_SUMMARY, ANNUAL_SUMMARY,
-  getTrendData, getCashFlow, BALANCE_SHEET,
-  type PeriodSummary,
-} from '@/lib/reporting-data';
+  useListBookings, useListPackages, useGetFinancialReport, getGetFinancialReportQueryKey,
+  type FinancialReportResult,
+} from '@workspace/api-client-react';
+import { adaptBooking, isoDateOnly } from '@/lib/api-adapters';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Period = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual';
+type FinancialPeriod = 'monthly' | 'quarterly' | 'annual';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt$ = (n: number, decimals = 0) =>
   '$' + n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 const fmtPct = (n: number) => n.toFixed(1) + '%';
+
+/** "2026-09" -> "September 2026" (or a custom date-fns format string). */
+function formatYm(ym: string, formatStr = 'MMMM yyyy') {
+  const [y, m] = ym.split('-').map(Number);
+  return format(new Date(y, m - 1, 1), formatStr);
+}
+
+/** Human-readable top-of-tab label, e.g. "September 2026" / "Trailing 3 months
+ * (Jul 2026 – Sep 2026)" / "Year to date (Jan 2026 – Sep 2026)". */
+function getPeriodLabel(period: FinancialPeriod, months: string[]): string {
+  if (months.length === 0) return '';
+  if (period === 'monthly') return formatYm(months[0]);
+  const prefix = period === 'quarterly' ? `Trailing ${months.length} months` : 'Year to date';
+  return `${prefix} (${formatYm(months[0], 'MMM yyyy')} – ${formatYm(months[months.length - 1], 'MMM yyyy')})`;
+}
+
+/** Raw `YYYY-MM` range label used repeatedly inside card subtitles, matching the
+ * app's existing convention of showing the underlying months verbatim there. */
+function monthsRangeLabel(months: string[]): string {
+  if (months.length === 0) return '';
+  if (months.length === 1) return months[0];
+  return `Trailing ${months.length} months (${months[0]} – ${months[months.length - 1]})`;
+}
+
+function LoadingCard() {
+  return (
+    <Card className="p-8 flex items-center justify-center">
+      <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+    </Card>
+  );
+}
+
+function ErrorCard() {
+  return (
+    <Card className="p-8 text-center space-y-2">
+      <AlertTriangle className="w-8 h-8 text-destructive mx-auto" />
+      <p className="text-[15px] font-semibold">Couldn't load report data</p>
+      <p className="text-[13px] text-muted-foreground">Check your connection and try again.</p>
+    </Card>
+  );
+}
 
 function StatCard({
   label, value, sub, accent = false,
@@ -79,10 +121,23 @@ function OperationalView({ period }: { period: 'daily' | 'weekly' }) {
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
   const weekEnd   = endOfWeek(now,   { weekStartsOn: 1 });
 
+  const rangeStart = period === 'daily' ? dayStr : format(weekStart, 'yyyy-MM-dd');
+  const rangeEnd   = period === 'daily' ? dayStr : format(weekEnd,   'yyyy-MM-dd');
+
+  // Real data — FR-9: scoped to the visible day/week via GET /bookings' start/end
+  // params, same as calendar.tsx's convention.
+  const bookingsQuery = useListBookings({ start: rangeStart, end: rangeEnd });
+  const packagesQuery = useListPackages({ includeArchived: true });
+
+  const loadFailed = bookingsQuery.isError || packagesQuery.isError;
+  const isLoading  = bookingsQuery.isLoading || packagesQuery.isLoading;
+
+  const packages = packagesQuery.data ?? [];
+  const bookings = (bookingsQuery.data ?? []).map(adaptBooking);
+
   const relevant = bookings.filter(b => {
     if (b.status === 'cancelled' || b.status === 'no-show') return false;
-    if (period === 'daily') return b.date === dayStr;
-    return b.date >= format(weekStart, 'yyyy-MM-dd') && b.date <= format(weekEnd, 'yyyy-MM-dd');
+    return b.date >= rangeStart && b.date <= rangeEnd;
   });
 
   const revenue = relevant.reduce((s, b) =>
@@ -91,13 +146,17 @@ function OperationalView({ period }: { period: 'daily' | 'weekly' }) {
   const avgTicket = jobs > 0 ? revenue / jobs : 0;
   const completed = relevant.filter(b => b.status === 'completed').length;
 
-  // Gross margin approx from synthetic rates
+  // Est. Gross Margin: hardcoded 38.9% constant, unchanged — no real per-booking
+  // cost data (labor/materials/gas per job) exists yet to replace it with.
   const gm = revenue > 0 ? revenue * 0.389 : 0;
   const gmPct = revenue > 0 ? 38.9 : 0;
 
   const periodLabel = period === 'daily'
     ? format(now, 'EEEE, MMMM d')
     : `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
+
+  if (loadFailed) return <ErrorCard />;
+  if (isLoading) return <LoadingCard />;
 
   return (
     <div className="space-y-4">
@@ -155,35 +214,28 @@ function OperationalView({ period }: { period: 'daily' | 'weekly' }) {
 }
 
 // ─── Full financial view (monthly / quarterly / annual) ───────────────────────
-function FinancialView({ summary, periodLabel }: { summary: PeriodSummary; periodLabel: string }) {
-  const trendData  = getTrendData();
-  const cashFlow   = getCashFlow(summary);
-  const maxPkgRev  = Math.max(...summary.pkgMix.map(p => p.revenue));
+function FinancialView({ report, periodLabel }: { report: FinancialReportResult; periodLabel: string }) {
+  const monthsLabel = monthsRangeLabel(report.months);
+  const maxPkgRev = report.packageMix.length > 0
+    ? Math.max(...report.packageMix.map(p => p.revenue))
+    : 0;
 
-  // Revenue by employee from live bookings (best-effort from real data)
-  const empRevenue = employees.map(emp => {
-    const empBookings = bookings.filter(
-      b => b.status === 'completed' && b.employeeIds.includes(emp.id)
-    );
-    const rev = empBookings.reduce((s, b) => {
-      const total = b.packageIds.reduce((ps, id) => ps + (packages.find(p => p.id === id)?.price ?? 0), 0);
-      const split = b.employeeSplit.find(sp => sp.employeeId === emp.id);
-      return s + total * (split?.percentage ?? 100) / 100;
-    }, 0);
-    return { name: emp.name.split(' ')[0], revenue: rev, color: emp.color };
-  }).filter(e => e.revenue > 0);
-
-  // "Where the money goes" cost breakdown
+  // "Where the money goes" cost breakdown. Card processing is dropped entirely —
+  // Checkout only supports zelle/venmo/cash, so there's no card-fee line to show.
   const costItems = [
-    { label: 'Labor (commission)', value: summary.labor },
-    { label: 'Operating expenses', value: summary.totalOpex },
-    { label: 'Materials & supplies', value: summary.materials },
-    { label: 'Gas', value: summary.gas },
-    { label: 'Card processing', value: summary.cardFees },
-    { label: 'Interest & tax', value: summary.interest + summary.tax },
+    { label: 'Labor (commission)', value: report.cogs.labor },
+    { label: 'Operating expenses', value: report.opex.total },
+    { label: 'Materials & supplies', value: report.cogs.materials },
+    { label: 'Gas', value: report.cogs.gas },
+    { label: 'Interest & tax', value: report.interest + report.tax },
   ];
   const totalCosts = costItems.reduce((s, c) => s + c.value, 0);
-  const COLORS = ['#3654FF', '#7C3AED', '#06B6D4', '#1E9E62', '#D9A404', '#DC2626'];
+  const COLORS = ['#3654FF', '#7C3AED', '#06B6D4', '#1E9E62', '#D9A404'];
+
+  const empRevenue = report.revenueByEmployee.map(e => ({
+    name: e.name.split(' ')[0],
+    revenue: e.revenue,
+  }));
 
   return (
     <div className="space-y-5">
@@ -196,33 +248,33 @@ function FinancialView({ summary, periodLabel }: { summary: PeriodSummary; perio
       <div className="grid grid-cols-2 gap-3">
         <StatCard
           label="Revenue"
-          value={fmt$(summary.revenue)}
-          sub={`${summary.months.length > 1 ? 'Trailing ' + summary.months.length + ' months' : summary.months[0]}`}
+          value={fmt$(report.revenue)}
+          sub={report.months.length > 1 ? `Trailing ${report.months.length} months` : report.months[0]}
         />
         <StatCard
           label="Gross Margin"
-          value={fmtPct(summary.grossMarginPct)}
-          sub={`${fmt$(summary.grossProfit)} gross profit`}
+          value={fmtPct(report.grossMarginPct)}
+          sub={`${fmt$(report.grossProfit)} gross profit`}
         />
         <StatCard
           label="Net Margin"
-          value={fmtPct(summary.netMarginPct)}
-          sub={`${fmt$(summary.netIncome)} net income`}
+          value={fmtPct(report.netMarginPct)}
+          sub={`${fmt$(report.netIncome)} net income`}
         />
         <StatCard
           label="Jobs Completed"
-          value={summary.jobs.toLocaleString()}
-          sub={`avg ticket ${fmt$(summary.avgTicket)}`}
+          value={report.jobs.toLocaleString()}
+          sub={`avg ticket ${fmt$(report.avgTicket)}`}
         />
         <StatCard
           label="Cash on Hand"
-          value={fmt$(BALANCE_SHEET.cash)}
-          sub={`as of ${BALANCE_SHEET.asOf}`}
+          value={fmt$(report.balanceSheet.cash)}
+          sub={`as of ${isoDateOnly(report.balanceSheet.asOf)}`}
           accent
         />
         <StatCard
           label="Total Liabilities"
-          value={fmt$(BALANCE_SHEET.totalLiabilities)}
+          value={fmt$(report.balanceSheet.totalLiabilities)}
           sub="loan + payables"
         />
       </div>
@@ -234,7 +286,7 @@ function FinancialView({ summary, periodLabel }: { summary: PeriodSummary; perio
           <p className="text-[12px] text-muted-foreground">6-month history, monthly</p>
         </div>
         <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={trendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+          <AreaChart data={report.trend} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%"  stopColor="#3654FF" stopOpacity={0.15} />
@@ -275,13 +327,7 @@ function FinancialView({ summary, periodLabel }: { summary: PeriodSummary; perio
         </div>
         <div className="flex gap-4 items-center">
           <div style={{ width: 130, height: 130, flexShrink: 0 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[{ name: '' }]} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                {/* Fake pie with bar segments — use a real PieChart instead */}
-              </BarChart>
-            </ResponsiveContainer>
-            {/* Use a donut via CSS */}
-            <div className="relative w-full h-full" style={{ marginTop: -130 }}>
+            <div className="relative w-full h-full">
               <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
                 {(() => {
                   let offset = 0;
@@ -323,16 +369,14 @@ function FinancialView({ summary, periodLabel }: { summary: PeriodSummary; perio
       <Card className="p-4">
         <div className="mb-3">
           <p className="text-[15px] font-semibold">Package mix</p>
-          <p className="text-[12px] text-muted-foreground">
-            {summary.months.length > 1
-              ? `Trailing ${summary.months.length} months (${summary.months[0]} – ${summary.months[summary.months.length - 1]})`
-              : summary.months[0]}
-          </p>
+          <p className="text-[12px] text-muted-foreground">{monthsLabel}</p>
         </div>
         <div>
-          {summary.pkgMix.map(p => (
-            <PkgBar key={p.name} name={p.name} rev={p.revenue} jobs={p.jobs} maxRev={maxPkgRev} />
-          ))}
+          {report.packageMix.length > 0
+            ? report.packageMix.map(p => (
+                <PkgBar key={p.packageId} name={p.name} rev={p.revenue} jobs={p.jobs} maxRev={maxPkgRev} />
+              ))
+            : <p className="text-[13px] text-muted-foreground text-center py-4">No completed bookings this period</p>}
         </div>
       </Card>
 
@@ -340,35 +384,29 @@ function FinancialView({ summary, periodLabel }: { summary: PeriodSummary; perio
       <Card className="p-4">
         <div className="mb-3">
           <p className="text-[15px] font-semibold">Income statement</p>
-          <p className="text-[12px] text-muted-foreground">
-            {summary.months.length > 1
-              ? `Trailing ${summary.months.length} months (${summary.months[0]} – ${summary.months[summary.months.length - 1]})`
-              : summary.months[0]}
-          </p>
+          <p className="text-[12px] text-muted-foreground">{monthsLabel}</p>
         </div>
         <div className="divide-y-0">
           <p className="text-[13px] font-semibold mt-1 mb-0.5">Revenue</p>
-          <LedgerRow label="Service revenue" value={summary.revenue} indent />
-          <LedgerRow label="Tips (pass-through, not income)" value={summary.tips} indent muted />
+          <LedgerRow label="Service revenue" value={report.revenue} indent />
 
           <p className="text-[13px] font-semibold mt-3 mb-0.5">Cost of service</p>
-          <LedgerRow label="Labor (commission)" value={summary.labor} indent />
-          <LedgerRow label="Materials & supplies" value={summary.materials} indent />
-          <LedgerRow label="Gas" value={summary.gas} indent />
-          <LedgerRow label="Card processing fees" value={summary.cardFees} indent />
-          <LedgerRow label={`Gross profit (${fmtPct(summary.grossMarginPct)})`} value={summary.grossProfit} bold />
+          <LedgerRow label="Labor (commission)" value={report.cogs.labor} indent />
+          <LedgerRow label="Materials & supplies" value={report.cogs.materials} indent />
+          <LedgerRow label="Gas" value={report.cogs.gas} indent />
+          <LedgerRow label={`Gross profit (${fmtPct(report.grossMarginPct)})`} value={report.grossProfit} bold />
 
           <p className="text-[13px] font-semibold mt-3 mb-0.5">Operating expenses</p>
-          <LedgerRow label="Insurance" value={summary.insurance} indent />
-          <LedgerRow label="Vehicle maintenance" value={summary.vehicleMaint} indent />
-          <LedgerRow label="Software & subscriptions" value={summary.software} indent />
-          <LedgerRow label="Marketing" value={summary.marketing} indent />
-          <LedgerRow label="Admin wages" value={summary.adminWages} indent />
-          <LedgerRow label={`Operating income (${fmtPct(summary.operatingMarginPct)})`} value={summary.operatingIncome} bold />
+          <LedgerRow label="Insurance" value={report.opex.insurance} indent />
+          <LedgerRow label="Vehicle maintenance" value={report.opex.vehicleMaint} indent />
+          <LedgerRow label="Software & subscriptions" value={report.opex.software} indent />
+          <LedgerRow label="Marketing" value={report.opex.marketing} indent />
+          <LedgerRow label="Admin wages" value={report.opex.adminWages} indent />
+          <LedgerRow label={`Operating income (${fmtPct(report.operatingMarginPct)})`} value={report.operatingIncome} bold />
 
-          <LedgerRow label="Interest expense" value={summary.interest} indent />
-          <LedgerRow label="Income tax (illustrative 25%)" value={summary.tax} indent />
-          <LedgerRow label={`Net income (${fmtPct(summary.netMarginPct)})`} value={summary.netIncome} bold green />
+          <LedgerRow label="Interest expense" value={report.interest} indent />
+          <LedgerRow label="Income tax (illustrative 25%)" value={report.tax} indent />
+          <LedgerRow label={`Net income (${fmtPct(report.netMarginPct)})`} value={report.netIncome} bold green />
         </div>
       </Card>
 
@@ -376,52 +414,48 @@ function FinancialView({ summary, periodLabel }: { summary: PeriodSummary; perio
       <Card className="p-4">
         <div className="mb-3">
           <p className="text-[15px] font-semibold">Balance sheet</p>
-          <p className="text-[12px] text-muted-foreground">as of {BALANCE_SHEET.asOf}</p>
+          <p className="text-[12px] text-muted-foreground">as of {isoDateOnly(report.balanceSheet.asOf)}</p>
         </div>
         <p className="text-[13px] font-semibold mt-1 mb-0.5">Assets</p>
-        <LedgerRow label="Cash" value={BALANCE_SHEET.cash} indent />
-        <LedgerRow label="Accounts receivable" value={BALANCE_SHEET.accountsReceivable} indent />
-        <LedgerRow label="Prepaid expenses" value={BALANCE_SHEET.prepaidExpenses} indent />
-        <LedgerRow label="Total current assets" value={BALANCE_SHEET.totalCurrentAssets} muted indent />
-        <LedgerRow label="Vehicle (net of depreciation)" value={BALANCE_SHEET.vehicleNet} indent />
-        <LedgerRow label="Equipment (net of depreciation)" value={BALANCE_SHEET.equipmentNet} indent />
-        <LedgerRow label="Total assets" value={BALANCE_SHEET.totalAssets} bold />
+        <LedgerRow label="Cash" value={report.balanceSheet.cash} indent />
+        <LedgerRow label="Accounts receivable" value={report.balanceSheet.accountsReceivable} indent />
+        <LedgerRow label="Prepaid expenses" value={report.balanceSheet.prepaidExpenses} indent />
+        <LedgerRow label="Total current assets" value={report.balanceSheet.totalCurrentAssets} muted indent />
+        <LedgerRow label="Vehicle (net of depreciation)" value={report.balanceSheet.vehicleNet} indent />
+        <LedgerRow label="Equipment (net of depreciation)" value={report.balanceSheet.equipmentNet} indent />
+        <LedgerRow label="Total assets" value={report.balanceSheet.totalAssets} bold />
 
         <p className="text-[13px] font-semibold mt-3 mb-0.5">Liabilities</p>
-        <LedgerRow label="Accounts payable" value={BALANCE_SHEET.accountsPayable} indent />
-        <LedgerRow label="Vehicle loan balance" value={BALANCE_SHEET.vehicleLoanBalance} indent />
-        <LedgerRow label="Total liabilities" value={BALANCE_SHEET.totalLiabilities} muted indent />
+        <LedgerRow label="Accounts payable" value={report.balanceSheet.accountsPayable} indent />
+        <LedgerRow label="Vehicle loan balance" value={report.balanceSheet.vehicleLoanBalance} indent />
+        <LedgerRow label="Total liabilities" value={report.balanceSheet.totalLiabilities} muted indent />
 
         <p className="text-[13px] font-semibold mt-3 mb-0.5">Equity</p>
-        <LedgerRow label="Owner's equity" value={BALANCE_SHEET.ownersEquity} bold />
+        <LedgerRow label="Owner's equity" value={report.balanceSheet.ownersEquity} bold />
       </Card>
 
       {/* Cash flow */}
       <Card className="p-4">
         <div className="mb-3">
           <p className="text-[15px] font-semibold">Cash flow</p>
-          <p className="text-[12px] text-muted-foreground">
-            {summary.months.length > 1
-              ? `Trailing ${summary.months.length} months (${summary.months[0]} – ${summary.months[summary.months.length - 1]})`
-              : summary.months[0]}
-          </p>
+          <p className="text-[12px] text-muted-foreground">{monthsLabel}</p>
         </div>
         <p className="text-[13px] font-semibold mt-1 mb-0.5">Operating activities</p>
-        <LedgerRow label="Net income"              value={cashFlow.netIncome} indent />
-        <LedgerRow label="Depreciation"            value={cashFlow.depreciation} indent />
-        <LedgerRow label="Change in receivables"   value={cashFlow.changeReceivables} indent negative={cashFlow.changeReceivables < 0} />
-        <LedgerRow label="Change in payables"      value={cashFlow.changePayables} indent negative={cashFlow.changePayables < 0} />
-        <LedgerRow label="Cash from operations"    value={cashFlow.cashFromOperations} bold />
+        <LedgerRow label="Net income"              value={report.cashFlow.netIncome} indent />
+        <LedgerRow label="Depreciation"            value={report.cashFlow.depreciation} indent />
+        <LedgerRow label="Change in receivables"   value={report.cashFlow.changeReceivables} indent negative={report.cashFlow.changeReceivables < 0} />
+        <LedgerRow label="Change in payables"      value={report.cashFlow.changePayables} indent negative={report.cashFlow.changePayables < 0} />
+        <LedgerRow label="Cash from operations"    value={report.cashFlow.cashFromOperations} bold />
 
         <p className="text-[13px] font-semibold mt-3 mb-0.5">Financing activities</p>
-        <LedgerRow label="Loan principal payments" value={cashFlow.loanPayments} indent negative />
-        <LedgerRow label="Owner draws"             value={cashFlow.ownerDraws} indent negative />
-        <LedgerRow label="Cash from financing"     value={cashFlow.cashFromFinancing} bold negative />
+        <LedgerRow label="Loan principal payments" value={report.cashFlow.loanPayments} indent negative />
+        <LedgerRow label="Owner draws"             value={report.cashFlow.ownerDraws} indent negative />
+        <LedgerRow label="Cash from financing"     value={report.cashFlow.cashFromFinancing} bold negative />
 
         <p className="text-[13px] font-semibold mt-3 mb-0.5">Net change</p>
-        <LedgerRow label="Net change in cash" value={cashFlow.netChange} indent green={cashFlow.netChange > 0} />
-        <LedgerRow label="Cash, beginning"    value={cashFlow.cashBeginning} indent />
-        <LedgerRow label="Cash, ending"       value={cashFlow.cashEnding} bold green />
+        <LedgerRow label="Net change in cash" value={report.cashFlow.netChange} indent green={report.cashFlow.netChange > 0} />
+        <LedgerRow label="Cash, beginning"    value={report.cashFlow.cashBeginning} indent />
+        <LedgerRow label="Cash, ending"       value={report.cashFlow.cashEnding} bold green />
       </Card>
 
       {/* ── Revenue by employee (bottom) ── */}
@@ -435,9 +469,7 @@ function FinancialView({ summary, periodLabel }: { summary: PeriodSummary; perio
               <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => '$' + v} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} width={52} />
               <Tooltip formatter={(v: number) => [fmt$(v, 2), 'Revenue']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-              <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
-                {empRevenue.map((e, i) => <Cell key={i} fill={e.color} />)}
-              </Bar>
+              <Bar dataKey="revenue" radius={[0, 4, 4, 0]} fill="#3654FF" />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -458,13 +490,38 @@ export default function Reporting() {
     { key: 'annual',    label: 'Annual'    },
   ];
 
-  const getFinancialSummary = () => {
-    if (period === 'monthly')   return { summary: MONTHLY_SUMMARY,   label: 'July 2026' };
-    if (period === 'quarterly') return { summary: QUARTERLY_SUMMARY, label: 'Trailing 3 months (2026-05 – 2026-07)' };
-    return { summary: ANNUAL_SUMMARY, label: 'Year to date (2026-01 – 2026-07)' };
-  };
-
   const isFinancial = period === 'monthly' || period === 'quarterly' || period === 'annual';
+
+  // Real period boundaries for the Financial View — Monthly is the current
+  // calendar month, Quarterly is the trailing 3 calendar months, Annual is
+  // year-to-date. `GET /reports/financials` computes everything else.
+  const now = new Date();
+  let financialStart = now;
+  let financialEnd = now;
+  if (period === 'monthly') {
+    financialStart = startOfMonth(now);
+    financialEnd = endOfMonth(now);
+  } else if (period === 'quarterly') {
+    financialStart = startOfMonth(subMonths(now, 2));
+    financialEnd = endOfMonth(now);
+  } else if (period === 'annual') {
+    financialStart = startOfYear(now);
+    financialEnd = endOfMonth(now);
+  }
+
+  const financialReportParams = {
+    start: format(financialStart, 'yyyy-MM-dd'),
+    end: format(financialEnd, 'yyyy-MM-dd'),
+  };
+  const financialReportQuery = useGetFinancialReport(
+    financialReportParams,
+    {
+      query: {
+        queryKey: getGetFinancialReportQueryKey(financialReportParams),
+        enabled: isFinancial,
+      },
+    },
+  );
 
   return (
     <div className="min-h-[100dvh] pb-24 md:pb-8">
@@ -490,10 +547,14 @@ export default function Reporting() {
 
         {/* Content */}
         {!isFinancial && <OperationalView period={period as 'daily' | 'weekly'} />}
-        {isFinancial && (() => {
-          const { summary, label } = getFinancialSummary();
-          return <FinancialView summary={summary} periodLabel={label} />;
-        })()}
+        {isFinancial && (
+          financialReportQuery.isError ? <ErrorCard /> :
+          financialReportQuery.isLoading || !financialReportQuery.data ? <LoadingCard /> :
+          <FinancialView
+            report={financialReportQuery.data}
+            periodLabel={getPeriodLabel(period as FinancialPeriod, financialReportQuery.data.months)}
+          />
+        )}
       </div>
     </div>
   );

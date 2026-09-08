@@ -6,11 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { EmployeeSplit } from './employeeSplit';
-import type { UpdateBookingRequestPaymentMethod } from './updateBookingRequestPaymentMethod';
 import type { UpdateBookingRequestStatus } from './updateBookingRequestStatus';
 
 /**
- * Partial update — all fields optional. Omitting `packageIds`/`employeeSplit` leaves them unchanged; passing either replaces the entire set.
+ * Partial update — all fields optional. Omitting `packageIds`/`employeeSplit` leaves them unchanged; passing either replaces the entire set. Payment/refund fields are not editable here — see `POST /bookings/{id}/payment` and `POST /bookings/{id}/refund`.
  */
 export interface UpdateBookingRequest {
   clientId?: number;
@@ -26,6 +25,4 @@ export interface UpdateBookingRequest {
   parkingCost?: number;
   status?: UpdateBookingRequestStatus;
   notes?: string | null;
-  paymentMethod?: UpdateBookingRequestPaymentMethod;
-  paymentNote?: string | null;
 }

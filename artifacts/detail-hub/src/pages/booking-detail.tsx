@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetBooking, useUpdateBooking, useDeleteBooking,
   useListClients, useListPackages, useListEmployees,
+  useRefundBooking,
   getGetBookingQueryKey, getListBookingsQueryKey,
   type UpdateBookingRequestStatus,
 } from '@workspace/api-client-react';
@@ -55,6 +56,8 @@ export default function BookingDetail() {
   const [employeeSplit, setEmployeeSplit] = useState<{ employeeId: number; percentage: number }[]>([]);
   const [selectedPackageIds, setSelectedPackageIds] = useState<number[]>([]);
   const [showAddService, setShowAddService] = useState(false);
+  const [showRefundDialog, setShowRefundDialog] = useState(false);
+  const [refundReference, setRefundReference] = useState('');
 
   // Sync local edit state from the fetched booking. Keyed on the booking's own id
   // (not the whole `booking` object, which changes identity on every refetch after a
@@ -101,6 +104,24 @@ export default function BookingDetail() {
       onError: (err) => {
         const message = err?.data?.message ?? 'Something went wrong deleting this booking. Please try again.';
         toast({ title: 'Delete failed', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  // FR-16/FR-8: always a manual reversal record — no processor refund call for any
+  // tender type (Zelle/Venmo/Cash never had one; Credit Card can't, no processor is
+  // connected — see `PRD_DetailHub_Payment_Methods.md` Section 6.2/FR-8).
+  const refundBookingMutation = useRefundBooking({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getGetBookingQueryKey(bookingId) });
+        setShowRefundDialog(false);
+        setRefundReference('');
+        toast({ title: 'Refund recorded' });
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong recording this refund. Please try again.';
+        toast({ title: 'Refund failed', description: message, variant: 'destructive' });
       },
     },
   });
@@ -161,6 +182,13 @@ export default function BookingDetail() {
 
   const handleDelete = () => {
     deleteBookingMutation.mutate({ id: bookingId });
+  };
+
+  const handleRefund = () => {
+    refundBookingMutation.mutate({
+      id: bookingId,
+      data: { refundReference: refundReference.trim() ? refundReference.trim() : null },
+    });
   };
 
   const handleSplitChange = (employeeId: number, percentage: number) => {
@@ -383,8 +411,32 @@ export default function BookingDetail() {
                 <PaymentMethodBadge method={booking.paymentMethod} size="sm" />
               )}
             </div>
-            {booking.paymentNote && (
-              <p className="text-[12px] text-muted-foreground mb-3 italic">"{booking.paymentNote}"</p>
+            {booking.paymentMethod && (
+              <div className="mb-3 space-y-1">
+                {booking.paymentReference && (
+                  <p className="text-[12px] text-muted-foreground italic">"{booking.paymentReference}"</p>
+                )}
+                {booking.paymentRecordedAt && (
+                  <p className="text-[12px] text-muted-foreground">
+                    Recorded {new Date(booking.paymentRecordedAt).toLocaleString()}
+                  </p>
+                )}
+                {booking.refundStatus === 'completed' ? (
+                  <p className="text-[12px] text-destructive font-medium">
+                    Refunded{booking.refundReference ? ` — "${booking.refundReference}"` : ''}
+                  </p>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-1 h-8"
+                    onClick={() => setShowRefundDialog(true)}
+                    data-testid="button-refund"
+                  >
+                    Refund
+                  </Button>
+                )}
+              </div>
             )}
             <div className="space-y-3">
               <div>
@@ -422,6 +474,37 @@ export default function BookingDetail() {
           </Card>
 
         </div>
+
+        {/* ── Refund dialog ──────────────────────────────────────────────── */}
+        <Dialog open={showRefundDialog} onOpenChange={setShowRefundDialog}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Record Refund</DialogTitle>
+            </DialogHeader>
+            <p className="text-[13px] text-muted-foreground">
+              This marks the booking as refunded for reporting — it's a manual reversal record only; no money actually moves through DetailHub for any payment method.
+            </p>
+            <div>
+              <Label htmlFor="refund-reference">Reference (optional)</Label>
+              <Textarea
+                id="refund-reference"
+                value={refundReference}
+                onChange={(e) => setRefundReference(e.target.value)}
+                placeholder="e.g. reason or confirmation note"
+                rows={2}
+                data-testid="input-refund-reference"
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleRefund}
+              disabled={refundBookingMutation.isPending}
+              data-testid="button-confirm-refund"
+            >
+              {refundBookingMutation.isPending ? 'Recording…' : 'Confirm Refund'}
+            </Button>
+          </DialogContent>
+        </Dialog>
 
         {/* ── Add service picker ─────────────────────────────────────────── */}
         <Dialog open={showAddService} onOpenChange={setShowAddService}>

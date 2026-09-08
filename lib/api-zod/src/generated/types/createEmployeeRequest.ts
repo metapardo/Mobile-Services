@@ -5,6 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BankAccount } from './bankAccount';
+import type { CreateEmployeeRequestPaymentMethod } from './createEmployeeRequestPaymentMethod';
+import type { CreateEmployeeRequestWorkerType } from './createEmployeeRequestWorkerType';
 
 export interface CreateEmployeeRequest {
   /** @minLength 1 */
@@ -14,4 +17,7 @@ export interface CreateEmployeeRequest {
   email?: string | null;
   phone?: string | null;
   active?: boolean;
+  workerType?: CreateEmployeeRequestWorkerType;
+  paymentMethod?: CreateEmployeeRequestPaymentMethod;
+  bankAccounts?: BankAccount[];
 }

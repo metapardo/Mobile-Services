@@ -1,4 +1,4 @@
-import { Banknote, CreditCard, Smartphone } from 'lucide-react';
+import { Banknote, CreditCard } from 'lucide-react';
 import type { PaymentMethodId } from '@/lib/mock-data';
 
 interface MethodConfig {
@@ -9,12 +9,12 @@ interface MethodConfig {
   letter?: string;
 }
 
+// Matches the real backend enum — see `PaymentMethodId` in `mock-data.ts`.
 const METHOD_CONFIG: Record<PaymentMethodId, MethodConfig> = {
-  cash:  { label: 'Cash',  bg: 'bg-emerald-500/15', text: 'text-emerald-700', Icon: Banknote },
-  zelle: { label: 'Zelle', bg: 'bg-violet-500/15',  text: 'text-violet-700',  letter: 'Z' },
-  venmo: { label: 'Venmo', bg: 'bg-sky-500/15',     text: 'text-sky-700',     letter: 'V' },
-  card:  { label: 'Card',  bg: 'bg-blue-500/15',    text: 'text-blue-700',    Icon: CreditCard },
-  tap:   { label: 'Tap',   bg: 'bg-indigo-500/15',  text: 'text-indigo-700',  Icon: Smartphone },
+  cash:         { label: 'Cash',        bg: 'bg-emerald-500/15', text: 'text-emerald-700', Icon: Banknote },
+  zelle:        { label: 'Zelle',       bg: 'bg-violet-500/15',  text: 'text-violet-700',  letter: 'Z' },
+  venmo:        { label: 'Venmo',       bg: 'bg-sky-500/15',     text: 'text-sky-700',     letter: 'V' },
+  credit_card:  { label: 'Card',        bg: 'bg-blue-500/15',    text: 'text-blue-700',    Icon: CreditCard },
 };
 
 interface PaymentMethodBadgeProps {
