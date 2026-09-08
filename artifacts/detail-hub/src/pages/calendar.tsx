@@ -189,7 +189,7 @@ export default function Calendar() {
         </div>
       ) : hasNoBookingsAtAll ? (
         <div className="flex-1 flex items-center justify-center px-4">
-          <Empty className="border border-border rounded-xl" data-testid="empty-state-calendar">
+          <Empty className="border border-border rounded-xl bg-card" data-testid="empty-state-calendar">
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <CalendarPlus />

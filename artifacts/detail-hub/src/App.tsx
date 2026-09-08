@@ -1,11 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@workspace/blue-glass-design-system/components/ui/toaster';
 import { TooltipProvider } from '@workspace/blue-glass-design-system/components/ui/tooltip';
+import { Loader2 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, Router as WouterRouter, Redirect } from 'wouter';
 import { BottomNav } from '@/components/bottom-nav';
 import { SidebarNav } from '@/components/sidebar-nav';
 import { AuthGate } from '@/components/auth-gate';
+import { useSession } from '@/hooks/use-session';
 
 import Login from '@/pages/login';
 import Signup from '@/pages/signup';
@@ -70,26 +72,46 @@ function AppShell() {
   );
 }
 
+/**
+ * `/` is public (unlike every other route, which lives behind `AuthGate`): a visitor with
+ * no session should see the marketing/signup page, not get bounced to `/login`. A visitor
+ * who already has a valid session + organization should skip the marketing page and land
+ * straight in the app. Mirrors the same `useSession` check `AuthGate` uses, but the
+ * unauthenticated fallback here is the marketing page (`Signup`), not a redirect to
+ * `/login`.
+ */
+function RootRoute() {
+  const { data, isPending } = useSession();
+
+  if (isPending) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (data?.authenticated && data.organizationId) {
+    return <Redirect to="/calendar" />;
+  }
+
+  return <Signup />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <Switch>
-            {/* `/login` and `/signup` are the only routes that must stay ungated —
-                everything else (including `/`) renders behind `AuthGate` below. */}
+            {/* `/`, `/login`, and `/signup` are the only routes that must stay ungated —
+                everything else renders behind `AuthGate` below. */}
+            <Route path="/" component={RootRoute} />
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
             <Route>
               <AuthGate>
-                <Switch>
-                  <Route path="/">
-                    <Redirect to="/calendar" />
-                  </Route>
-                  <Route>
-                    <AppShell />
-                  </Route>
-                </Switch>
+                <AppShell />
               </AuthGate>
             </Route>
           </Switch>

@@ -23,7 +23,7 @@ export function SidebarNav() {
   };
 
   return (
-    <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 glass-nav border-r border-white/10 flex-col">
+    <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex-col">
       <div className="p-6 flex items-center gap-3">
         <img src={rareAirLockup} alt="Rare Air" className="h-9 w-auto" data-testid="img-sidebar-logo" />
       </div>

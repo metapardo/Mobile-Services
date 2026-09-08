@@ -38,7 +38,7 @@ export function AuthShell({
         transition={{ duration: 0.45, ease: 'easeOut' }}
         className="w-full flex flex-col items-center"
       >
-        <div className="glass rounded-3xl px-8 py-10 sm:px-10 sm:py-12 flex flex-col items-center w-full max-w-[420px]">
+        <div className="glass-panel rounded-3xl px-8 py-10 sm:px-10 sm:py-12 flex flex-col items-center w-full max-w-[420px]">
           {showLogo && (
             <h1 className="text-3xl font-bold mb-8 tracking-tight text-foreground">RareAir</h1>
           )}
