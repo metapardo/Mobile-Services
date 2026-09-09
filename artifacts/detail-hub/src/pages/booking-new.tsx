@@ -1,11 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useLocation, useSearch, Link } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useListClients, useListPackages, useListEmployees, useListBookings,
-  useCreateBooking, useCreateClient,
-  getListBookingsQueryKey, getListClientsQueryKey,
-  type CreateBookingRequestStatus,
+  useCreateBooking, useCreateClient, useCreatePackage,
+  getListBookingsQueryKey, getListClientsQueryKey, getListPackagesQueryKey,
+  type CreateBookingRequestStatus, type CreatePackageRequestCategory,
 } from '@workspace/api-client-react';
 import { adaptBooking, evenSplit } from '@/lib/api-adapters';
 import { settings } from '@/lib/mock-data';
@@ -13,16 +13,18 @@ import { getSetupProfile } from '@/lib/setup-store';
 import { suggestSlots, SuggestedSlot } from '@/lib/suggest-slots';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import {
-  X, Check, ChevronDown, ChevronRight, UserPlus, Plus,
-  Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Zap, Loader2, PackageX, UserX,
+  X, Check, ChevronDown, ArrowLeft, UserPlus, Plus,
+  Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Zap, Loader2,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@workspace/blue-glass-design-system/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/blue-glass-design-system/components/ui/select';
 import { computeFuelGauge, type FuelGaugeResult } from '@/lib/fuel-gauge';
 import { format, parse } from 'date-fns';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 // ─── Bottom sheet wrapper ────────────────────────────────────────────────────
+// Still used for the date/time picker (explicitly out of scope for the page-
+// takeover rework — see PRD_DetailHub_Appointment_Creation_Flow_Enhancement.md
+// Section 8). The customer and service pickers moved to `PageTakeover` below.
 function BottomSheet({ open, onClose, title, children }: {
   open: boolean; onClose: () => void; title: string; children: React.ReactNode;
 }) {
@@ -43,11 +45,63 @@ function BottomSheet({ open, onClose, title, children }: {
   );
 }
 
+// ─── Full-screen page takeover ────────────────────────────────────────────────
+// Fully opaque, top-anchored, occupies the full viewport — the pattern the
+// signup wizard (`components/setup-wizard.tsx`) already established for
+// multi-step full-screen flows (`fixed inset-0 z-[100] bg-background
+// overflow-y-auto` + a sticky header with a back/close button and centered
+// title). Reused here per FR-1 instead of inventing a new overlay style, for
+// the customer and service pickers specifically — the date picker stays a
+// `BottomSheet` (Section 8, explicitly out of scope).
+//
+// Header back/close buttons are sized 44px (`w-11 h-11`) rather than matching
+// this file's existing 36px (`w-9 h-9`) chrome buttons elsewhere — these are
+// brand-new surfaces with no prior touch-target pass (FR-20), so they get the
+// standard comfortable minimum outright rather than inheriting a smaller size
+// tuned for a denser, previously-existing header.
+function PageTakeover({
+  onBack,
+  showBack,
+  title,
+  children,
+  testId,
+}: {
+  onBack: () => void;
+  showBack: boolean;
+  title: string;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    // `z-[100]` (matching `components/setup-wizard.tsx`'s own full-screen
+    // takeover precedent) rather than `z-50` — `bottom-nav.tsx`'s fixed mobile
+    // tab bar is also `z-50` and renders after `<Router />` in `App.tsx`'s DOM
+    // order, so at equal z-index it would sit on top of this takeover's
+    // bottom edge instead of being fully covered by it.
+    <div className="fixed inset-0 z-[100] bg-background overflow-y-auto" data-testid={testId}>
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border/40 px-4 py-3 flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="w-11 h-11 flex items-center justify-center rounded-full bg-muted hover:bg-muted/70 transition-colors shrink-0"
+        >
+          {showBack ? <ArrowLeft className="w-4 h-4" /> : <X className="w-4 h-4" />}
+        </button>
+        <p className="flex-1 text-center text-[16px] font-semibold">{title}</p>
+        <div className="w-11 shrink-0" aria-hidden />
+      </div>
+      {children}
+    </div>
+  );
+}
+
 // ─── Section heading ─────────────────────────────────────────────────────────
+// `py-6`/`mb-4` (bumped up from `py-4`/`mb-3`) per FR-19 — with four sections
+// gone (All-day, Repeats, Team, Deposit & extras) the remaining sections get
+// more room to breathe rather than keeping spacing tuned for a longer form.
 function Section({ title, icon: Icon, children }: { title: string; icon?: React.ElementType; children: React.ReactNode }) {
   return (
-    <div className="px-5 py-4 border-b border-border/40">
-      <div className="flex items-center gap-2 mb-3">
+    <div className="px-5 py-6 border-b border-border/40">
+      <div className="flex items-center gap-2 mb-4">
         {Icon && <Icon className="w-4 h-4 text-muted-foreground" />}
         <p className="text-[15px] font-semibold">{title}</p>
       </div>
@@ -61,43 +115,11 @@ function PillBtn({ label, onClick, icon: Icon }: { label: string; onClick: () =>
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-muted hover:bg-muted/70 transition-colors text-[15px] font-medium"
+      className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-muted hover:bg-muted/70 transition-colors text-[15px] font-medium min-h-[52px]"
     >
       {Icon && <Icon className="w-4 h-4" />}
       {label}
     </button>
-  );
-}
-
-// ─── "Nothing to pick from yet" prompt ────────────────────────────────────────
-// Per the PRD's edge-case guidance (Section 8): a brand-new account with zero
-// employees or packages shouldn't see a silently empty dropdown. Packages are now
-// a real, working Settings screen, so that prompt deep-links there via `actionHref`.
-// There's still no employee-management UI at all, so that prompt stays a plain
-// explanatory message with no link.
-function NothingToPickPrompt({
-  icon: Icon,
-  message,
-  actionHref,
-  actionLabel,
-}: {
-  icon: React.ElementType;
-  message: string;
-  actionHref?: string;
-  actionLabel?: string;
-}) {
-  return (
-    <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-2xl bg-muted/50 text-[13px] text-muted-foreground">
-      <Icon className="w-4 h-4 shrink-0 mt-0.5" />
-      <div className="flex flex-col items-start gap-1.5">
-        <span>{message}</span>
-        {actionHref && actionLabel && (
-          <Link href={actionHref} className="text-primary font-medium hover:underline">
-            {actionLabel}
-          </Link>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -246,6 +268,32 @@ function FuelGaugeRow({ result, thresholds }: { result: FuelGaugeResult; thresho
   );
 }
 
+// ─── Quick-add customer form state ────────────────────────────────────────────
+// Per FR-3: quick-add is First name / Last name / phone only — email and
+// address are dropped from the UI (a real reduction from the old
+// `newClientValid`, which required a regex-valid email and a non-empty
+// address before "Save customer" enabled).
+interface NewClientState { firstName: string; lastName: string; phone: string }
+const EMPTY_NEW_CLIENT: NewClientState = { firstName: '', lastName: '', phone: '' };
+
+// ─── Quick-add package form state ─────────────────────────────────────────────
+// Grounded in the real `packages` schema (`lib/db/src/schema/packages.ts` +
+// `CreatePackageBody` in `lib/api-zod/src/generated/api.ts`) — five `NOT NULL`
+// fields beyond name are required: category, description, price,
+// durationMinutes, isAddon. `durationMinutes` is read directly in this file
+// for total-duration display, the Fuel Gauge calc, and `suggestSlots`, so it's
+// a required field here, not an optional nicety (FR-6).
+interface NewPackageState {
+  name: string;
+  price: string;
+  durationMinutes: string;
+  category: CreatePackageRequestCategory;
+  description: string;
+}
+const EMPTY_NEW_PACKAGE: NewPackageState = {
+  name: '', price: '', durationMinutes: '', category: 'Full', description: '',
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function BookingNew() {
   const [, setLocation] = useLocation();
@@ -272,34 +320,31 @@ export default function BookingNew() {
   const referenceDataLoading = clientsQuery.isLoading || packagesQuery.isLoading || employeesQuery.isLoading || bookingsQuery.isLoading;
   const referenceDataFailed = clientsQuery.isError || packagesQuery.isError || employeesQuery.isError || bookingsQuery.isError;
 
-  const noPackagesYet = !packagesQuery.isLoading && packages.length === 0;
-  const noEmployeesYet = !employeesQuery.isLoading && employees.length === 0;
-
   // Form state
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
-  const [newClient, setNewClient] = useState({ firstName: '', lastName: '', phone: '', email: '', address: '' });
+  const [newClient, setNewClient] = useState<NewClientState>(EMPTY_NEW_CLIENT);
   const [creatingClient, setCreatingClient] = useState(false);
   const [selectedPackages, setSelectedPackages] = useState<number[]>([]);
+  const [newPackage, setNewPackage] = useState<NewPackageState>(EMPTY_NEW_PACKAGE);
+  const [creatingPackage, setCreatingPackage] = useState(false);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState('09:00');
   const [address, setAddress] = useState('');
+  // Kept exactly as-is per FR-12: the explicit "Team" picker UI is gone, but
+  // Smart Suggestions (`applySuggestion`) and the Fuel Gauge `useMemo` below
+  // both still quietly depend on this state and keep working unchanged.
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
-  const [deposit, setDeposit] = useState('');
-  const [parking, setParking] = useState('');
   const [notes, setNotes] = useState('');
-  const [allDay, setAllDay] = useState(false);
 
-  // Bottom sheets
+  // Page takeovers / sheets
   const [showCustomers, setShowCustomers] = useState(false);
   const [showServices, setShowServices] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [showTeam, setShowTeam] = useState(false);
 
   // Landing here from the clients page's "Add your first client" empty-state
   // CTA (`?newClient=1`) — this page doubles as the only place a client can be
   // created, so jump straight into the "new customer" step of the customer
-  // sheet instead of making the visitor rediscover it.
+  // takeover instead of making the visitor rediscover it.
   useEffect(() => {
     if (new URLSearchParams(search).get('newClient') === '1') {
       setShowCustomers(true);
@@ -310,6 +355,7 @@ export default function BookingNew() {
 
   // Search
   const [clientSearch, setClientSearch] = useState('');
+  const [serviceSearch, setServiceSearch] = useState('');
 
   // Suggested slots
   const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null); // key = date|time|empId
@@ -335,7 +381,10 @@ export default function BookingNew() {
     setSelectedSuggestion(key);
   };
 
-  const canSave = selectedClient !== null && selectedPackages.length > 0 && address.trim() && selectedEmployees.length > 0;
+  // FR-11: `selectedEmployees.length > 0` dropped — the API spec states
+  // `employeeSplit` may be empty (a booking can be created before an employee
+  // is assigned), so the frontend no longer hard-requires it either.
+  const canSave = selectedClient !== null && selectedPackages.length > 0 && address.trim().length > 0;
 
   const selectedClientObj = clients.find(c => c.id === selectedClient);
   const selectedPkgs = packages.filter(p => selectedPackages.includes(p.id));
@@ -351,6 +400,8 @@ export default function BookingNew() {
       id: -1,
       clientId: selectedClient ?? -1,
       packageIds: selectedPackages,
+      // Falls back to the first employee when nothing's been assigned yet
+      // (e.g. via Smart Suggestions) — unchanged per FR-12.
       employeeIds: selectedEmployees.length > 0 ? selectedEmployees : [employees[0]?.id ?? -1],
       date: date || format(new Date(), 'yyyy-MM-dd'),
       startTime: time || '09:00',
@@ -399,9 +450,15 @@ export default function BookingNew() {
         date,
         startTime: time,
         address,
-        depositAmount: parseFloat(deposit) || 0,
-        parkingCost: parseFloat(parking) || 0,
-        status: (parseFloat(deposit) > 0 ? 'confirmed' : 'pending') as CreateBookingRequestStatus,
+        // FR-16: both remain `NOT NULL` columns on the real `bookings` table,
+        // so they still need a value — just always zero now that the Deposit
+        // & extras section (and the parking-cost field within it) is gone
+        // from this screen (FR-14/FR-17).
+        depositAmount: 0,
+        parkingCost: 0,
+        // FR-15: deposit-based status logic is gone — every new booking is
+        // created as `'confirmed'`.
+        status: 'confirmed' as CreateBookingRequestStatus,
         notes: notes.trim() ? notes.trim() : null,
       },
     });
@@ -412,10 +469,10 @@ export default function BookingNew() {
       onSuccess: async (created) => {
         await queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
         setSelectedClient(created.id);
-        if (created.address) setAddress(created.address);
         setShowCustomers(false);
         setCreatingClient(false);
-        setNewClient({ firstName: '', lastName: '', phone: '', email: '', address: '' });
+        setNewClient(EMPTY_NEW_CLIENT);
+        setClientSearch('');
       },
       onError: (err) => {
         const message = err?.data?.message ?? 'Something went wrong creating this client. Please try again.';
@@ -426,9 +483,7 @@ export default function BookingNew() {
 
   const newClientValid =
     newClient.firstName.trim().length > 0 &&
-    newClient.phone.trim().length > 0 &&
-    EMAIL_RE.test(newClient.email.trim()) &&
-    newClient.address.trim().length > 0;
+    newClient.phone.trim().length > 0;
 
   const handleCreateClient = () => {
     if (!newClientValid || createClientMutation.isPending) return;
@@ -437,10 +492,68 @@ export default function BookingNew() {
       data: {
         name: full,
         phone: newClient.phone.trim(),
-        email: newClient.email.trim(),
-        address: newClient.address.trim(),
+        // Email/address are optional on the real `clients` schema — a
+        // quick-added client simply won't have either on file until someone
+        // fills them in later from the Clients page (FR-4).
       },
     });
+  };
+
+  // Splits whatever was typed into the search field on the first space to
+  // pre-fill First/Last name (FR-3) — "John Smith" -> First: John, Last: Smith
+  // — rather than making the operator retype it.
+  const startQuickAddClient = (typed: string) => {
+    const trimmed = typed.trim();
+    const spaceIdx = trimmed.indexOf(' ');
+    const firstName = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+    const lastName = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
+    setNewClient({ firstName, lastName, phone: '' });
+    setCreatingClient(true);
+  };
+
+  const createPackageMutation = useCreatePackage({
+    mutation: {
+      onSuccess: async (created) => {
+        await queryClient.invalidateQueries({ queryKey: getListPackagesQueryKey() });
+        setSelectedPackages(p => [...p, created.id]);
+        setNewPackage(EMPTY_NEW_PACKAGE);
+        setCreatingPackage(false);
+        setServiceSearch('');
+        toast({ title: 'Package created' });
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong creating this package. Please try again.';
+        toast({ title: 'Couldn’t create package', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
+  const newPackageValid =
+    newPackage.name.trim().length > 0 &&
+    parseFloat(newPackage.price) >= 0 &&
+    !Number.isNaN(parseFloat(newPackage.price)) &&
+    parseInt(newPackage.durationMinutes, 10) >= 1 &&
+    !Number.isNaN(parseInt(newPackage.durationMinutes, 10)) &&
+    newPackage.description.trim().length > 0;
+
+  const handleCreatePackage = () => {
+    if (!newPackageValid || createPackageMutation.isPending) return;
+    createPackageMutation.mutate({
+      data: {
+        name: newPackage.name.trim(),
+        category: newPackage.category,
+        description: newPackage.description.trim(),
+        price: parseFloat(newPackage.price),
+        durationMinutes: parseInt(newPackage.durationMinutes, 10),
+        // Derived from category (FR-6) — 'Add-on' -> true, everything else -> false.
+        isAddon: newPackage.category === 'Add-on',
+      },
+    });
+  };
+
+  const startQuickAddPackage = (typed: string) => {
+    setNewPackage({ ...EMPTY_NEW_PACKAGE, name: typed.trim() });
+    setCreatingPackage(true);
   };
 
   const filteredClients = clients.filter(c =>
@@ -448,7 +561,11 @@ export default function BookingNew() {
     c.phone.includes(clientSearch)
   );
 
-  const pkgsByCategory = packages.reduce<Record<string, typeof packages>>((acc, pkg) => {
+  const filteredPackages = packages.filter(p =>
+    p.name.toLowerCase().includes(serviceSearch.toLowerCase())
+  );
+
+  const pkgsByCategory = filteredPackages.reduce<Record<string, typeof packages>>((acc, pkg) => {
     if (!acc[pkg.category]) acc[pkg.category] = [];
     acc[pkg.category].push(pkg);
     return acc;
@@ -497,7 +614,7 @@ export default function BookingNew() {
       <Section title="Customer" icon={Users}>
         {selectedClientObj ? (
           <div
-            className="flex items-center gap-3 p-3 rounded-2xl border border-primary bg-primary/5 cursor-pointer"
+            className="flex items-center gap-3 p-3 rounded-2xl border border-primary bg-primary/5 cursor-pointer min-h-[52px]"
             onClick={() => setShowCustomers(true)}
           >
             <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-[13px]">
@@ -519,7 +636,7 @@ export default function BookingNew() {
         {selectedPkgs.length > 0 && (
           <div className="space-y-2 mb-3">
             {selectedPkgs.map(pkg => (
-              <div key={pkg.id} className="flex items-center justify-between px-3 py-2.5 rounded-2xl bg-muted/50">
+              <div key={pkg.id} className="flex items-center justify-between px-3 py-3 rounded-2xl bg-muted/50 min-h-[52px]">
                 <div className="flex-1 min-w-0">
                   <p className="text-[14px] font-medium">{pkg.name}</p>
                   <p className="text-[12px] text-muted-foreground">{pkg.durationMinutes} min</p>
@@ -528,9 +645,9 @@ export default function BookingNew() {
                   <p className="text-[14px] font-semibold tabular-nums">${pkg.price}</p>
                   <button
                     onClick={() => setSelectedPackages(p => p.filter(id => id !== pkg.id))}
-                    className="w-6 h-6 rounded-full bg-muted-foreground/20 flex items-center justify-center"
+                    className="w-8 h-8 rounded-full bg-muted-foreground/20 flex items-center justify-center"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -542,16 +659,7 @@ export default function BookingNew() {
             </div>
           </div>
         )}
-        {noPackagesYet ? (
-          <NothingToPickPrompt
-            icon={PackageX}
-            message="No packages yet. Add a package in Settings before booking a job."
-            actionHref="/more/packages"
-            actionLabel="Go to Settings > Packages"
-          />
-        ) : (
-          <PillBtn label="Add service" icon={Plus} onClick={() => setShowServices(true)} />
-        )}
+        <PillBtn label="Add service" icon={Plus} onClick={() => setShowServices(true)} />
       </Section>
 
       {/* ── Location ── */}
@@ -576,7 +684,7 @@ export default function BookingNew() {
 
       {/* ── Suggested times pills ── */}
       {suggestions.length > 0 && (
-        <div className="px-5 pt-4 pb-3 border-b border-border/40">
+        <div className="px-5 pt-6 pb-4 border-b border-border/40">
           <div className="flex items-center gap-1.5 mb-2.5">
             <Zap className="w-3.5 h-3.5 text-primary" />
             <p className="text-[12px] font-semibold text-primary uppercase tracking-wide">Smart suggestions</p>
@@ -612,7 +720,7 @@ export default function BookingNew() {
                     {dateShort}
                   </span>
                   <span className={`text-[10px] font-semibold leading-none mt-1 ${isSelected ? 'text-white' : 'text-foreground'}`}>
-                    {timeLabel.replace(' ', ' ')}
+                    {timeLabel.replace(' ', ' ')}
                   </span>
                   {emp && (
                     <span
@@ -631,98 +739,20 @@ export default function BookingNew() {
       )}
 
       {/* ── Date & time ── */}
+      {/* All-day and Repeats rows removed per FR-8/FR-9 — All-day's state was
+          never sent to `useCreateBooking`, and Repeats was pure static
+          decoration with no `onClick` behind it. Zero behavioral risk. */}
       <Section title="Date and time" icon={Calendar}>
-        <div className="space-y-2">
-          <button
-            onClick={() => setShowDatePicker(true)}
-            className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border border-border bg-background hover:bg-muted/40 transition-colors"
-          >
-            <div className="text-left">
-              <p className="text-[12px] text-muted-foreground font-medium">Date and time</p>
-              <p className="text-[15px] font-medium mt-0.5">{dateLabel} at {fmtTime(time)}</p>
-            </div>
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div className="flex items-center justify-between px-4 py-3.5 rounded-2xl border border-border bg-background">
-            <p className="text-[15px]">All-day</p>
-            <button
-              onClick={() => setAllDay(v => !v)}
-              className={`w-12 h-6 rounded-full transition-colors relative ${allDay ? 'bg-primary' : 'bg-muted-foreground/30'}`}
-            >
-              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${allDay ? 'translate-x-6' : 'translate-x-0.5'}`} />
-            </button>
+        <button
+          onClick={() => setShowDatePicker(true)}
+          className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border border-border bg-background hover:bg-muted/40 transition-colors min-h-[52px]"
+        >
+          <div className="text-left">
+            <p className="text-[12px] text-muted-foreground font-medium">Date and time</p>
+            <p className="text-[15px] font-medium mt-0.5">{dateLabel} at {fmtTime(time)}</p>
           </div>
-          <button className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border border-border bg-background hover:bg-muted/40 transition-colors">
-            <div className="text-left">
-              <p className="text-[12px] text-muted-foreground font-medium">Repeats</p>
-              <p className="text-[15px] font-medium mt-0.5">Never</p>
-            </div>
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          </button>
-        </div>
-      </Section>
-
-      {/* ── Team ── */}
-      <Section title="Team" icon={Users}>
-        {selectedEmployees.length > 0 ? (
-          <div className="space-y-2 mb-3">
-            {selectedEmployees.map(id => {
-              const emp = employees.find(e => e.id === id)!;
-              return (
-                <div key={id} className="flex items-center gap-3 px-3 py-2.5 rounded-2xl bg-muted/50">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-                    style={{ backgroundColor: emp.color }}>
-                    {emp.name.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <p className="flex-1 text-[14px] font-medium">{emp.name}</p>
-                  <button onClick={() => setSelectedEmployees(p => p.filter(i => i !== id))}>
-                    <X className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-        {noEmployeesYet ? (
-          <NothingToPickPrompt
-            icon={UserX}
-            message="No employees yet. Add an employee to assign this job to — employee management isn't built in this app yet, so ask an admin to add one directly for now."
-          />
-        ) : (
-          <button
-            onClick={() => setShowTeam(true)}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-muted hover:bg-muted/70 transition-colors text-[15px] font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            {selectedEmployees.length > 0 ? 'Add another' : 'Assign team member'}
-          </button>
-        )}
-      </Section>
-
-      {/* ── Deposit & extras ── */}
-      <Section title="Deposit & extras" icon={DollarSign}>
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-border bg-background">
-            <span className="text-[15px] text-muted-foreground">$</span>
-            <input
-              type="number"
-              className="flex-1 text-[15px] bg-transparent focus:outline-none"
-              placeholder="Deposit amount"
-              value={deposit}
-              onChange={e => setDeposit(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-border bg-background">
-            <span className="text-[15px] text-muted-foreground">$</span>
-            <input
-              type="number"
-              className="flex-1 text-[15px] bg-transparent focus:outline-none"
-              placeholder="Parking cost"
-              value={parking}
-              onChange={e => setParking(e.target.value)}
-            />
-          </div>
-        </div>
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+        </button>
       </Section>
 
       {/* ── Notes ── */}
@@ -751,153 +781,346 @@ export default function BookingNew() {
           {createBookingMutation.isPending
             ? 'Booking…'
             : canSave
-              ? (parseFloat(deposit) > 0 ? `Charge $${parseFloat(deposit).toFixed(2)} Deposit` : 'Book Appointment')
+              ? 'Book Appointment'
               : 'Fill in details to book'}
         </button>
       </div>
 
-      {/* ── Customer bottom sheet ── */}
-      <BottomSheet open={showCustomers} onClose={() => { setShowCustomers(false); setCreatingClient(false); }} title="Select customer">
-        {!creatingClient ? (
-          <div>
-            {/* Search */}
-            <div className="px-4 py-3 border-b border-border/40">
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-muted">
-                <Search className="w-4 h-4 text-muted-foreground" />
+      {/* ── Customer page takeover ── */}
+      {showCustomers && (
+        <PageTakeover
+          testId="takeover-customer-picker"
+          title={creatingClient ? 'New customer' : 'Select customer'}
+          showBack={creatingClient}
+          onBack={() => {
+            if (creatingClient) { setCreatingClient(false); return; }
+            setShowCustomers(false);
+          }}
+        >
+          {!creatingClient ? (
+            <div>
+              {/* Live search — filters existing clients and surfaces a
+                  contextual "Add as new customer" action inline (FR-2). */}
+              <div className="px-4 py-3 border-b border-border/40">
+                <div className="flex items-center gap-2 px-3 py-3 rounded-2xl bg-muted min-h-[52px]">
+                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <input
+                    className="flex-1 bg-transparent text-[15px] focus:outline-none"
+                    placeholder="Search or add a customer…"
+                    value={clientSearch}
+                    onChange={e => setClientSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="divide-y divide-border/30">
+                {clientSearch.trim().length > 0 && (
+                  <button
+                    onClick={() => startQuickAddClient(clientSearch)}
+                    className="w-full flex items-center gap-3 px-4 py-4 hover:bg-muted/40 transition-colors text-left min-h-[56px]"
+                    data-testid="button-add-new-customer"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <UserPlus className="w-4 h-4 text-primary" />
+                    </div>
+                    <p className="text-[15px] font-medium text-primary">
+                      Add "{clientSearch.trim()}" as new customer
+                    </p>
+                  </button>
+                )}
+
+                {filteredClients.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => { setSelectedClient(c.id); if (c.address) setAddress(c.address); setShowCustomers(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left min-h-[56px]"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[13px] font-semibold shrink-0">
+                      {c.name.split(' ').map(n => n[0]).join('')}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[15px] font-medium">{c.name}</p>
+                      <p className="text-[12px] text-muted-foreground">{c.phone}</p>
+                    </div>
+                    {selectedClient === c.id && <Check className="w-4 h-4 text-primary shrink-0" />}
+                  </button>
+                ))}
+
+                {filteredClients.length === 0 && clientSearch.trim().length === 0 && (
+                  <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                    No customers yet — type a name above to add one.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="px-4 py-5 space-y-3">
+              {/* FR-3: First name, Last name, phone number only — email and
+                  address are dropped from this fast path (FR-4). Labels match
+                  this file's own "Date" micro-label convention below, for
+                  in-screen consistency and a real accessible name once the
+                  placeholder disappears behind typed text. */}
+              <div>
+                <label htmlFor="quick-client-first" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  First name
+                </label>
                 <input
-                  className="flex-1 bg-transparent text-[15px] focus:outline-none"
-                  placeholder="Search clients…"
-                  value={clientSearch}
-                  onChange={e => setClientSearch(e.target.value)}
+                  id="quick-client-first"
+                  type="text"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-border text-[15px] focus:outline-none focus:border-primary transition-colors bg-background"
+                  placeholder="First name"
+                  value={newClient.firstName}
+                  onChange={e => setNewClient(p => ({ ...p, firstName: e.target.value }))}
                   autoFocus
                 />
               </div>
-            </div>
-            {/* New customer button */}
-            <button
-              onClick={() => setCreatingClient(true)}
-              className="w-full flex items-center gap-3 px-4 py-4 border-b border-border/40 hover:bg-muted/40 transition-colors"
-            >
-              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                <UserPlus className="w-4 h-4 text-primary" />
+              <div>
+                <label htmlFor="quick-client-last" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  Last name
+                </label>
+                <input
+                  id="quick-client-last"
+                  type="text"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-border text-[15px] focus:outline-none focus:border-primary transition-colors bg-background"
+                  placeholder="Last name"
+                  value={newClient.lastName}
+                  onChange={e => setNewClient(p => ({ ...p, lastName: e.target.value }))}
+                />
               </div>
-              <p className="text-[15px] font-medium text-primary">New customer</p>
-            </button>
-            {/* Client list */}
-            <div className="divide-y divide-border/30">
-              {filteredClients.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => { setSelectedClient(c.id); if (c.address) setAddress(c.address); setShowCustomers(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left"
-                >
-                  <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[13px] font-semibold shrink-0">
-                    {c.name.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[15px] font-medium">{c.name}</p>
-                    <p className="text-[12px] text-muted-foreground">{c.phone}</p>
-                  </div>
-                  {selectedClient === c.id && <Check className="w-4 h-4 text-primary shrink-0" />}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="px-4 py-4 space-y-3">
-            <button
-              onClick={() => setCreatingClient(false)}
-              className="flex items-center gap-1.5 text-primary text-[14px] mb-4"
-            >
-              ← Back to search
-            </button>
-            <h3 className="text-[20px] font-bold mb-4">New customer</h3>
-            <button className="w-full py-3 rounded-2xl bg-muted text-[15px] font-medium hover:bg-muted/70 transition-colors">
-              Import from contacts
-            </button>
-            {[
-              { key: 'firstName', placeholder: 'First name' },
-              { key: 'lastName',  placeholder: 'Last name'  },
-              { key: 'phone',     placeholder: 'Phone number' },
-              { key: 'email',     placeholder: 'Email address' },
-              { key: 'address',   placeholder: 'Address' },
-            ].map(f => (
-              <input
-                key={f.key}
-                type={f.key === 'email' ? 'email' : f.key === 'phone' ? 'tel' : 'text'}
-                className="w-full px-4 py-3.5 rounded-2xl border border-border text-[15px] focus:outline-none focus:border-primary transition-colors bg-background"
-                placeholder={f.placeholder}
-                value={(newClient as any)[f.key]}
-                onChange={e => setNewClient(p => ({ ...p, [f.key]: e.target.value }))}
-              />
-            ))}
-            <button
-              onClick={handleCreateClient}
-              disabled={!newClientValid || createClientMutation.isPending}
-              className={`w-full py-4 mt-2 rounded-2xl text-[15px] font-semibold transition-all ${
-                newClientValid && !createClientMutation.isPending ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              {createClientMutation.isPending ? 'Saving…' : 'Save customer'}
-            </button>
-            <div className="h-8" />
-          </div>
-        )}
-      </BottomSheet>
-
-      {/* ── Services bottom sheet ── */}
-      <BottomSheet open={showServices} onClose={() => setShowServices(false)} title="Select services">
-        <div className="px-4 py-2">
-          {Object.entries(pkgsByCategory).map(([category, pkgs]) => (
-            <div key={category} className="mb-4">
-              <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide px-1 py-2">{category}</p>
-              <div className="space-y-2">
-                {pkgs.map(pkg => {
-                  const selected = selectedPackages.includes(pkg.id);
-                  return (
-                    <button
-                      key={pkg.id}
-                      onClick={() => setSelectedPackages(p => selected ? p.filter(id => id !== pkg.id) : [...p, pkg.id])}
-                      className={`w-full flex items-start gap-3 p-3.5 rounded-2xl border-2 text-left transition-all ${
-                        selected ? 'border-primary bg-primary/5' : 'border-border hover:border-foreground/30'
-                      }`}
-                    >
-                      <div className={`w-5 h-5 rounded-md border-2 mt-0.5 shrink-0 flex items-center justify-center ${
-                        selected ? 'border-primary bg-primary' : 'border-muted-foreground/40'
-                      }`}>
-                        {selected && <Check className="w-3 h-3 text-white" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-semibold">{pkg.name}</p>
-                        <p className="text-[12px] text-muted-foreground mt-0.5">{pkg.description}</p>
-                        <div className="flex items-center gap-3 mt-1.5">
-                          <span className="text-[12px] text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {pkg.durationMinutes} min
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-[15px] font-bold tabular-nums shrink-0">${pkg.price}</p>
-                    </button>
-                  );
-                })}
+              <div>
+                <label htmlFor="quick-client-phone" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  Phone number
+                </label>
+                <input
+                  id="quick-client-phone"
+                  type="tel"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-border text-[15px] focus:outline-none focus:border-primary transition-colors bg-background"
+                  placeholder="Phone number"
+                  value={newClient.phone}
+                  onChange={e => setNewClient(p => ({ ...p, phone: e.target.value }))}
+                />
               </div>
-            </div>
-          ))}
-          {selectedPackages.length > 0 && (
-            <div className="sticky bottom-0 bg-background/95 pb-4 pt-2">
               <button
-                onClick={() => setShowServices(false)}
-                className="w-full py-4 rounded-2xl text-[17px] font-semibold gradient-btn text-white"
+                onClick={handleCreateClient}
+                disabled={!newClientValid || createClientMutation.isPending}
+                className={`w-full py-4 mt-2 rounded-2xl text-[15px] font-semibold transition-all ${
+                  newClientValid && !createClientMutation.isPending ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground'
+                }`}
               >
-                Done · {selectedPackages.length} service{selectedPackages.length !== 1 ? 's' : ''} · ${totalPrice}
+                {createClientMutation.isPending ? 'Saving…' : 'Save customer'}
               </button>
+              <div className="h-8" />
             </div>
           )}
-          <div className="h-8" />
-        </div>
-      </BottomSheet>
+        </PageTakeover>
+      )}
 
-      {/* ── Date picker sheet ── */}
+      {/* ── Service page takeover ── */}
+      {showServices && (
+        <PageTakeover
+          testId="takeover-service-picker"
+          title={creatingPackage ? 'New package' : 'Select services'}
+          showBack={creatingPackage}
+          onBack={() => {
+            if (creatingPackage) { setCreatingPackage(false); return; }
+            setShowServices(false);
+          }}
+        >
+          {!creatingPackage ? (
+            <div className="px-4 py-2">
+              {/* Live search — filters `pkgsByCategory` and surfaces a
+                  contextual "Add as new package" action inline (FR-5), even
+                  when a similar package already exists, so operators can add
+                  variants. This replaces the old zero-packages deep-link to
+                  Settings entirely. */}
+              <div className="py-3 border-b border-border/40">
+                <div className="flex items-center gap-2 px-3 py-3 rounded-2xl bg-muted min-h-[52px]">
+                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <input
+                    className="flex-1 bg-transparent text-[15px] focus:outline-none"
+                    placeholder="Search or add a package…"
+                    value={serviceSearch}
+                    onChange={e => setServiceSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              {serviceSearch.trim().length > 0 && (
+                <button
+                  onClick={() => startQuickAddPackage(serviceSearch)}
+                  className="w-full flex items-center gap-3 px-3.5 py-4 my-3 rounded-2xl border-2 border-dashed border-primary/40 hover:bg-primary/5 transition-colors text-left min-h-[56px]"
+                  data-testid="button-add-new-package"
+                >
+                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Plus className="w-4 h-4 text-primary" />
+                  </div>
+                  <p className="text-[15px] font-medium text-primary">
+                    Add "{serviceSearch.trim()}" as a new package
+                  </p>
+                </button>
+              )}
+
+              {Object.entries(pkgsByCategory).map(([category, pkgs]) => (
+                <div key={category} className="mb-5">
+                  <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide px-1 py-2">{category}</p>
+                  <div className="space-y-2.5">
+                    {pkgs.map(pkg => {
+                      const selected = selectedPackages.includes(pkg.id);
+                      return (
+                        <button
+                          key={pkg.id}
+                          onClick={() => setSelectedPackages(p => selected ? p.filter(id => id !== pkg.id) : [...p, pkg.id])}
+                          className={`w-full flex items-start gap-3 p-3.5 rounded-2xl border-2 text-left transition-all min-h-[56px] ${
+                            selected ? 'border-primary bg-primary/5' : 'border-border hover:border-foreground/30'
+                          }`}
+                        >
+                          <div className={`w-5 h-5 rounded-md border-2 mt-0.5 shrink-0 flex items-center justify-center ${
+                            selected ? 'border-primary bg-primary' : 'border-muted-foreground/40'
+                          }`}>
+                            {selected && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[14px] font-semibold">{pkg.name}</p>
+                            <p className="text-[12px] text-muted-foreground mt-0.5">{pkg.description}</p>
+                            <div className="flex items-center gap-3 mt-1.5">
+                              <span className="text-[12px] text-muted-foreground flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> {pkg.durationMinutes} min
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-[15px] font-bold tabular-nums shrink-0">${pkg.price}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {filteredPackages.length === 0 && serviceSearch.trim().length === 0 && (
+                <p className="px-1 py-8 text-center text-[13px] text-muted-foreground">
+                  No packages yet — type a name above to add your first one.
+                </p>
+              )}
+
+              {selectedPackages.length > 0 && (
+                <div className="sticky bottom-0 bg-background/95 pb-4 pt-2 backdrop-blur-md">
+                  <button
+                    onClick={() => setShowServices(false)}
+                    className="w-full py-4 rounded-2xl text-[17px] font-semibold gradient-btn text-white"
+                  >
+                    Done · {selectedPackages.length} service{selectedPackages.length !== 1 ? 's' : ''} · ${totalPrice}
+                  </button>
+                </div>
+              )}
+              <div className="h-8" />
+            </div>
+          ) : (
+            <div className="px-4 py-5 space-y-3">
+              {/* FR-6: name, price, duration, category, description — all
+                  five required by the real `packages` schema. Category
+                  defaults to 'Full' but stays changeable. `isAddon` derives
+                  automatically from category, no separate control. Labels
+                  match this file's own "Date" micro-label convention below. */}
+              <div>
+                <label htmlFor="quick-pkg-name" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  Package name
+                </label>
+                <input
+                  id="quick-pkg-name"
+                  type="text"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-border text-[15px] focus:outline-none focus:border-primary transition-colors bg-background"
+                  placeholder="Package name"
+                  value={newPackage.name}
+                  onChange={e => setNewPackage(p => ({ ...p, name: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label htmlFor="quick-pkg-price" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  Price
+                </label>
+                <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-border bg-background">
+                  <span className="text-[15px] text-muted-foreground">$</span>
+                  <input
+                    id="quick-pkg-price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="flex-1 text-[15px] bg-transparent focus:outline-none"
+                    placeholder="Price"
+                    value={newPackage.price}
+                    onChange={e => setNewPackage(p => ({ ...p, price: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="quick-pkg-duration" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  Duration
+                </label>
+                <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-border bg-background">
+                  <input
+                    id="quick-pkg-duration"
+                    type="number"
+                    min="1"
+                    step="5"
+                    className="flex-1 text-[15px] bg-transparent focus:outline-none"
+                    placeholder="Duration"
+                    value={newPackage.durationMinutes}
+                    onChange={e => setNewPackage(p => ({ ...p, durationMinutes: e.target.value }))}
+                  />
+                  <span className="text-[15px] text-muted-foreground">min</span>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="quick-pkg-category" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  Category
+                </label>
+                <Select
+                  value={newPackage.category}
+                  onValueChange={(v) => setNewPackage(p => ({ ...p, category: v as CreatePackageRequestCategory }))}
+                >
+                  <SelectTrigger id="quick-pkg-category" className="h-auto w-full px-4 py-3.5 rounded-2xl border border-border text-[15px] bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Exterior">Exterior</SelectItem>
+                    <SelectItem value="Interior">Interior</SelectItem>
+                    <SelectItem value="Full">Full</SelectItem>
+                    <SelectItem value="Add-on">Add-on</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label htmlFor="quick-pkg-description" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  Description
+                </label>
+                <textarea
+                  id="quick-pkg-description"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-border bg-background text-[15px] focus:outline-none focus:border-primary transition-colors resize-none placeholder-muted-foreground/60"
+                  placeholder="Description"
+                  rows={3}
+                  value={newPackage.description}
+                  onChange={e => setNewPackage(p => ({ ...p, description: e.target.value }))}
+                />
+              </div>
+              <button
+                onClick={handleCreatePackage}
+                disabled={!newPackageValid || createPackageMutation.isPending}
+                className={`w-full py-4 mt-2 rounded-2xl text-[15px] font-semibold transition-all ${
+                  newPackageValid && !createPackageMutation.isPending ? 'gradient-btn text-white' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {createPackageMutation.isPending ? 'Saving…' : 'Save package'}
+              </button>
+              <div className="h-8" />
+            </div>
+          )}
+        </PageTakeover>
+      )}
+
+      {/* ── Date picker sheet (unchanged — stays a bottom sheet per Section 8) ── */}
       <BottomSheet open={showDatePicker} onClose={() => setShowDatePicker(false)} title="Date and time">
         <div className="px-4 py-4 space-y-4">
           <div>
@@ -932,43 +1155,6 @@ export default function BookingNew() {
             Confirm · {dateLabel} at {fmtTime(time)}
           </button>
           <div className="h-4" />
-        </div>
-      </BottomSheet>
-
-      {/* ── Team picker sheet ── */}
-      <BottomSheet open={showTeam} onClose={() => setShowTeam(false)} title="Assign team">
-        <div className="divide-y divide-border/30">
-          {employees.map(emp => {
-            const selected = selectedEmployees.includes(emp.id);
-            return (
-              <button
-                key={emp.id}
-                onClick={() => {
-                  setSelectedEmployees(p => selected ? p.filter(id => id !== emp.id) : [...p, emp.id]);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-4 hover:bg-muted/40 transition-colors text-left"
-              >
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-[13px] shrink-0"
-                  style={{ backgroundColor: emp.color }}>
-                  {emp.name.split(' ').map(n => n[0]).join('')}
-                </div>
-                <p className="flex-1 text-[15px] font-medium">{emp.name}</p>
-                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                  selected ? 'border-primary bg-primary' : 'border-muted-foreground/40'
-                }`}>
-                  {selected && <Check className="w-3.5 h-3.5 text-white" />}
-                </div>
-              </button>
-            );
-          })}
-          <div className="p-4">
-            <button
-              onClick={() => setShowTeam(false)}
-              className="w-full py-4 rounded-2xl gradient-btn text-white text-[17px] font-semibold"
-            >
-              {selectedEmployees.length > 0 ? `Done · ${selectedEmployees.length} assigned` : 'Done'}
-            </button>
-          </div>
         </div>
       </BottomSheet>
     </div>

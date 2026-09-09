@@ -14,8 +14,8 @@ export interface UpdateClientRequest {
   name?: string;
   /** @minLength 1 */
   phone?: string;
-  email?: string;
+  email?: string | null;
   /** @minLength 1 */
-  address?: string;
+  address?: string | null;
   notes?: string | null;
 }

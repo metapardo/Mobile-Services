@@ -37,7 +37,7 @@ export default function Clients() {
   const filteredClients = clients.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.phone.includes(search) ||
-    c.email.toLowerCase().includes(search.toLowerCase())
+    (c.email ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
   const sortedClients = [...filteredClients].sort((a, b) => a.name.localeCompare(b.name));

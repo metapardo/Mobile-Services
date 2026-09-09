@@ -13,8 +13,8 @@ export interface ClientResult {
   id: number;
   name: string;
   phone: string;
-  email: string;
-  address: string;
+  email?: string | null;
+  address?: string | null;
   notes?: string | null;
   archived: boolean;
   createdAt: Date;

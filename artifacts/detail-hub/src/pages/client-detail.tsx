@@ -59,8 +59,8 @@ export default function ClientDetail() {
       setFormData({
         name: client.name,
         phone: client.phone,
-        email: client.email,
-        address: client.address,
+        email: client.email ?? '',
+        address: client.address ?? '',
         notes: client.notes ?? '',
       });
     }
@@ -83,11 +83,14 @@ export default function ClientDetail() {
     },
   });
 
+  // Email/address are optional on the real `clients` schema (a quick-added
+  // client from the appointment-creation flow may have neither) — only
+  // format-validate email when something's actually typed, don't require
+  // either field to be present just to save an unrelated edit.
   const formValid =
     formData.name.trim().length > 0 &&
     formData.phone.trim().length > 0 &&
-    EMAIL_RE.test(formData.email.trim()) &&
-    formData.address.trim().length > 0;
+    (formData.email.trim().length === 0 || EMAIL_RE.test(formData.email.trim()));
 
   const handleSave = () => {
     if (!formValid) return;
@@ -96,8 +99,8 @@ export default function ClientDetail() {
       data: {
         name: formData.name.trim(),
         phone: formData.phone.trim(),
-        email: formData.email.trim(),
-        address: formData.address.trim(),
+        email: formData.email.trim() ? formData.email.trim() : null,
+        address: formData.address.trim() ? formData.address.trim() : null,
         notes: formData.notes.trim() ? formData.notes.trim() : null,
       },
     });
@@ -243,11 +246,15 @@ export default function ClientDetail() {
             </div>
             <div>
               <p className="text-[13px] text-muted-foreground mb-0.5">Email</p>
-              <p className="text-[15px]">{client.email}</p>
+              <p className="text-[15px]">
+                {client.email || <span className="text-muted-foreground">Not provided</span>}
+              </p>
             </div>
             <div>
               <p className="text-[13px] text-muted-foreground mb-0.5">Address</p>
-              <p className="text-[15px]">{client.address}</p>
+              <p className="text-[15px]">
+                {client.address || <span className="text-muted-foreground">Not provided</span>}
+              </p>
             </div>
             {client.notes && (
               <div>

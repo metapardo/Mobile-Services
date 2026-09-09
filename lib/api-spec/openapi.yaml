@@ -2153,8 +2153,10 @@ components:
           type: string
         email:
           type: string
+          nullable: true
         address:
           type: string
+          nullable: true
         notes:
           type: string
           nullable: true
@@ -2170,13 +2172,16 @@ components:
         - id
         - name
         - phone
-        - email
-        - address
         - archived
         - createdAt
         - updatedAt
     CreateClientRequest:
       type: object
+      description: >-
+        `email`/`address` are optional — quick-add (per
+        `PRD_DetailHub_Appointment_Creation_Flow_Enhancement.md` FR-3/FR-4) only
+        collects name + phone; email/address can be filled in later from the Clients
+        page. When `email` IS provided it must still be a valid email address.
       properties:
         name:
           type: string
@@ -2187,17 +2192,17 @@ components:
         email:
           type: string
           format: email
+          nullable: true
         address:
           type: string
           minLength: 1
+          nullable: true
         notes:
           type: string
           nullable: true
       required:
         - name
         - phone
-        - email
-        - address
     UpdateClientRequest:
       type: object
       description: Partial update — all fields optional.
@@ -2211,9 +2216,11 @@ components:
         email:
           type: string
           format: email
+          nullable: true
         address:
           type: string
           minLength: 1
+          nullable: true
         notes:
           type: string
           nullable: true

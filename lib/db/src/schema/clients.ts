@@ -13,8 +13,8 @@ export const clientsTable = pgTable(
       .references(() => organizationTable.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     phone: text("phone").notNull(),
-    email: text("email").notNull(),
-    address: text("address").notNull(),
+    email: text("email"),
+    address: text("address"),
     notes: text("notes"),
     // Soft-delete flag (`PRD_DetailHub_Real_Bookings_Clients_Backend.md` Section 10 /
     // Edge Cases): a client referenced by an existing booking is never hard-deleted, so

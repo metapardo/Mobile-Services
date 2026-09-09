@@ -186,8 +186,8 @@ export const ListClientsResponseItem = zod.object({
   "id": zod.number().int(),
   "name": zod.string(),
   "phone": zod.string(),
-  "email": zod.string(),
-  "address": zod.string(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "archived": zod.boolean(),
   "createdAt": zod.coerce.date(),
@@ -208,17 +208,17 @@ export const ListClientsResponse = zod.array(ListClientsResponseItem)
 export const CreateClientBody = zod.object({
   "name": zod.string().min(1),
   "phone": zod.string().min(1),
-  "email": zod.string().email(),
-  "address": zod.string().min(1),
+  "email": zod.string().email().nullish(),
+  "address": zod.string().min(1).nullish(),
   "notes": zod.string().nullish()
-})
+}).describe('`email`\/`address` are optional — quick-add (per `PRD_DetailHub_Appointment_Creation_Flow_Enhancement.md` FR-3\/FR-4) only collects name + phone; email\/address can be filled in later from the Clients page. When `email` IS provided it must still be a valid email address.')
 
 export const CreateClientResponse = zod.object({
   "id": zod.number().int(),
   "name": zod.string(),
   "phone": zod.string(),
-  "email": zod.string(),
-  "address": zod.string(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "archived": zod.boolean(),
   "createdAt": zod.coerce.date(),
@@ -237,8 +237,8 @@ export const GetClientResponse = zod.object({
   "id": zod.number().int(),
   "name": zod.string(),
   "phone": zod.string(),
-  "email": zod.string(),
-  "address": zod.string(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "archived": zod.boolean(),
   "createdAt": zod.coerce.date(),
@@ -262,8 +262,8 @@ export const UpdateClientParams = zod.object({
 export const UpdateClientBody = zod.object({
   "name": zod.string().min(1).optional(),
   "phone": zod.string().min(1).optional(),
-  "email": zod.string().email().optional(),
-  "address": zod.string().min(1).optional(),
+  "email": zod.string().email().nullish(),
+  "address": zod.string().min(1).nullish(),
   "notes": zod.string().nullish()
 }).describe('Partial update — all fields optional.')
 
@@ -271,8 +271,8 @@ export const UpdateClientResponse = zod.object({
   "id": zod.number().int(),
   "name": zod.string(),
   "phone": zod.string(),
-  "email": zod.string(),
-  "address": zod.string(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "archived": zod.boolean(),
   "createdAt": zod.coerce.date(),
@@ -292,8 +292,8 @@ export const ArchiveClientResponse = zod.object({
   "id": zod.number().int(),
   "name": zod.string(),
   "phone": zod.string(),
-  "email": zod.string(),
-  "address": zod.string(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "archived": zod.boolean(),
   "createdAt": zod.coerce.date(),

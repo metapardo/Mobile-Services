@@ -6,13 +6,16 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * `email`/`address` are optional — quick-add (per `PRD_DetailHub_Appointment_Creation_Flow_Enhancement.md` FR-3/FR-4) only collects name + phone; email/address can be filled in later from the Clients page. When `email` IS provided it must still be a valid email address.
+ */
 export interface CreateClientRequest {
   /** @minLength 1 */
   name: string;
   /** @minLength 1 */
   phone: string;
-  email: string;
+  email?: string | null;
   /** @minLength 1 */
-  address: string;
+  address?: string | null;
   notes?: string | null;
 }
