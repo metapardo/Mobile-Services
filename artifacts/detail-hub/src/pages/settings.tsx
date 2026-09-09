@@ -111,7 +111,12 @@ export default function Settings() {
   const [showSetup, setShowSetup] = useState(false);
   const setupProfile = getSetupProfile();
 
-  const settingsQuery = useGetSettings();
+  // `retry: false` — a 404 here means "no settings row yet," a normal steady
+  // state for a legacy org, not a transient failure worth retrying 3x with
+  // backoff. Retrying delays the recoverable-form fallback below for no
+  // benefit, and (observed in manual testing) can leave the query paused
+  // indefinitely if a retry attempt coincides with any connectivity blip.
+  const settingsQuery = useGetSettings({ query: { queryKey: getGetSettingsQueryKey(), retry: false } });
   const [formData, setFormData] = useState<SettingsFormState | null>(null);
   const initialized = useRef(false);
 
