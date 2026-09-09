@@ -377,8 +377,14 @@ export default function BookingNew() {
   const rawBookings: FuelGaugeBookingInput[] = bookingsQuery.data ?? [];
   const realSettings = settingsQuery.data;
 
-  const referenceDataLoading = clientsQuery.isLoading || packagesQuery.isLoading || employeesQuery.isLoading || bookingsQuery.isLoading || settingsQuery.isLoading;
-  const referenceDataFailed = clientsQuery.isError || packagesQuery.isError || employeesQuery.isError || bookingsQuery.isError || settingsQuery.isError;
+  // Deliberately excludes `settingsQuery` — an org with no settings row yet
+  // (404, e.g. a legacy account that predates auto-created defaults) must
+  // still be able to create a booking. Every `realSettings` read below is
+  // already null-safe and degrades to the Fuel Gauge's "No HQ set" state
+  // (FR-24/§8.2) rather than blocking the whole screen on a piece of data
+  // only the gauge itself needs.
+  const referenceDataLoading = clientsQuery.isLoading || packagesQuery.isLoading || employeesQuery.isLoading || bookingsQuery.isLoading;
+  const referenceDataFailed = clientsQuery.isError || packagesQuery.isError || employeesQuery.isError || bookingsQuery.isError;
 
   // Form state
   const [selectedClient, setSelectedClient] = useState<number | null>(null);

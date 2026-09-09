@@ -78,6 +78,15 @@ export async function getSettings(organizationId: string): Promise<Settings | nu
  * can't pass it in `patch` since it's typed as `Omit<..., "organizationId">`, and even
  * if a caller managed to smuggle it in, the RLS `WITH CHECK` predicate this row is
  * scoped under would reject any attempt to move it to a different organization.
+ *
+ * Self-healing: if the UPDATE affects zero rows (no settings row exists yet — a
+ * legacy organization that predates `createDefaultSettings`, or a genuine
+ * signup-time insert failure), this falls back to creating one from
+ * `SETTINGS_DEFAULTS` plus whatever the caller supplied, rather than leaving the
+ * organization permanently unable to ever reach a settings row through the API.
+ * `homeAddress` is required either way (`NOT NULL`, no DB default) — the settings
+ * form always sends it, so this only matters for the edge case this whole path
+ * exists to fix.
  */
 export async function updateSettings(
   organizationId: string,
@@ -89,6 +98,13 @@ export async function updateSettings(
       .set(patch)
       .where(eq(settingsTable.organizationId, organizationId))
       .returning();
-    return updated ?? null;
+    if (updated) return updated;
+
+    if (patch.homeAddress === undefined) return null;
+    const [created] = await tx
+      .insert(settingsTable)
+      .values({ organizationId, ...SETTINGS_DEFAULTS, ...patch, homeAddress: patch.homeAddress })
+      .returning();
+    return created ?? null;
   });
 }

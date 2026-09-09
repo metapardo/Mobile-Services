@@ -38,6 +38,31 @@ interface SettingsFormState {
   cardReaderPaired: boolean;
 }
 
+// Mirrors `SETTINGS_DEFAULTS` in `lib/db/src/settings.ts` — used only when
+// `GET /settings` 404s (no row yet for this organization: a legacy account
+// that predates auto-created defaults, or a signup-time insert that failed).
+// Seeding the form with these instead of showing a fatal error lets the
+// owner fill in Home Base Address and Save, which now self-heals by
+// creating the row (see `updateSettings`'s upsert fallback).
+const DEFAULT_FORM_STATE: SettingsFormState = {
+  homeAddress: '',
+  hqLatitude: null,
+  hqLongitude: null,
+  hqGooglePlaceId: null,
+  gasPrice: 6,
+  vehicleMpg: 28,
+  techHourlyCost: 22,
+  commissionRate: 25,
+  gasThresholdGreen: 10,
+  gasThresholdAmber: 20,
+  fuelGaugeHalfMi: 3,
+  fuelGaugeFullMi: 8,
+  fuelGaugeHalfMin: 1.5,
+  fuelGaugeFullMin: 4,
+  paymentProcessorConnected: false,
+  cardReaderPaired: false,
+};
+
 function toFormState(s: SettingsResult): SettingsFormState {
   return {
     homeAddress: s.homeAddress,
@@ -92,13 +117,21 @@ export default function Settings() {
 
   // Seed local form state once from the fetched settings — a plain `useState`
   // default can't see async query data, and re-seeding on every refetch would
-  // clobber whatever the owner is mid-typing.
+  // clobber whatever the owner is mid-typing. A 404 specifically means "no
+  // settings row yet" (not a real failure) — seed defaults instead so the
+  // owner can fill in Home Base Address and Save, which creates the row.
+  // Any other error (network, 500) is not treated this way — see the
+  // settingsQuery.isError branch below, which still shows a real error.
   useEffect(() => {
-    if (!initialized.current && settingsQuery.data) {
+    if (initialized.current) return;
+    if (settingsQuery.data) {
       setFormData(toFormState(settingsQuery.data));
       initialized.current = true;
+    } else if ((settingsQuery.error as { status?: number } | null)?.status === 404) {
+      setFormData(DEFAULT_FORM_STATE);
+      initialized.current = true;
     }
-  }, [settingsQuery.data]);
+  }, [settingsQuery.data, settingsQuery.error]);
 
   const updateSettingsMutation = useUpdateSettings({
     mutation: {
@@ -122,7 +155,9 @@ export default function Settings() {
     updateSettingsMutation.mutate({ data: toUpdateRequest(formData) });
   };
 
-  if (settingsQuery.isError) {
+  // A 404 is handled above (seeded defaults, editable form) — only a genuine
+  // failure (network, 500, etc.) without recovered form data is fatal here.
+  if (settingsQuery.isError && !formData) {
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-3 px-4 text-center bg-background" data-testid="status-settings-error">
         <AlertTriangle className="w-8 h-8 text-destructive" />
