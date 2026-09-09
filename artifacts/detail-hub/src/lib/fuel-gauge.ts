@@ -145,9 +145,24 @@ function toMins(hhmm: string): number {
   return h * 60 + m;
 }
 
-/** Local appointment date + time -> ISO 8601, for Routes API's `departureTime` (FR-3). */
+/**
+ * Local appointment date + time -> ISO 8601, for Routes API's `departureTime` (FR-3).
+ *
+ * Clamped to "now" (+60s buffer) when the appointment's scheduled start has
+ * already passed — Google's Routes API rejects a past `departureTime` for
+ * `TRAFFIC_AWARE` DRIVE routing outright (it's a TRANSIT-only allowance), and
+ * this is the common case for a same-day booking created after its default
+ * time slot: the appointment-creation screen defaults to today's date, so
+ * simply not touching the time picker yields a past timestamp for the rest
+ * of the day. "Now" is the closest honest proxy for what the drive would
+ * actually look like — the alternative (send the literal past time and let
+ * it fail) makes the gauge non-functional for the single most common way to
+ * create a booking.
+ */
 function toDepartureIso(date: string, startTime: string): string {
-  return new Date(`${date}T${startTime}:00`).toISOString();
+  const scheduled = new Date(`${date}T${startTime}:00`);
+  const now = new Date();
+  return (scheduled.getTime() > now.getTime() ? scheduled : new Date(now.getTime() + 60_000)).toISOString();
 }
 
 function unscoredResult(reason: FuelGaugeUnknownReason, servicePrice: number): FuelGaugeResult {
