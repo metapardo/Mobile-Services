@@ -11,6 +11,8 @@ import timeLogsRouter from "./time-logs";
 import timeOffRequestsRouter from "./time-off-requests";
 import payrollRouter from "./payroll";
 import reportsRouter from "./reports";
+import placesRouter from "./places";
+import routingRouter from "./routing";
 
 const router: IRouter = Router();
 
@@ -26,5 +28,7 @@ router.use(timeLogsRouter);
 router.use(timeOffRequestsRouter);
 router.use(payrollRouter);
 router.use(reportsRouter);
+router.use(placesRouter);
+router.use(routingRouter);
 
 export default router;

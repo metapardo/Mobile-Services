@@ -1,6 +1,10 @@
-import { useState } from 'react';
-import { settings, updateSettings } from '@/lib/mock-data';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useGetSettings, useUpdateSettings, getGetSettingsQueryKey,
+  type SettingsResult, type UpdateSettingsRequest,
+} from '@workspace/api-client-react';
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
@@ -9,20 +13,132 @@ import { Label } from '@workspace/blue-glass-design-system/components/ui/label';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { SetupWizard } from '@/components/setup-wizard';
 import { getSetupProfile } from '@/lib/setup-store';
+import { AddressAutocomplete } from '@/components/address-autocomplete';
+
+// Local form shape mirrors `SettingsResult` — `hqLatitude`/`hqLongitude`/
+// `hqGooglePlaceId` are nullable on the wire (PRD_Mobull_Fuel_Gauge_Accuracy
+// _Rework.md FR-2/FR-24/§9.4); everything else is required, matching the
+// real schema's `NOT NULL` columns + defaults.
+interface SettingsFormState {
+  homeAddress: string;
+  hqLatitude: number | null;
+  hqLongitude: number | null;
+  hqGooglePlaceId: string | null;
+  gasPrice: number;
+  vehicleMpg: number;
+  techHourlyCost: number;
+  commissionRate: number;
+  gasThresholdGreen: number;
+  gasThresholdAmber: number;
+  fuelGaugeHalfMi: number;
+  fuelGaugeFullMi: number;
+  fuelGaugeHalfMin: number;
+  fuelGaugeFullMin: number;
+  paymentProcessorConnected: boolean;
+  cardReaderPaired: boolean;
+}
+
+function toFormState(s: SettingsResult): SettingsFormState {
+  return {
+    homeAddress: s.homeAddress,
+    hqLatitude: s.hqLatitude ?? null,
+    hqLongitude: s.hqLongitude ?? null,
+    hqGooglePlaceId: s.hqGooglePlaceId ?? null,
+    gasPrice: s.gasPrice,
+    vehicleMpg: s.vehicleMpg,
+    techHourlyCost: s.techHourlyCost,
+    commissionRate: s.commissionRate,
+    gasThresholdGreen: s.gasThresholdGreen,
+    gasThresholdAmber: s.gasThresholdAmber,
+    fuelGaugeHalfMi: s.fuelGaugeHalfMi,
+    fuelGaugeFullMi: s.fuelGaugeFullMi,
+    fuelGaugeHalfMin: s.fuelGaugeHalfMin,
+    fuelGaugeFullMin: s.fuelGaugeFullMin,
+    paymentProcessorConnected: s.paymentProcessorConnected,
+    cardReaderPaired: s.cardReaderPaired,
+  };
+}
+
+function toUpdateRequest(f: SettingsFormState): UpdateSettingsRequest {
+  return {
+    homeAddress: f.homeAddress,
+    hqLatitude: f.hqLatitude ?? undefined,
+    hqLongitude: f.hqLongitude ?? undefined,
+    hqGooglePlaceId: f.hqGooglePlaceId ?? undefined,
+    gasPrice: f.gasPrice,
+    vehicleMpg: f.vehicleMpg,
+    techHourlyCost: f.techHourlyCost,
+    commissionRate: f.commissionRate,
+    gasThresholdGreen: f.gasThresholdGreen,
+    gasThresholdAmber: f.gasThresholdAmber,
+    fuelGaugeHalfMi: f.fuelGaugeHalfMi,
+    fuelGaugeFullMi: f.fuelGaugeFullMi,
+    fuelGaugeHalfMin: f.fuelGaugeHalfMin,
+    fuelGaugeFullMin: f.fuelGaugeFullMin,
+    paymentProcessorConnected: f.paymentProcessorConnected,
+    cardReaderPaired: f.cardReaderPaired,
+  };
+}
 
 export default function Settings() {
   const { toast } = useToast();
-  const [formData, setFormData] = useState(settings);
+  const queryClient = useQueryClient();
   const [showSetup, setShowSetup] = useState(false);
   const setupProfile = getSetupProfile();
 
+  const settingsQuery = useGetSettings();
+  const [formData, setFormData] = useState<SettingsFormState | null>(null);
+  const initialized = useRef(false);
+
+  // Seed local form state once from the fetched settings — a plain `useState`
+  // default can't see async query data, and re-seeding on every refetch would
+  // clobber whatever the owner is mid-typing.
+  useEffect(() => {
+    if (!initialized.current && settingsQuery.data) {
+      setFormData(toFormState(settingsQuery.data));
+      initialized.current = true;
+    }
+  }, [settingsQuery.data]);
+
+  const updateSettingsMutation = useUpdateSettings({
+    mutation: {
+      onSuccess: async (updated) => {
+        await queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+        setFormData(toFormState(updated));
+        toast({
+          title: 'Settings saved',
+          description: 'Your settings have been updated successfully.',
+        });
+      },
+      onError: (err) => {
+        const message = err?.data?.message ?? 'Something went wrong saving your settings. Please try again.';
+        toast({ title: 'Couldn’t save settings', description: message, variant: 'destructive' });
+      },
+    },
+  });
+
   const handleSave = () => {
-    updateSettings(formData);
-    toast({
-      title: 'Settings saved',
-      description: 'Your settings have been updated successfully.',
-    });
+    if (!formData || updateSettingsMutation.isPending) return;
+    updateSettingsMutation.mutate({ data: toUpdateRequest(formData) });
   };
+
+  if (settingsQuery.isError) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-3 px-4 text-center bg-background" data-testid="status-settings-error">
+        <AlertTriangle className="w-8 h-8 text-destructive" />
+        <p className="text-[15px] font-semibold">Couldn't load settings</p>
+        <p className="text-[13px] text-muted-foreground max-w-[280px]">Check your connection and try again.</p>
+      </div>
+    );
+  }
+
+  if (settingsQuery.isLoading || !formData) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background" data-testid="status-settings-loading">
+        <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-background pb-20 md:pb-6">
@@ -65,14 +181,38 @@ export default function Settings() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="homeAddress">Home Base Address</Label>
-              <Input
+              {/* PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-24 — same address
+                  typeahead as the booking screen's Location field. No
+                  `originLat`/`originLng` bias here: there's no existing HQ to
+                  bias suggestions around when you're setting HQ itself. */}
+              <AddressAutocomplete
                 id="homeAddress"
                 value={formData.homeAddress}
-                onChange={(e) => setFormData({ ...formData, homeAddress: e.target.value })}
+                onTextChange={(text) => setFormData(f => f && {
+                  ...f,
+                  homeAddress: text,
+                  // Free typing after a prior selection means the text no
+                  // longer matches those coordinates — clear the stale
+                  // geocode rather than silently keeping it (FR-17's spirit:
+                  // a retyped address goes back to ungeocoded until
+                  // re-selected).
+                  hqLatitude: null,
+                  hqLongitude: null,
+                  hqGooglePlaceId: null,
+                })}
+                onSelect={(place) => setFormData(f => f && {
+                  ...f,
+                  homeAddress: place.formattedAddress,
+                  hqLatitude: place.latitude,
+                  hqLongitude: place.longitude,
+                  hqGooglePlaceId: place.placeId,
+                })}
+                placeholder="Business address"
                 data-testid="input-home-address"
               />
               <p className="text-[13px] text-muted-foreground mt-1">
-                Used to calculate travel distance for jobs
+                Used to calculate travel distance for jobs. Select a suggestion to score jobs against real
+                coordinates — a typed-but-unselected address won't be geocoded.
               </p>
             </div>
           </div>
@@ -81,7 +221,8 @@ export default function Settings() {
         <Card className="p-6 border border-border rounded-xl mb-6">
           <h2 className="text-[18px] font-semibold mb-4">Travel Cost Settings</h2>
           <p className="text-[13px] text-muted-foreground mb-4">
-            Used to estimate gas cost/margin for the booking form's smart time-slot suggestions.
+            Used to price the Fuel Gauge's fuel and drive-time cost lines and the booking form's smart
+            time-slot suggestions.
           </p>
           <div className="space-y-4">
             <div>
@@ -91,7 +232,7 @@ export default function Settings() {
                 type="number"
                 step="0.01"
                 value={formData.gasPrice}
-                onChange={(e) => setFormData({ ...formData, gasPrice: parseFloat(e.target.value) })}
+                onChange={(e) => setFormData(f => f && { ...f, gasPrice: parseFloat(e.target.value) })}
                 data-testid="input-gas-price"
               />
             </div>
@@ -101,9 +242,24 @@ export default function Settings() {
                 id="vehicleMpg"
                 type="number"
                 value={formData.vehicleMpg}
-                onChange={(e) => setFormData({ ...formData, vehicleMpg: parseInt(e.target.value) })}
+                onChange={(e) => setFormData(f => f && { ...f, vehicleMpg: parseInt(e.target.value) })}
                 data-testid="input-vehicle-mpg"
               />
+            </div>
+            <div>
+              <Label htmlFor="techHourlyCost">Technician Hourly Cost</Label>
+              <Input
+                id="techHourlyCost"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.techHourlyCost}
+                onChange={(e) => setFormData(f => f && { ...f, techHourlyCost: parseFloat(e.target.value) })}
+                data-testid="input-tech-hourly-cost"
+              />
+              <p className="text-[13px] text-muted-foreground mt-1">
+                What one hour of your technician's time costs you. Used to price the drive.
+              </p>
             </div>
           </div>
         </Card>
@@ -125,7 +281,7 @@ export default function Settings() {
                   type="number"
                   step="0.5"
                   value={formData.fuelGaugeHalfMi}
-                  onChange={(e) => setFormData({ ...formData, fuelGaugeHalfMi: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData(f => f && { ...f, fuelGaugeHalfMi: parseFloat(e.target.value) })}
                 />
                 <p className="text-[13px] text-muted-foreground mt-1">Half gauge when rate ≥ this — default $3/mi</p>
               </div>
@@ -136,7 +292,7 @@ export default function Settings() {
                   type="number"
                   step="0.5"
                   value={formData.fuelGaugeFullMi}
-                  onChange={(e) => setFormData({ ...formData, fuelGaugeFullMi: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData(f => f && { ...f, fuelGaugeFullMi: parseFloat(e.target.value) })}
                 />
                 <p className="text-[13px] text-muted-foreground mt-1">Full gauge when rate ≥ this — default $8/mi</p>
               </div>
@@ -154,7 +310,7 @@ export default function Settings() {
                   type="number"
                   step="0.25"
                   value={formData.fuelGaugeHalfMin}
-                  onChange={(e) => setFormData({ ...formData, fuelGaugeHalfMin: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData(f => f && { ...f, fuelGaugeHalfMin: parseFloat(e.target.value) })}
                 />
                 <p className="text-[13px] text-muted-foreground mt-1">Half gauge when rate ≥ this — default $1.50/min</p>
               </div>
@@ -165,7 +321,7 @@ export default function Settings() {
                   type="number"
                   step="0.25"
                   value={formData.fuelGaugeFullMin}
-                  onChange={(e) => setFormData({ ...formData, fuelGaugeFullMin: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData(f => f && { ...f, fuelGaugeFullMin: parseFloat(e.target.value) })}
                 />
                 <p className="text-[13px] text-muted-foreground mt-1">Full gauge when rate ≥ this — default $4/min</p>
               </div>
@@ -191,7 +347,7 @@ export default function Settings() {
                 {formData.paymentProcessorConnected ? 'Connected' : 'Not connected'}
               </span>
               <button
-                onClick={() => setFormData(d => ({ ...d, paymentProcessorConnected: !d.paymentProcessorConnected }))}
+                onClick={() => setFormData(f => f && { ...f, paymentProcessorConnected: !f.paymentProcessorConnected })}
                 className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                   formData.paymentProcessorConnected ? 'bg-primary' : 'bg-muted-foreground/30'
                 }`}
@@ -218,7 +374,7 @@ export default function Settings() {
                 {formData.cardReaderPaired ? 'Paired' : 'Not paired'}
               </span>
               <button
-                onClick={() => setFormData(d => ({ ...d, cardReaderPaired: !d.cardReaderPaired }))}
+                onClick={() => setFormData(f => f && { ...f, cardReaderPaired: !f.cardReaderPaired })}
                 className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                   formData.cardReaderPaired ? 'bg-primary' : 'bg-muted-foreground/30'
                 }`}
@@ -243,8 +399,13 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Button onClick={handleSave} className="w-full" data-testid="button-save">
-          Save Settings
+        <Button
+          onClick={handleSave}
+          disabled={updateSettingsMutation.isPending}
+          className="w-full"
+          data-testid="button-save"
+        >
+          {updateSettingsMutation.isPending ? 'Saving…' : 'Save Settings'}
         </Button>
       </div>
 

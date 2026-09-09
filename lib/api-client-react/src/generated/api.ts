@@ -20,8 +20,12 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AutocompletePlacesRequest,
+  AutocompletePlacesResult,
   BookingResult,
   ClientResult,
+  ComputeRouteRequest,
+  ComputeRouteResult,
   CreateBookingRequest,
   CreateClientRequest,
   CreateEmployeeRequest,
@@ -36,6 +40,7 @@ import type {
   FinancialReportResult,
   GetFinancialReportParams,
   GetPayrollSummaryParams,
+  GetPlaceDetailsRequest,
   HealthStatus,
   ListBookingsParams,
   ListClientsParams,
@@ -50,6 +55,7 @@ import type {
   PackageResult,
   PayrollRunResult,
   PayrollSummaryResult,
+  PlaceDetailsResult,
   RecordBookingPaymentRequest,
   RefundBookingRequest,
   ReviewTimeOffRequestRequest,
@@ -3589,4 +3595,220 @@ export function useGetFinancialReport<TData = Awaited<ReturnType<typeof getFinan
 
 
 
+
+export const getAutocompletePlacesUrl = () => {
+
+
+
+
+  return `/api/places/autocomplete`
+}
+
+/**
+ * PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-9 through FR-13, FR-19. Server-side proxy to Places API (New) `places:autocomplete` — `GOOGLE_MAPS_API_KEY` never reaches the browser (Section 9.1). Always restricted to `regionCode: "US"` (FR-12). When `originLat`/`originLng` are supplied (the organization's Home Base coordinates, once the frontend has them), results are biased with a `locationBias` circle around that point; Google's `Circle.radius` maximum is 50,000m (~31 mi), so the PRD's 50-mile bias radius is clamped to that API ceiling rather than sent as-is. Omitted entirely — not an error — when no origin is supplied, since Home Base coordinates don't exist in the DB yet. Only `placePrediction` suggestions are returned (each carries a `placeId`); Google's other suggestion type, `queryPrediction`, has no `placeId` and can't be selected as a booking address, so it's filtered out server-side.
+ * @summary Address suggestions from Google Places API (New) Autocomplete
+ */
+export const autocompletePlaces = async (autocompletePlacesRequest: AutocompletePlacesRequest, options?: Parameters<typeof customFetch>[1]): Promise<AutocompletePlacesResult> => {
+
+  return customFetch<AutocompletePlacesResult>(getAutocompletePlacesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(autocompletePlacesRequest)
+  }
+);}
+
+
+
+
+
+export const getAutocompletePlacesMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof autocompletePlaces>>, TError,{data: BodyType<AutocompletePlacesRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof autocompletePlaces>>, TError,{data: BodyType<AutocompletePlacesRequest>}, TContext> => {
+
+const mutationKey = ['autocompletePlaces'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof autocompletePlaces>>, {data: BodyType<AutocompletePlacesRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  autocompletePlaces(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AutocompletePlacesMutationResult = NonNullable<Awaited<ReturnType<typeof autocompletePlaces>>>
+    export type AutocompletePlacesMutationBody = BodyType<AutocompletePlacesRequest>
+    export type AutocompletePlacesMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Address suggestions from Google Places API (New) Autocomplete
+ */
+export const useAutocompletePlaces = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof autocompletePlaces>>, TError,{data: BodyType<AutocompletePlacesRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof autocompletePlaces>>,
+        TError,
+        {data: BodyType<AutocompletePlacesRequest>},
+        TContext
+      > => {
+      return useMutation(getAutocompletePlacesMutationOptions(options));
+    }
+
+export const getGetPlaceDetailsUrl = () => {
+
+
+
+
+  return `/api/places/details`
+}
+
+/**
+ * FR-14. Requests exactly `location,formattedAddress` via the required `X-Goog-FieldMask` header — Google bills Place Details by field mask breadth, so no other field (photos, reviews, hours, etc.) is requested. Passing the same `sessionToken` used for the preceding `/places/autocomplete` calls closes that Autocomplete billing session (FR-11); this is implicit in the call itself — there is no separate "end session" request.
+ * @summary Resolve a selected suggestion to coordinates via Place Details (New)
+ */
+export const getPlaceDetails = async (getPlaceDetailsRequest: GetPlaceDetailsRequest, options?: Parameters<typeof customFetch>[1]): Promise<PlaceDetailsResult> => {
+
+  return customFetch<PlaceDetailsResult>(getGetPlaceDetailsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(getPlaceDetailsRequest)
+  }
+);}
+
+
+
+
+
+export const getGetPlaceDetailsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getPlaceDetails>>, TError,{data: BodyType<GetPlaceDetailsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getPlaceDetails>>, TError,{data: BodyType<GetPlaceDetailsRequest>}, TContext> => {
+
+const mutationKey = ['getPlaceDetails'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getPlaceDetails>>, {data: BodyType<GetPlaceDetailsRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  getPlaceDetails(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetPlaceDetailsMutationResult = NonNullable<Awaited<ReturnType<typeof getPlaceDetails>>>
+    export type GetPlaceDetailsMutationBody = BodyType<GetPlaceDetailsRequest>
+    export type GetPlaceDetailsMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Resolve a selected suggestion to coordinates via Place Details (New)
+ */
+export const useGetPlaceDetails = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getPlaceDetails>>, TError,{data: BodyType<GetPlaceDetailsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof getPlaceDetails>>,
+        TError,
+        {data: BodyType<GetPlaceDetailsRequest>},
+        TContext
+      > => {
+      return useMutation(getGetPlaceDetailsMutationOptions(options));
+    }
+
+export const getComputeRouteUrl = () => {
+
+
+
+
+  return `/api/routes/compute`
+}
+
+/**
+ * FR-1 through FR-6. Server-side proxy to Routes API `computeRoutes` with `travelMode: DRIVE`, `routingPreference: TRAFFIC_AWARE`, and the given `departureTime` — the actual drive at the actual hour of the appointment (FR-3). Returns a ONE-WAY distance/time; callers (the Fuel Gauge calculation layer) double it themselves for the round trip per PRD §6.1. Never fabricates a distance (FR-5): if Google returns `routes: []` (no routable path — e.g. islands, remote sites), this responds `422 no_route_found` rather than a fake number, so the frontend can show Unknown with a retry instead of a guess.
+ * @summary Traffic-aware one-way drive distance and drive time between two places
+ */
+export const computeRoute = async (computeRouteRequest: ComputeRouteRequest, options?: Parameters<typeof customFetch>[1]): Promise<ComputeRouteResult> => {
+
+  return customFetch<ComputeRouteResult>(getComputeRouteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(computeRouteRequest)
+  }
+);}
+
+
+
+
+
+export const getComputeRouteMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeRoute>>, TError,{data: BodyType<ComputeRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof computeRoute>>, TError,{data: BodyType<ComputeRouteRequest>}, TContext> => {
+
+const mutationKey = ['computeRoute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof computeRoute>>, {data: BodyType<ComputeRouteRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  computeRoute(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ComputeRouteMutationResult = NonNullable<Awaited<ReturnType<typeof computeRoute>>>
+    export type ComputeRouteMutationBody = BodyType<ComputeRouteRequest>
+    export type ComputeRouteMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Traffic-aware one-way drive distance and drive time between two places
+ */
+export const useComputeRoute = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeRoute>>, TError,{data: BodyType<ComputeRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof computeRoute>>,
+        TError,
+        {data: BodyType<ComputeRouteRequest>},
+        TContext
+      > => {
+      return useMutation(getComputeRouteMutationOptions(options));
+    }
 

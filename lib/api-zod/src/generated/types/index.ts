@@ -7,12 +7,16 @@
  */
 
 export * from './authUser';
+export * from './autocompletePlacesRequest';
+export * from './autocompletePlacesResult';
 export * from './bankAccount';
 export * from './bookingResult';
 export * from './bookingResultPaymentMethod';
 export * from './bookingResultRefundStatus';
 export * from './bookingResultStatus';
 export * from './clientResult';
+export * from './computeRouteRequest';
+export * from './computeRouteResult';
 export * from './createBookingRequest';
 export * from './createBookingRequestStatus';
 export * from './createClientRequest';
@@ -45,6 +49,7 @@ export * from './financialReportTrendPoint';
 export * from './getFinancialReportParams';
 export * from './getPayrollSummaryParams';
 export * from './getPayrollSummaryPeriod';
+export * from './getPlaceDetailsRequest';
 export * from './healthStatus';
 export * from './listBookingsParams';
 export * from './listClientsParams';
@@ -66,6 +71,9 @@ export * from './payrollRunResult';
 export * from './payrollRunResultDurationType';
 export * from './payrollRunResultStatus';
 export * from './payrollSummaryResult';
+export * from './placeDetailsResult';
+export * from './placeSuggestion';
+export * from './placeSuggestionMatch';
 export * from './recordBookingPaymentRequest';
 export * from './recordBookingPaymentRequestPaymentMethod';
 export * from './refundBookingRequest';

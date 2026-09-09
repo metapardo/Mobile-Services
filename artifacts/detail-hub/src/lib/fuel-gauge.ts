@@ -1,88 +1,141 @@
 /**
  * Fuel Gauge — per-booking ROI indicator.
  *
- * Standalone, UI-free, testable independently.
+ * Standalone, UI-free, testable independently. Rebuilt per
+ * `PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md` (Phase 1) — the old version
+ * "measured" distance by hashing address strings; it never touched real
+ * geography. Every number here now comes from a real routed distance/time,
+ * supplied by the caller via the `fetchRoute` dependency-injection callback
+ * (React Query hooks can't be called from a plain function, so this file
+ * stays framework-agnostic and the calling component wires
+ * `useComputeRoute()` into `fetchRoute`).
  *
- * Step 1 — Anchor selection (same-tech only):
- *   • No other booking that day → Home Base Address
- *   • One adjacent booking → that booking's address
- *   • Bookings before AND after → whichever is nearer
+ * Step 1 — Anchor selection (same-tech, same-day peers only — FR-4):
+ *   • No other booking that day → Home Base
+ *   • One adjacent booking → that booking's address (falls back to Home Base
+ *     if that one peer has no real coordinates)
+ *   • Bookings before AND after → whichever is nearer by real routed
+ *     distance (falls back to whichever side has coordinates if only one
+ *     does; falls back to Home Base if neither does)
  *
- * Step 2 — Metric:
- *   • NYC address (5 boroughs) → drive TIME in minutes
- *   • Everywhere else → drive DISTANCE in miles
+ * Step 2 — Cost model (§6.1), round trip, fuel and drive time kept separate
+ *   all the way to the return value — never pre-summed here (FR-6/FR-23a):
+ *     roundTripMiles   = oneWayMiles   x 2
+ *     roundTripMinutes = oneWayMinutes x 2
+ *     fuelCost  = roundTripMiles   / vehicleMpg x gasPrice
+ *     driveCost = roundTripMinutes / 60         x techHourlyCost
+ *     travelCost = fuelCost + driveCost
+ *     youKeep    = servicePrice - travelCost
+ *     travelLoad = travelCost / servicePrice
  *
- * Step 3 — Rate & bucket:
- *   • Rate = booking price / metric value
- *   • Thresholds are user-configurable (defaults: $3/$8 per mile, $1.50/$4 per minute)
+ * Step 3 — Grade (§6.3, hardcoded for Phase 1 — configurable cutoffs are
+ *   FR-7/FR-26, explicitly Phase 2):
+ *     travelLoad < 15%          → strong  ("Worth the trip")
+ *     15% <= travelLoad < 35%   → fair    ("Okay — watch the drive")
+ *     travelLoad >= 35%         → weak    ("The drive eats this one")
+ *
+ * FR-5: routing failure, a missing anchor, a target with no selected
+ * address, or a $0 price all resolve to `grade: 'unknown'` — never a
+ * fabricated or estimated grade. `reason` distinguishes *why*, so the UI can
+ * show the right placeholder copy (only `routing-failed` gets a Retry
+ * action — see §8.2/§10).
  */
 
-import type { Booking, Package } from './mock-data';
+// ── Public types ────────────────────────────────────────────────────────────
 
-// ── Public types ──────────────────────────────────────────────────────────────
+export type FuelGaugeGrade = 'strong' | 'fair' | 'weak' | 'unknown';
+export type FuelGaugeAnchorType = 'home' | 'adjacent' | 'nearest';
 
-export type GaugeLevel = 'full' | 'half' | 'empty' | 'unknown';
+/**
+ * Why a result is `unknown` — only meaningful when `grade === 'unknown'`.
+ *   no-address     — target booking has no `googlePlaceId` (address was
+ *                     typed but never selected from suggestions, or this is
+ *                     a legacy booking that predates real geocoding)
+ *   no-price       — selected service(s) total $0 (§10: "a free job is a
+ *                     business decision, not a bad drive")
+ *   no-hq          — the resolved anchor needed Home Base and Home Base has
+ *                     no coordinates yet (FR-24)
+ *   no-anchor      — same-day peers exist but none have coordinates, and
+ *                     Home Base also has none
+ *   routing-failed — `fetchRoute` rejected, or Google returned no route
+ *                     (FR-5) — the only reason that should offer a Retry
+ *   not-computed   — `computeFuelGauge` was never called for this reading
+ *                     at all (e.g. `calendar.tsx`'s Phase 1 compatibility
+ *                     fix, which shows Unknown for every booking rather
+ *                     than batch-fetching routes per grid cell — see that
+ *                     file for why). Never returned by `computeFuelGauge`
+ *                     itself; callers construct this reason directly.
+ */
+export type FuelGaugeUnknownReason =
+  | 'no-address'
+  | 'no-price'
+  | 'no-hq'
+  | 'no-anchor'
+  | 'routing-failed'
+  | 'not-computed';
 
 export interface FuelGaugeResult {
-  level: GaugeLevel;
-  metricType: 'miles' | 'minutes';
-  metricValue: number;        // miles or minutes to/from anchor
-  rate: number;               // $/mile or $/minute
-  bookingPrice: number;
+  grade: FuelGaugeGrade;
+  /** Only set when `grade === 'unknown'`. */
+  reason?: FuelGaugeUnknownReason;
+  servicePrice: number;
+  /** `servicePrice - travelCost`. 0 when `grade === 'unknown'`. */
+  youKeep: number;
+  /** `travelCost / servicePrice`. 0 when `grade === 'unknown'`. */
+  travelLoad: number;
+  /** Round-trip fuel dollars — its own line, never pre-summed with `driveCost` (FR-23a). */
+  fuelCost: number;
+  roundTripMiles: number;
+  /** Round-trip drive-time dollars — its own line, never pre-summed with `fuelCost` (FR-23a). */
+  driveCost: number;
+  roundTripMinutes: number;
+  /** Google's `formattedAddress` for the anchor when known; `settings.homeAddress` for a Home Base anchor. */
   anchorAddress: string;
-  anchorType: 'home' | 'adjacent' | 'nearest';
+  anchorType: FuelGaugeAnchorType;
 }
 
-export interface FuelGaugeThresholds {
-  fuelGaugeHalfMi:  number;   // $/mile — lower bound of Half (default 3)
-  fuelGaugeFullMi:  number;   // $/mile — lower bound of Full (default 8)
-  fuelGaugeHalfMin: number;   // $/min  — lower bound of Half (default 1.5)
-  fuelGaugeFullMin: number;   // $/min  — lower bound of Full (default 4)
+/** Minimal shape `computeFuelGauge` needs from a booking — a structural subset of `BookingResult`. */
+export interface FuelGaugeBookingInput {
+  id: number;
+  date: string;       // YYYY-MM-DD
+  startTime: string;  // HH:MM, 24-hour
+  status: string;
+  employeeIds: number[];
+  googlePlaceId: string | null;
+  formattedAddress: string | null;
 }
 
-// ── NYC borough detection — static lookup, zero API calls ─────────────────────
-
-/** Zip-code ranges for the 5 NYC boroughs */
-const NYC_ZIP_RANGES: Array<[number, number]> = [
-  [10001, 10282], // Manhattan
-  [10301, 10314], // Staten Island
-  [10451, 10475], // Bronx
-  [11004, 11109], // Queens (eastern / near JFK)
-  [11201, 11239], // Brooklyn
-  [11354, 11436], // Queens (western/northern — Flushing, Astoria, Forest Hills…)
-  [11691, 11697], // Queens — Far Rockaway
-];
-
-export function isNYCAddress(address: string): boolean {
-  // Grab first 5-digit sequence that starts with 1 (NYC zips: 10xxx–11xxx)
-  const m = address.match(/\b(1\d{4})\b/);
-  if (!m) return false;
-  const z = parseInt(m[1], 10);
-  return NYC_ZIP_RANGES.some(([lo, hi]) => z >= lo && z <= hi);
-}
-
-// ── Distance / drive-time proxies (no API call) ───────────────────────────────
-
-function addrHash(s: string): number {
-  return s.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+/** Minimal shape `computeFuelGauge` needs from settings — a structural subset of `SettingsResult`. */
+export interface FuelGaugeSettingsInput {
+  homeAddress: string;
+  hqGooglePlaceId: string | null | undefined;
+  gasPrice: number;
+  vehicleMpg: number;
+  techHourlyCost: number;
 }
 
 /**
- * Straight-line distance proxy.  Two addresses in the same metro area typically
- * hash within 2–16 miles of each other — enough for the gauge to differentiate
- * nearby vs. far-flung jobs without a live Geocoding API.
+ * Dependency-injected router — the calling component supplies a thin wrapper
+ * around `useComputeRoute()`'s `mutateAsync`. Always one-way; this file
+ * doubles it for the round trip. Must reject (never return a sentinel) on
+ * failure — `computeFuelGauge` treats any rejection as FR-5's
+ * `routing-failed` case.
  */
-export function estimateDistanceMiles(a: string, b: string): number {
-  const h1 = addrHash(a) % 100;
-  const h2 = addrHash(b) % 100;
-  return (Math.abs(h1 - h2) % 20) * 0.7 + 2; // 2–16 mi
-}
+export type FetchRoute = (
+  originPlaceId: string,
+  destinationPlaceId: string,
+  departureTimeIso: string,
+) => Promise<{ miles: number; minutes: number }>;
 
-/**
- * NYC drive-time proxy: ~10 mph average in dense-city traffic.
- */
-export function estimateDriveMinutes(a: string, b: string): number {
-  return Math.round((estimateDistanceMiles(a, b) / 10) * 60);
+// ── Grade bands (§6.3 — hardcoded for Phase 1, FR-7/FR-26 are Phase 2) ───────
+
+const TRAVEL_LOAD_STRONG_MAX = 0.15; // < 15% → strong
+const TRAVEL_LOAD_FAIR_MAX = 0.35;   // < 35% → fair, else weak
+
+function grade(travelLoad: number): FuelGaugeGrade {
+  if (travelLoad < TRAVEL_LOAD_STRONG_MAX) return 'strong';
+  if (travelLoad < TRAVEL_LOAD_FAIR_MAX) return 'fair';
+  return 'weak';
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,22 +145,57 @@ function toMins(hhmm: string): number {
   return h * 60 + m;
 }
 
-function pkgDuration(b: Booking, pkgMap: Map<number, Package>): number {
-  const d = b.packageIds.reduce((s, id) => s + (pkgMap.get(id)?.durationMinutes ?? 60), 0);
-  return d > 0 ? d : 60;
+/** Local appointment date + time -> ISO 8601, for Routes API's `departureTime` (FR-3). */
+function toDepartureIso(date: string, startTime: string): string {
+  return new Date(`${date}T${startTime}:00`).toISOString();
 }
 
-// ── Anchor selection (spec Step 1) ───────────────────────────────────────────
+function unscoredResult(reason: FuelGaugeUnknownReason, servicePrice: number): FuelGaugeResult {
+  return {
+    grade: 'unknown',
+    reason,
+    servicePrice,
+    youKeep: 0,
+    travelLoad: 0,
+    fuelCost: 0,
+    roundTripMiles: 0,
+    driveCost: 0,
+    roundTripMinutes: 0,
+    anchorAddress: '',
+    anchorType: 'home',
+  };
+}
 
-function selectAnchor(
-  target: Booking,
-  allBookings: Booking[],
-  pkgMap: Map<number, Package>,
-  homeAddress: string,
-): { address: string; type: FuelGaugeResult['anchorType'] } {
+// ── Anchor selection (FR-4) ───────────────────────────────────────────────────
 
-  // Same-tech, same-day, active bookings other than target
-  const peers = allBookings
+type AnchorSelection =
+  | { kind: 'ok'; type: FuelGaugeAnchorType; placeId: string; address: string; route?: { miles: number; minutes: number } }
+  | { kind: 'none'; reason: 'no-hq' | 'no-anchor' };
+
+interface Peer extends FuelGaugeBookingInput {
+  startMins: number;
+}
+
+function homeAnchor(settings: FuelGaugeSettingsInput): AnchorSelection {
+  return settings.hqGooglePlaceId
+    ? { kind: 'ok', type: 'home', placeId: settings.hqGooglePlaceId, address: settings.homeAddress }
+    : { kind: 'none', reason: 'no-hq' };
+}
+
+function usableAdjacent(peer: Peer | null): AnchorSelection | null {
+  if (!peer || !peer.googlePlaceId || !peer.formattedAddress) return null;
+  return { kind: 'ok', type: 'adjacent', placeId: peer.googlePlaceId, address: peer.formattedAddress };
+}
+
+async function selectAnchor(
+  target: FuelGaugeBookingInput,
+  targetPlaceId: string,
+  allBookings: FuelGaugeBookingInput[],
+  settings: FuelGaugeSettingsInput,
+  departureTimeIso: string,
+  fetchRoute: FetchRoute,
+): Promise<AnchorSelection> {
+  const peers: Peer[] = allBookings
     .filter(b =>
       b.id !== target.id &&
       b.date === target.date &&
@@ -117,94 +205,102 @@ function selectAnchor(
     .map(b => ({ ...b, startMins: toMins(b.startTime) }))
     .sort((a, b) => a.startMins - b.startMins);
 
-  if (peers.length === 0) {
-    return { address: homeAddress, type: 'home' };
-  }
+  if (peers.length === 0) return homeAnchor(settings);
 
   const tStart = toMins(target.startTime);
-  const before = peers.filter(b => b.startMins < tStart);
-  const after  = peers.filter(b => b.startMins >= tStart);
-  const prev   = before.length > 0 ? before[before.length - 1] : null;
-  const next   = after.length  > 0 ? after[0]                  : null;
+  const before = peers.filter(p => p.startMins < tStart);
+  const after = peers.filter(p => p.startMins >= tStart);
+  const prev = before.length > 0 ? before[before.length - 1] : null;
+  const next = after.length > 0 ? after[0] : null;
 
   // Exactly one adjacent booking
-  if (!prev && next) return { address: next.address, type: 'adjacent' };
-  if (prev && !next) return { address: prev.address, type: 'adjacent' };
+  if (prev && !next) return usableAdjacent(prev) ?? homeAnchor(settings);
+  if (!prev && next) return usableAdjacent(next) ?? homeAnchor(settings);
 
-  // Both before and after — pick nearer one
-  const dPrev = estimateDistanceMiles(target.address, prev!.address);
-  const dNext = estimateDistanceMiles(target.address, next!.address);
-  return dPrev <= dNext
-    ? { address: prev!.address, type: 'nearest' }
-    : { address: next!.address, type: 'nearest' };
+  // Sandwiched — both a prior and a following booking exist
+  const prevUsable = !!(prev?.googlePlaceId && prev?.formattedAddress);
+  const nextUsable = !!(next?.googlePlaceId && next?.formattedAddress);
+
+  if (prevUsable && !nextUsable) {
+    return { kind: 'ok', type: 'nearest', placeId: prev!.googlePlaceId!, address: prev!.formattedAddress! };
+  }
+  if (!prevUsable && nextUsable) {
+    return { kind: 'ok', type: 'nearest', placeId: next!.googlePlaceId!, address: next!.formattedAddress! };
+  }
+  if (!prevUsable && !nextUsable) {
+    const home = homeAnchor(settings);
+    return home.kind === 'ok' ? home : { kind: 'none', reason: 'no-anchor' };
+  }
+
+  // Both usable — route to both, keep the nearer, and reuse that route as
+  // the final result so the anchor's real leg is never fetched twice.
+  const [prevRoute, nextRoute] = await Promise.all([
+    fetchRoute(prev!.googlePlaceId!, targetPlaceId, departureTimeIso),
+    fetchRoute(next!.googlePlaceId!, targetPlaceId, departureTimeIso),
+  ]);
+  return prevRoute.miles <= nextRoute.miles
+    ? { kind: 'ok', type: 'nearest', placeId: prev!.googlePlaceId!, address: prev!.formattedAddress!, route: prevRoute }
+    : { kind: 'ok', type: 'nearest', placeId: next!.googlePlaceId!, address: next!.formattedAddress!, route: nextRoute };
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function computeFuelGauge(
-  target: Booking,
-  allBookings: Booking[],
-  allPackages: Package[],
-  homeAddress: string,
-  thresholds: FuelGaugeThresholds,
-): FuelGaugeResult {
-  const pkgMap = new Map(allPackages.map(p => [p.id, p]));
+/**
+ * Computes the Fuel Gauge reading for one booking. Never throws — every
+ * failure mode (missing address, missing HQ, missing peer coordinates, a
+ * rejected/no-route `fetchRoute` call) resolves to `grade: 'unknown'` with a
+ * `reason`, per FR-5.
+ */
+export async function computeFuelGauge(
+  target: FuelGaugeBookingInput,
+  servicePrice: number,
+  allBookings: FuelGaugeBookingInput[],
+  settings: FuelGaugeSettingsInput,
+  fetchRoute: FetchRoute,
+): Promise<FuelGaugeResult> {
+  // §10 edge case: a free/comped job is a business decision, not a bad drive.
+  if (!(servicePrice > 0)) return unscoredResult('no-price', servicePrice);
 
-  const bookingPrice = target.packageIds
-    .reduce((s, id) => s + (pkgMap.get(id)?.price ?? 0), 0);
+  // Never for an address the owner typed but never selected (§5.2/§10).
+  if (!target.googlePlaceId) return unscoredResult('no-address', servicePrice);
 
-  // Unknown: no address, no price, or price is zero
-  if (!target.address?.trim() || bookingPrice === 0) {
+  const targetPlaceId = target.googlePlaceId;
+  const departureTimeIso = toDepartureIso(target.date, target.startTime);
+
+  try {
+    const anchor = await selectAnchor(target, targetPlaceId, allBookings, settings, departureTimeIso, fetchRoute);
+    if (anchor.kind === 'none') {
+      return unscoredResult(anchor.reason, servicePrice);
+    }
+
+    const route = anchor.route ?? await fetchRoute(anchor.placeId, targetPlaceId, departureTimeIso);
+
+    const roundTripMiles = route.miles * 2;
+    const roundTripMinutes = route.minutes * 2;
+
+    // Two costs, computed and returned separately — never pre-summed (FR-6/FR-23a).
+    const fuelCost = (roundTripMiles / settings.vehicleMpg) * settings.gasPrice;
+    const driveCost = (roundTripMinutes / 60) * settings.techHourlyCost;
+    const travelCost = fuelCost + driveCost;
+
+    const youKeep = servicePrice - travelCost;
+    const travelLoad = travelCost / servicePrice;
+
     return {
-      level: 'unknown', metricType: 'miles', metricValue: 0,
-      rate: 0, bookingPrice, anchorAddress: '', anchorType: 'home',
+      grade: grade(travelLoad),
+      servicePrice,
+      youKeep,
+      travelLoad,
+      fuelCost,
+      roundTripMiles,
+      driveCost,
+      roundTripMinutes,
+      anchorAddress: anchor.address,
+      anchorType: anchor.type,
     };
+  } catch {
+    // fetchRoute rejected, or Google returned no route (the backend proxy's
+    // `no_route_found` 422) — never fabricate a grade (FR-5).
+    return unscoredResult('routing-failed', servicePrice);
   }
-
-  const anchor = selectAnchor(target, allBookings, pkgMap, homeAddress);
-
-  if (!anchor.address?.trim()) {
-    return {
-      level: 'unknown', metricType: 'miles', metricValue: 0,
-      rate: 0, bookingPrice, anchorAddress: homeAddress, anchorType: 'home',
-    };
-  }
-
-  // Step 2 — choose metric
-  const useMinutes = isNYCAddress(target.address);
-  const metricValue = useMinutes
-    ? estimateDriveMinutes(anchor.address, target.address)
-    : estimateDistanceMiles(anchor.address, target.address);
-
-  if (metricValue === 0) {
-    return {
-      level: 'unknown',
-      metricType: useMinutes ? 'minutes' : 'miles',
-      metricValue: 0, rate: 0, bookingPrice,
-      anchorAddress: anchor.address, anchorType: anchor.type,
-    };
-  }
-
-  // Step 3 — rate & bucket
-  const rate = bookingPrice / metricValue;
-  let level: GaugeLevel;
-  if (useMinutes) {
-    level = rate >= thresholds.fuelGaugeFullMin ? 'full'
-          : rate >= thresholds.fuelGaugeHalfMin ? 'half'
-          : 'empty';
-  } else {
-    level = rate >= thresholds.fuelGaugeFullMi ? 'full'
-          : rate >= thresholds.fuelGaugeHalfMi ? 'half'
-          : 'empty';
-  }
-
-  return {
-    level,
-    metricType: useMinutes ? 'minutes' : 'miles',
-    metricValue,
-    rate,
-    bookingPrice,
-    anchorAddress: anchor.address,
-    anchorType: anchor.type,
-  };
 }

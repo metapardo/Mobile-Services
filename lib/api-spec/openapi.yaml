@@ -33,6 +33,12 @@ tags:
       The Reports section's Monthly/Quarterly/Annual "Financial View" — income
       statement, balance sheet, cash flow, package mix, and revenue-by-employee
       (PRD_DetailHub_After_Package_Work.md Section 6.2)
+  - name: maps
+    description: >-
+      Server-side proxies to Google Maps Platform (Places API (New), Routes API) for
+      the Fuel Gauge accuracy rework (PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md Section
+      9.1). `GOOGLE_MAPS_API_KEY` is read only in `artifacts/api-server` and never
+      reaches the browser.
 paths:
   /healthz:
     get:
@@ -1848,6 +1854,178 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /places/autocomplete:
+    post:
+      operationId: autocompletePlaces
+      tags: [maps]
+      summary: Address suggestions from Google Places API (New) Autocomplete
+      description: >-
+        PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-9 through FR-13, FR-19. Server-side
+        proxy to Places API (New) `places:autocomplete` — `GOOGLE_MAPS_API_KEY` never
+        reaches the browser (Section 9.1). Always restricted to `regionCode: "US"`
+        (FR-12). When `originLat`/`originLng` are supplied (the organization's Home
+        Base coordinates, once the frontend has them), results are biased with a
+        `locationBias` circle around that point; Google's `Circle.radius` maximum is
+        50,000m (~31 mi), so the PRD's 50-mile bias radius is clamped to that API
+        ceiling rather than sent as-is. Omitted entirely — not an error — when no
+        origin is supplied, since Home Base coordinates don't exist in the DB yet.
+        Only `placePrediction` suggestions are returned (each carries a `placeId`);
+        Google's other suggestion type, `queryPrediction`, has no `placeId` and can't
+        be selected as a booking address, so it's filtered out server-side.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutocompletePlacesRequest"
+      responses:
+        "200":
+          description: Suggestion list, ordered by Google's relevance ranking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutocompletePlacesResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: >-
+            Places API (New) Autocomplete request failed or returned an unexpected
+            shape. The frontend should degrade the field to plain text (FR-19), never
+            block the form.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /places/details:
+    post:
+      operationId: getPlaceDetails
+      tags: [maps]
+      summary: Resolve a selected suggestion to coordinates via Place Details (New)
+      description: >-
+        FR-14. Requests exactly `location,formattedAddress` via the required
+        `X-Goog-FieldMask` header — Google bills Place Details by field mask breadth,
+        so no other field (photos, reviews, hours, etc.) is requested. Passing the
+        same `sessionToken` used for the preceding `/places/autocomplete` calls closes
+        that Autocomplete billing session (FR-11); this is implicit in the call itself
+        — there is no separate "end session" request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetPlaceDetailsRequest"
+      responses:
+        "200":
+          description: Resolved coordinates and formatted address for the selected place.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceDetailsResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Google has no place matching this placeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Place Details (New) request failed or returned an unexpected shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /routes/compute:
+    post:
+      operationId: computeRoute
+      tags: [maps]
+      summary: Traffic-aware one-way drive distance and drive time between two places
+      description: >-
+        FR-1 through FR-6. Server-side proxy to Routes API `computeRoutes` with
+        `travelMode: DRIVE`, `routingPreference: TRAFFIC_AWARE`, and the given
+        `departureTime` — the actual drive at the actual hour of the appointment
+        (FR-3). Returns a ONE-WAY distance/time; callers (the Fuel Gauge calculation
+        layer) double it themselves for the round trip per PRD §6.1. Never fabricates
+        a distance (FR-5): if Google returns `routes: []` (no routable path — e.g.
+        islands, remote sites), this responds `422 no_route_found` rather than a fake
+        number, so the frontend can show Unknown with a retry instead of a guess.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComputeRouteRequest"
+      responses:
+        "200":
+          description: One-way distance and drive time for the requested departure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComputeRouteResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >-
+            Google returned no route between these two places (FR-5) — never a
+            fabricated distance; the frontend must show Unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Routes API request failed or returned an unexpected shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   parameters:
     IdParam:
@@ -2062,6 +2240,20 @@ components:
           description: >-
             The business's home base address (`AdminSettings.home_base_address` in the
             master PRD). Editable via `PATCH /settings`.
+        hqLatitude:
+          type: number
+          nullable: true
+          description: >-
+            PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/FR-24/§9.4 (Phase 1). Null
+            until Home Base is re-saved through the Places-autocomplete address field
+            — an org that hasn't done that yet gets Unknown gauge readings and a setup
+            prompt (frontend concern, next phase), not a fabricated location.
+        hqLongitude:
+          type: number
+          nullable: true
+        hqGooglePlaceId:
+          type: string
+          nullable: true
         gasPrice:
           type: number
           description: Assumed $/gallon fuel price, for Gas Meter cost estimates.
@@ -2089,6 +2281,13 @@ components:
         fuelGaugeFullMin:
           type: number
           description: Fuel Gauge "full" band lower bound, $/minute.
+        techHourlyCost:
+          type: number
+          description: >-
+            PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §6.1/§6.2 (Phase 1). What an hour
+            of a technician's time costs the business — priced into the Fuel Gauge's
+            drive-time cost line. NOT NULL at the DB level with a $22.00 default, so
+            this is always present (unlike the nullable HQ coordinate fields above).
         paymentProcessorConnected:
           type: boolean
         cardReaderPaired:
@@ -2104,6 +2303,7 @@ components:
         - fuelGaugeFullMi
         - fuelGaugeHalfMin
         - fuelGaugeFullMin
+        - techHourlyCost
         - paymentProcessorConnected
         - cardReaderPaired
     UpdateSettingsRequest:
@@ -2115,6 +2315,12 @@ components:
         homeAddress:
           type: string
           minLength: 1
+        hqLatitude:
+          type: number
+        hqLongitude:
+          type: number
+        hqGooglePlaceId:
+          type: string
         gasPrice:
           type: number
         vehicleMpg:
@@ -2133,6 +2339,9 @@ components:
           type: number
         fuelGaugeFullMin:
           type: number
+        techHourlyCost:
+          type: number
+          minimum: 0
         paymentProcessorConnected:
           type: boolean
         cardReaderPaired:
@@ -2854,6 +3063,24 @@ components:
           description: "24-hour HH:MM, e.g. \"09:00\"."
         address:
           type: string
+        latitude:
+          type: number
+          nullable: true
+          description: >-
+            PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/§9.4 (Phase 1). Null for any
+            booking never re-saved through the Places-autocomplete address field
+            (including every booking that existed before this field shipped) — the
+            Fuel Gauge treats that as Unknown, never a guess.
+        longitude:
+          type: number
+          nullable: true
+        googlePlaceId:
+          type: string
+          nullable: true
+        formattedAddress:
+          type: string
+          nullable: true
+          description: Google's normalized address string for `latitude`/`longitude`, distinct from the free-typed `address`.
         depositAmount:
           type: number
         parkingCost:
@@ -2900,6 +3127,10 @@ components:
         - date
         - startTime
         - address
+        - latitude
+        - longitude
+        - googlePlaceId
+        - formattedAddress
         - depositAmount
         - parkingCost
         - status
@@ -2929,6 +3160,20 @@ components:
         address:
           type: string
           minLength: 1
+        latitude:
+          type: number
+          description: >-
+            Set together with `longitude`/`googlePlaceId`/`formattedAddress` when the
+            owner selects an address from Places Autocomplete
+            (`POST /places/details`'s response). Omit entirely for a manual/free-typed
+            address (FR-17) — the booking is stored with no coordinates and the Fuel
+            Gauge shows Unknown until it's edited with a selected suggestion.
+        longitude:
+          type: number
+        googlePlaceId:
+          type: string
+        formattedAddress:
+          type: string
         depositAmount:
           type: number
           minimum: 0
@@ -2975,6 +3220,14 @@ components:
         address:
           type: string
           minLength: 1
+        latitude:
+          type: number
+        longitude:
+          type: number
+        googlePlaceId:
+          type: string
+        formattedAddress:
+          type: string
         depositAmount:
           type: number
           minimum: 0
@@ -3274,6 +3527,128 @@ components:
         - balanceSheet
         - cashFlow
         - trend
+    AutocompletePlacesRequest:
+      type: object
+      description: >-
+        `originLat`/`originLng` are optional for now — Home Base coordinates don't
+        exist in the DB yet (a later phase's job); when omitted, `locationBias` is
+        left off the upstream Google request entirely rather than erroring.
+      properties:
+        input:
+          type: string
+          minLength: 1
+        sessionToken:
+          type: string
+          minLength: 1
+          description: >-
+            One token per address-entry session (FR-11), reused across every
+            Autocomplete call and the terminating Place Details call in that session.
+        originLat:
+          type: number
+        originLng:
+          type: number
+      required:
+        - input
+        - sessionToken
+    AutocompletePlacesResult:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlaceSuggestion"
+      required:
+        - suggestions
+    PlaceSuggestion:
+      type: object
+      properties:
+        placeId:
+          type: string
+        text:
+          type: string
+          description: 'Full suggestion text, e.g. "1102 Flatbush Ave, Brooklyn, NY, USA".'
+        matches:
+          type: array
+          description: >-
+            Matched-substring offsets (FR-13), so the frontend can bold what the owner
+            typed within `text`.
+          items:
+            $ref: "#/components/schemas/PlaceSuggestionMatch"
+      required:
+        - placeId
+        - text
+        - matches
+    PlaceSuggestionMatch:
+      type: object
+      properties:
+        startOffset:
+          type: integer
+        endOffset:
+          type: integer
+      required:
+        - startOffset
+        - endOffset
+    GetPlaceDetailsRequest:
+      type: object
+      properties:
+        placeId:
+          type: string
+          minLength: 1
+        sessionToken:
+          type: string
+          minLength: 1
+          description: >-
+            The same token used for the preceding `/places/autocomplete` calls in this
+            address-entry session; passing it here closes that billing session (FR-11).
+      required:
+        - placeId
+        - sessionToken
+    PlaceDetailsResult:
+      type: object
+      properties:
+        placeId:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        formattedAddress:
+          type: string
+      required:
+        - placeId
+        - latitude
+        - longitude
+        - formattedAddress
+    ComputeRouteRequest:
+      type: object
+      properties:
+        originPlaceId:
+          type: string
+          minLength: 1
+        destinationPlaceId:
+          type: string
+          minLength: 1
+        departureTime:
+          type: string
+          format: date-time
+          description: The appointment's scheduled start (FR-3), ISO 8601.
+      required:
+        - originPlaceId
+        - destinationPlaceId
+        - departureTime
+    ComputeRouteResult:
+      type: object
+      description: >-
+        One-way distance/time — callers double it themselves for the round trip
+        (PRD §6.1).
+      properties:
+        miles:
+          type: number
+        minutes:
+          type: number
+      required:
+        - miles
+        - minutes
     ErrorResponse:
       type: object
       properties:

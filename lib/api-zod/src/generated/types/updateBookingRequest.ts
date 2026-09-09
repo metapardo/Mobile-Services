@@ -19,6 +19,10 @@ export interface UpdateBookingRequest {
   startTime?: string;
   /** @minLength 1 */
   address?: string;
+  latitude?: number;
+  longitude?: number;
+  googlePlaceId?: string;
+  formattedAddress?: string;
   /** @minimum 0 */
   depositAmount?: number;
   /** @minimum 0 */

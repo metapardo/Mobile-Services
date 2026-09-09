@@ -12,6 +12,9 @@
 export interface UpdateSettingsRequest {
   /** @minLength 1 */
   homeAddress?: string;
+  hqLatitude?: number;
+  hqLongitude?: number;
+  hqGooglePlaceId?: string;
   gasPrice?: number;
   vehicleMpg?: number;
   gasThresholdGreen?: number;
@@ -21,6 +24,8 @@ export interface UpdateSettingsRequest {
   fuelGaugeFullMi?: number;
   fuelGaugeHalfMin?: number;
   fuelGaugeFullMin?: number;
+  /** @minimum 0 */
+  techHourlyCost?: number;
   paymentProcessorConnected?: boolean;
   cardReaderPaired?: boolean;
 }

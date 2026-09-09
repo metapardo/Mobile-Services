@@ -110,6 +110,10 @@ export interface LogoutResult {
 export interface SettingsResult {
   /** The business's home base address (`AdminSettings.home_base_address` in the master PRD). Editable via `PATCH /settings`. */
   homeAddress: string;
+  /** PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/FR-24/§9.4 (Phase 1). Null until Home Base is re-saved through the Places-autocomplete address field — an org that hasn't done that yet gets Unknown gauge readings and a setup prompt (frontend concern, next phase), not a fabricated location. */
+  hqLatitude?: number | null;
+  hqLongitude?: number | null;
+  hqGooglePlaceId?: string | null;
   /** Assumed $/gallon fuel price, for Gas Meter cost estimates. */
   gasPrice: number;
   /** Assumed vehicle fuel economy, for Gas Meter cost estimates. */
@@ -128,6 +132,8 @@ export interface SettingsResult {
   fuelGaugeHalfMin: number;
   /** Fuel Gauge "full" band lower bound, $/minute. */
   fuelGaugeFullMin: number;
+  /** PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §6.1/§6.2 (Phase 1). What an hour of a technician's time costs the business — priced into the Fuel Gauge's drive-time cost line. NOT NULL at the DB level with a $22.00 default, so this is always present (unlike the nullable HQ coordinate fields above). */
+  techHourlyCost: number;
   paymentProcessorConnected: boolean;
   cardReaderPaired: boolean;
 }
@@ -138,6 +144,9 @@ export interface SettingsResult {
 export interface UpdateSettingsRequest {
   /** @minLength 1 */
   homeAddress?: string;
+  hqLatitude?: number;
+  hqLongitude?: number;
+  hqGooglePlaceId?: string;
   gasPrice?: number;
   vehicleMpg?: number;
   gasThresholdGreen?: number;
@@ -147,6 +156,8 @@ export interface UpdateSettingsRequest {
   fuelGaugeFullMi?: number;
   fuelGaugeHalfMin?: number;
   fuelGaugeFullMin?: number;
+  /** @minimum 0 */
+  techHourlyCost?: number;
   paymentProcessorConnected?: boolean;
   cardReaderPaired?: boolean;
 }
@@ -690,6 +701,12 @@ export interface BookingResult {
   /** 24-hour HH:MM, e.g. "09:00". */
   startTime: string;
   address: string;
+  /** PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/§9.4 (Phase 1). Null for any booking never re-saved through the Places-autocomplete address field (including every booking that existed before this field shipped) — the Fuel Gauge treats that as Unknown, never a guess. */
+  latitude: number | null;
+  longitude: number | null;
+  googlePlaceId: string | null;
+  /** Google's normalized address string for `latitude`/`longitude`, distinct from the free-typed `address`. */
+  formattedAddress: string | null;
   depositAmount: number;
   parkingCost: number;
   status: BookingResultStatus;
@@ -724,6 +741,11 @@ export interface CreateBookingRequest {
   startTime: string;
   /** @minLength 1 */
   address: string;
+  /** Set together with `longitude`/`googlePlaceId`/`formattedAddress` when the owner selects an address from Places Autocomplete (`POST /places/details`'s response). Omit entirely for a manual/free-typed address (FR-17) — the booking is stored with no coordinates and the Fuel Gauge shows Unknown until it's edited with a selected suggestion. */
+  latitude?: number;
+  longitude?: number;
+  googlePlaceId?: string;
+  formattedAddress?: string;
   /** @minimum 0 */
   depositAmount: number;
   /** @minimum 0 */
@@ -754,6 +776,10 @@ export interface UpdateBookingRequest {
   startTime?: string;
   /** @minLength 1 */
   address?: string;
+  latitude?: number;
+  longitude?: number;
+  googlePlaceId?: string;
+  formattedAddress?: string;
   /** @minimum 0 */
   depositAmount?: number;
   /** @minimum 0 */
@@ -918,6 +944,72 @@ export interface FinancialReportResult {
   balanceSheet: FinancialReportBalanceSheet;
   cashFlow: FinancialReportCashFlow;
   trend: FinancialReportTrendPoint[];
+}
+
+/**
+ * `originLat`/`originLng` are optional for now — Home Base coordinates don't exist in the DB yet (a later phase's job); when omitted, `locationBias` is left off the upstream Google request entirely rather than erroring.
+ */
+export interface AutocompletePlacesRequest {
+  /** @minLength 1 */
+  input: string;
+  /**
+     * One token per address-entry session (FR-11), reused across every Autocomplete call and the terminating Place Details call in that session.
+     * @minLength 1
+     */
+  sessionToken: string;
+  originLat?: number;
+  originLng?: number;
+}
+
+export interface PlaceSuggestionMatch {
+  startOffset: number;
+  endOffset: number;
+}
+
+export interface PlaceSuggestion {
+  placeId: string;
+  /** Full suggestion text, e.g. "1102 Flatbush Ave, Brooklyn, NY, USA". */
+  text: string;
+  /** Matched-substring offsets (FR-13), so the frontend can bold what the owner typed within `text`. */
+  matches: PlaceSuggestionMatch[];
+}
+
+export interface AutocompletePlacesResult {
+  suggestions: PlaceSuggestion[];
+}
+
+export interface GetPlaceDetailsRequest {
+  /** @minLength 1 */
+  placeId: string;
+  /**
+     * The same token used for the preceding `/places/autocomplete` calls in this address-entry session; passing it here closes that billing session (FR-11).
+     * @minLength 1
+     */
+  sessionToken: string;
+}
+
+export interface PlaceDetailsResult {
+  placeId: string;
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
+}
+
+export interface ComputeRouteRequest {
+  /** @minLength 1 */
+  originPlaceId: string;
+  /** @minLength 1 */
+  destinationPlaceId: string;
+  /** The appointment's scheduled start (FR-3), ISO 8601. */
+  departureTime: string;
+}
+
+/**
+ * One-way distance/time — callers double it themselves for the round trip (PRD §6.1).
+ */
+export interface ComputeRouteResult {
+  miles: number;
+  minutes: number;
 }
 
 export interface ErrorResponse {

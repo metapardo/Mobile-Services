@@ -68,6 +68,22 @@ export const bookingsTable = pgTable(
     date: date("date").notNull(),
     startTime: text("start_time").notNull(),
     address: text("address").notNull(),
+    // PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/§9.4 (Phase 1). All four nullable:
+    // existing bookings have none of these, and per the PRD they render as Unknown
+    // until the booking is re-saved through the new Places-autocomplete address field
+    // — that's correct behavior, not a migration gap. `address` itself is untouched
+    // and stays the human-typed/display string; these are purely additive coordinate
+    // fields sourced from `POST /places/details`. Precision 10/scale 7 matches this
+    // schema's existing `numeric`-only convention for anything needing more than
+    // integer precision (see `depositAmount`/`gasPrice` etc. below and in
+    // `./settings.ts`) rather than introducing `doublePrecision` as a one-off type —
+    // 7 decimal places of lat/long is sub-meter precision, comfortably more than this
+    // feature needs and more than Google's own Place Details response typically
+    // carries meaningful precision to.
+    latitude: numeric("latitude", { precision: 10, scale: 7 }),
+    longitude: numeric("longitude", { precision: 10, scale: 7 }),
+    googlePlaceId: text("google_place_id"),
+    formattedAddress: text("formatted_address"),
     depositAmount: numeric("deposit_amount", { precision: 10, scale: 2 }).notNull(),
     parkingCost: numeric("parking_cost", { precision: 10, scale: 2 }).notNull(),
     status: bookingStatusEnum("status").notNull(),

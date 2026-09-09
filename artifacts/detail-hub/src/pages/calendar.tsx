@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { format, addDays, addWeeks, subWeeks, startOfWeek, isToday, isSameDay } from 'date-fns';
-import { settings } from '@/lib/mock-data';
 import { adaptBooking } from '@/lib/api-adapters';
 import { useListBookings, useListClients, useListEmployees, useListPackages, getListBookingsQueryKey } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { Plus, ChevronLeft, ChevronRight, CalendarPlus, Loader2, AlertTriangle } from 'lucide-react';
 import { StatusBadge } from '@/components/status-badge';
-import { computeFuelGauge } from '@/lib/fuel-gauge';
+import type { FuelGaugeResult } from '@/lib/fuel-gauge';
 import { FuelGaugeIcon } from '@/components/fuel-gauge-icon';
 import { PaymentMethodBadge } from '@/components/payment-method-badge';
 import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
@@ -23,6 +22,33 @@ const HOUR_HEIGHT = 64; // px per hour
 const GRID_START_HOUR = 7; // 7 AM
 const GRID_END_HOUR = 21;  // 9 PM
 const GRID_HOURS = GRID_END_HOUR - GRID_START_HOUR;
+
+/**
+ * PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md — minimal Phase 1 compatibility
+ * fix (FR-23 itself, the calendar drive-time display rework, is explicitly
+ * Phase 2). `computeFuelGauge` is now async and needs real coordinates on
+ * both the target booking and its anchor; building batched/async gauge
+ * fetching for an entire calendar grid without N duplicate route calls per
+ * render is real Phase 2/3 infrastructure (it needs the route cache from
+ * §9.2 to be viable at scale), not a Phase 1 change. So for now every
+ * booking on the calendar renders this same static Unknown reading,
+ * synchronously, with zero API calls — including bookings that *do* have
+ * real coordinates. Once FR-23 is built those get their real Strong/Fair/
+ * Weak treatment; this is a known, deliberate tradeoff, not a bug.
+ */
+const CALENDAR_UNSCORED_GAUGE: FuelGaugeResult = {
+  grade: 'unknown',
+  reason: 'not-computed',
+  servicePrice: 0,
+  youKeep: 0,
+  travelLoad: 0,
+  fuelCost: 0,
+  roundTripMiles: 0,
+  driveCost: 0,
+  roundTripMinutes: 0,
+  anchorAddress: '',
+  anchorType: 'home',
+};
 
 export default function Calendar() {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -303,16 +329,9 @@ export default function Calendar() {
             const totalDuration = pkgs.reduce((sum, p) => sum + p.durationMinutes, 0) || 90;
             const heightPx = Math.max((totalDuration / 60) * HOUR_HEIGHT, 40);
 
-            const gauge = computeFuelGauge(
-              booking, weekBookings, packages,
-              settings.homeAddress,
-              {
-                fuelGaugeHalfMi:  settings.fuelGaugeHalfMi,
-                fuelGaugeFullMi:  settings.fuelGaugeFullMi,
-                fuelGaugeHalfMin: settings.fuelGaugeHalfMin,
-                fuelGaugeFullMin: settings.fuelGaugeFullMin,
-              },
-            );
+            // See `CALENDAR_UNSCORED_GAUGE`'s comment — every booking shows
+            // Unknown on the calendar for Phase 1, deliberately.
+            const gauge = CALENDAR_UNSCORED_GAUGE;
 
             return (
               <Link key={booking.id} href={`/booking/${booking.id}`}>

@@ -24,6 +24,11 @@ const SETTINGS_DEFAULTS = {
   fuelGaugeFullMi: "8",
   fuelGaugeHalfMin: "1.5",
   fuelGaugeFullMin: "4",
+  // PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §6.2 — matches `settingsTable.techHourlyCost`'s
+  // own DB-level default (`.notNull().default("22.00")`); listed explicitly here too,
+  // same as every other default in this object, rather than relying on the column
+  // default alone.
+  techHourlyCost: "22.00",
   paymentProcessorConnected: false,
   cardReaderPaired: false,
 } satisfies Partial<InsertSettings>;

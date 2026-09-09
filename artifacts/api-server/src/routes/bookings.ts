@@ -77,6 +77,14 @@ function toWire(row: BookingWithRelations) {
     date: row.date,
     startTime: row.startTime,
     address: row.address,
+    // PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/§9.4 (Phase 1) — null for any
+    // booking with no coordinates yet (every booking that existed before this field
+    // shipped, or one saved via the "Use what I typed" manual-override path); see
+    // `schema/bookings.ts`'s doc comment on these columns.
+    latitude: row.latitude !== null ? Number(row.latitude) : null,
+    longitude: row.longitude !== null ? Number(row.longitude) : null,
+    googlePlaceId: row.googlePlaceId,
+    formattedAddress: row.formattedAddress,
     depositAmount: Number(row.depositAmount),
     parkingCost: Number(row.parkingCost),
     status: row.status,
@@ -161,6 +169,13 @@ router.post("/bookings", requireOrgSession, async (req, res) => {
       date: body.date.toISOString().slice(0, 10),
       startTime: body.startTime,
       address: body.address,
+      // FR-2/FR-14: only ever set together, when the owner selected a suggestion from
+      // Places Autocomplete (`POST /places/details`'s response) — omitted entirely for
+      // a manual/free-typed address (FR-17), which leaves these columns null.
+      ...(body.latitude !== undefined && { latitude: String(body.latitude) }),
+      ...(body.longitude !== undefined && { longitude: String(body.longitude) }),
+      ...(body.googlePlaceId !== undefined && { googlePlaceId: body.googlePlaceId }),
+      ...(body.formattedAddress !== undefined && { formattedAddress: body.formattedAddress }),
       depositAmount: String(body.depositAmount),
       parkingCost: String(body.parkingCost),
       status: body.status,
@@ -238,6 +253,10 @@ router.patch("/bookings/:id", requireOrgSession, async (req, res) => {
       ...(body.date !== undefined && { date: body.date.toISOString().slice(0, 10) }),
       ...(body.startTime !== undefined && { startTime: body.startTime }),
       ...(body.address !== undefined && { address: body.address }),
+      ...(body.latitude !== undefined && { latitude: String(body.latitude) }),
+      ...(body.longitude !== undefined && { longitude: String(body.longitude) }),
+      ...(body.googlePlaceId !== undefined && { googlePlaceId: body.googlePlaceId }),
+      ...(body.formattedAddress !== undefined && { formattedAddress: body.formattedAddress }),
       ...(body.depositAmount !== undefined && { depositAmount: String(body.depositAmount) }),
       ...(body.parkingCost !== undefined && { parkingCost: String(body.parkingCost) }),
       ...(body.status !== undefined && { status: body.status }),

@@ -16,6 +16,11 @@ export interface CreateBookingRequest {
   startTime: string;
   /** @minLength 1 */
   address: string;
+  /** Set together with `longitude`/`googlePlaceId`/`formattedAddress` when the owner selects an address from Places Autocomplete (`POST /places/details`'s response). Omit entirely for a manual/free-typed address (FR-17) — the booking is stored with no coordinates and the Fuel Gauge shows Unknown until it's edited with a selected suggestion. */
+  latitude?: number;
+  longitude?: number;
+  googlePlaceId?: string;
+  formattedAddress?: string;
   /** @minimum 0 */
   depositAmount: number;
   /** @minimum 0 */

@@ -53,3 +53,13 @@ export * from "./packages";
 export * from "./bookings";
 export * from "./employee-split";
 export * from "./settings";
+
+// Stripe subscription billing (Rare Air LLC's own SaaS billing — the business owner
+// paying Rare Air for the software, NOT the in-app payment-methods flow on `bookings`).
+// Was previously the biggest flagged gap in PRD_DetailHub_SuperAdmin_Console.md
+// (Section 2/10: "organizationBilling doesn't exist anywhere in the codebase").
+// `billing_webhook_events` is intentionally the one table below with no
+// tenantIsolationPolicy — see that file's header comment for why.
+export * from "./billing-account";
+export * from "./billing-invoice";
+export * from "./billing-webhook-event";

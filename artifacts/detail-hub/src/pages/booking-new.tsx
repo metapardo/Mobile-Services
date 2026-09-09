@@ -1,9 +1,10 @@
-import { useEffect, useState, useMemo } from 'react';
-import { useLocation, useSearch } from 'wouter';
+import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useLocation, useSearch, Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useListClients, useListPackages, useListEmployees, useListBookings,
   useCreateBooking, useCreateClient, useCreatePackage,
+  useGetSettings, useComputeRoute,
   getListBookingsQueryKey, getListClientsQueryKey, getListPackagesQueryKey,
   type CreateBookingRequestStatus, type CreatePackageRequestCategory,
 } from '@workspace/api-client-react';
@@ -12,13 +13,20 @@ import { settings } from '@/lib/mock-data';
 import { getSetupProfile } from '@/lib/setup-store';
 import { suggestSlots, SuggestedSlot } from '@/lib/suggest-slots';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
+import { Skeleton } from '@workspace/blue-glass-design-system/components/ui/skeleton';
 import {
   X, Check, ChevronDown, ArrowLeft, UserPlus, Plus,
-  Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Zap, Loader2,
+  Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Zap, Loader2, RotateCw,
 } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@workspace/blue-glass-design-system/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/blue-glass-design-system/components/ui/select';
-import { computeFuelGauge, type FuelGaugeResult } from '@/lib/fuel-gauge';
+import {
+  computeFuelGauge,
+  type FuelGaugeResult,
+  type FuelGaugeBookingInput,
+  type FuelGaugeSettingsInput,
+  type FetchRoute,
+} from '@/lib/fuel-gauge';
+import { AddressAutocomplete, type AddressAutocompleteSelection } from '@/components/address-autocomplete';
 import { format, parse } from 'date-fns';
 
 // ─── Bottom sheet wrapper ────────────────────────────────────────────────────
@@ -134,137 +142,177 @@ function fmtTime(t: string) {
   } catch { return t; }
 }
 
-// ─── Fuel Gauge inline row ────────────────────────────────────────────────────
-const GAUGE_COLOR: Record<string, string> = {
-  full: '#1E9E62', half: '#D9A404', empty: '#DC2626', unknown: '#9ca3af',
+// ─── Fuel Gauge readout ────────────────────────────────────────────────────
+// Rebuilt per PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §8.1/§8.2 — money
+// first, gauge second, fuel and drive-time cost lines always both present
+// and never collapsed (FR-23a). Only ever renders once an address has been
+// *selected* from suggestions (FR-2/FR-14); computation state (`GaugeUiState`)
+// is owned by the parent component, not derived here.
+const GRADE_COLOR: Record<string, string> = {
+  strong: '#1E9E62', fair: '#D9A404', weak: '#DC2626', unknown: '#9ca3af',
 };
-const GAUGE_NEEDLE: Record<string, [number, number]> = {
-  full: [20, 8], half: [12, 4], empty: [4, 8], unknown: [12, 4],
+const GRADE_NEEDLE: Record<string, [number, number]> = {
+  strong: [20, 8], fair: [12, 4], weak: [4, 8], unknown: [12, 4],
 };
-const GAUGE_ARC: Record<string, string | null> = {
-  full: 'M2,14 A10,10 0 0 1 22,14',
-  half: 'M2,14 A10,10 0 0 1 12,4',
-  empty: 'M2,14 A10,10 0 0 1 7,5.34',
+const GRADE_ARC: Record<string, string | null> = {
+  strong: 'M2,14 A10,10 0 0 1 22,14',
+  fair: 'M2,14 A10,10 0 0 1 12,4',
+  weak: 'M2,14 A10,10 0 0 1 7,5.34',
   unknown: null,
 };
 
-function GaugeSVGSmall({ level }: { level: string }) {
-  const color = GAUGE_COLOR[level] ?? '#9ca3af';
-  const [nx, ny] = GAUGE_NEEDLE[level] ?? [12, 4];
-  const arc = GAUGE_ARC[level];
+function GaugeSVGSmall({ grade }: { grade: string }) {
+  const color = GRADE_COLOR[grade] ?? '#9ca3af';
+  const [nx, ny] = GRADE_NEEDLE[grade] ?? [12, 4];
+  const arc = GRADE_ARC[grade];
   return (
     <svg width="28" height="16" viewBox="0 0 24 14" aria-hidden>
       <path d="M2,14 A10,10 0 0 1 22,14" fill="none" stroke="#d1d5db" strokeWidth="3" strokeLinecap="round" />
       {arc && <path d={arc} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />}
-      {level !== 'unknown' && (
+      {grade !== 'unknown' && (
         <line x1="12" y1="14" x2={nx} y2={ny} stroke={color} strokeWidth="1.5" strokeLinecap="round" />
       )}
       <circle cx="12" cy="14" r="2" fill={color} />
-      {level === 'unknown' && (
+      {grade === 'unknown' && (
         <text x="12" y="10" textAnchor="middle" fill="#9ca3af" fontSize="7" fontWeight="bold">?</text>
       )}
     </svg>
   );
 }
 
-interface FuelThresholds {
-  fuelGaugeHalfMi: number; fuelGaugeFullMi: number;
-  fuelGaugeHalfMin: number; fuelGaugeFullMin: number;
+function gradeSentence(grade: FuelGaugeResult['grade']): string {
+  return grade === 'strong' ? 'Worth the trip'
+       : grade === 'fair'   ? 'Okay — watch the drive'
+       : grade === 'weak'   ? 'The drive eats this one'
+       : 'Can’t score this yet';
 }
 
-function FuelGaugeRow({ result, thresholds }: { result: FuelGaugeResult; thresholds: FuelThresholds }) {
-  const color = GAUGE_COLOR[result.level] ?? '#9ca3af';
-  const isKnown = result.level !== 'unknown';
+function anchorOriginLabel(type: FuelGaugeResult['anchorType']): string {
+  return type === 'home'     ? 'from Home Base'
+       : type === 'adjacent' ? 'from previous/next job'
+       : 'from nearest job';
+}
 
-  const levelLabel  = result.level === 'full'  ? 'Great ROI'
-                    : result.level === 'half'  ? 'Fair ROI'
-                    : result.level === 'empty' ? 'Low ROI'
-                    : 'Rate unknown';
+type GaugeUiState = 'no-address' | 'no-service' | 'no-hq' | 'calculating' | 'scored' | 'error';
 
-  const metricStr = isKnown
-    ? result.metricType === 'miles'
-      ? `${result.metricValue.toFixed(1)} mi · $${result.rate.toFixed(2)}/mi`
-      : `${result.metricValue} min · $${result.rate.toFixed(2)}/min`
-    : 'Add a service to calculate rate';
+function FuelGaugeRow({
+  uiState, result, onRetry,
+}: {
+  uiState: GaugeUiState;
+  result: FuelGaugeResult | null;
+  onRetry: () => void;
+}) {
+  if (uiState === 'no-address') {
+    return (
+      <p className="text-[12px] text-muted-foreground mt-2 flex items-center gap-1.5" data-testid="fuel-gauge-state-no-address">
+        <Fuel className="w-3 h-3" />
+        Pick an address to see if it's worth the trip
+      </p>
+    );
+  }
 
-  const anchorDesc = result.anchorType === 'home'     ? 'from home base'
-                   : result.anchorType === 'adjacent' ? 'from adjacent job'
-                   : 'from nearest job';
+  if (uiState === 'no-service') {
+    return (
+      <p className="text-[12px] text-muted-foreground mt-2 flex items-center gap-1.5" data-testid="fuel-gauge-state-no-service">
+        <Fuel className="w-3 h-3" />
+        Add a service to see what you keep
+      </p>
+    );
+  }
 
-  const halfThr = result.metricType === 'miles'
-    ? `$${thresholds.fuelGaugeHalfMi}/mi`
-    : `$${thresholds.fuelGaugeHalfMin}/min`;
-  const fullThr = result.metricType === 'miles'
-    ? `$${thresholds.fuelGaugeFullMi}/mi`
-    : `$${thresholds.fuelGaugeFullMin}/min`;
+  if (uiState === 'no-hq') {
+    return (
+      <p className="text-[12px] text-muted-foreground mt-2 flex items-center gap-1.5" data-testid="fuel-gauge-state-no-hq">
+        <Fuel className="w-3 h-3" />
+        Set your shop address in{' '}
+        <Link href="/more/settings" className="text-primary underline underline-offset-2">Settings</Link>
+        {' '}to score jobs
+      </p>
+    );
+  }
+
+  if (uiState === 'calculating') {
+    return (
+      <div className="mt-3 px-4 py-3 rounded-2xl border border-border/60 space-y-2.5" data-testid="fuel-gauge-state-calculating">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-3.5 w-full" />
+        <Skeleton className="h-3.5 w-full" />
+      </div>
+    );
+  }
+
+  if (uiState === 'error' || !result) {
+    return (
+      <div
+        className="mt-3 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border"
+        style={{ borderColor: `${GRADE_COLOR.unknown}55`, background: `${GRADE_COLOR.unknown}0D` }}
+        data-testid="fuel-gauge-state-error"
+      >
+        <p className="text-[13px] font-medium text-muted-foreground">Couldn't get drive time</p>
+        <button
+          onClick={onRetry}
+          className="flex items-center gap-1.5 text-[13px] font-semibold text-primary shrink-0"
+          data-testid="button-fuel-gauge-retry"
+        >
+          <RotateCw className="w-3.5 h-3.5" /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  // uiState === 'scored'
+  if (result.grade === 'unknown') {
+    // A service is priced at $0, or some other structural edge case that
+    // isn't a routing failure (§10) — no Retry, just a quiet explanation.
+    const copy = result.reason === 'no-price'
+      ? 'Free or $0 service — not scored'
+      : 'Can’t score this yet';
+    return (
+      <p className="text-[12px] text-muted-foreground mt-2 flex items-center gap-1.5" data-testid="fuel-gauge-state-unknown">
+        <Fuel className="w-3 h-3" />
+        {copy}
+      </p>
+    );
+  }
+
+  const color = GRADE_COLOR[result.grade];
 
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className="mt-3 flex items-center gap-3 px-4 py-3 rounded-2xl border cursor-default select-none"
-            style={{ borderColor: `${color}55`, background: `${color}0D` }}
-            data-testid="fuel-gauge-row"
-          >
-            <GaugeSVGSmall level={result.level} />
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold" style={{ color }}>{levelLabel}</p>
-              <p className="text-[12px] text-muted-foreground truncate">
-                {metricStr}{isKnown && result.anchorAddress ? ` · ${anchorDesc}` : ''}
-              </p>
-            </div>
-            <span className="text-[11px] text-muted-foreground/60 shrink-0 hidden sm:block">hover for details</span>
-          </div>
-        </TooltipTrigger>
-
-        <TooltipContent
-          side="bottom"
-          sideOffset={8}
-          className="!bg-popover !text-popover-foreground border border-border shadow-xl rounded-xl px-4 py-3 w-64 max-w-[90vw] text-left"
-        >
-          {/* Level headline */}
-          <p className="font-semibold text-[13px] mb-2.5" style={{ color }}>
-            {result.level === 'full'  ? '🟢 Full — great ROI'
-           : result.level === 'half'  ? '🟡 Half — acceptable ROI'
-           : result.level === 'empty' ? '🔴 Empty — low ROI'
-           : '⚪ Unknown'}
+    <div
+      className="mt-3 px-4 py-3 rounded-2xl border"
+      style={{ borderColor: `${color}55`, background: `${color}0D` }}
+      data-testid="fuel-gauge-state-scored"
+    >
+      {/* Money-first headline */}
+      <div className="flex items-center gap-3">
+        <GaugeSVGSmall grade={result.grade} />
+        <div className="flex-1 min-w-0">
+          <p className="text-[16px] font-bold tabular-nums" style={{ color }}>
+            You keep ${result.youKeep.toFixed(0)} of ${result.servicePrice.toFixed(0)}
           </p>
+          <p className="text-[13px] font-medium" style={{ color }}>{gradeSentence(result.grade)}</p>
+        </div>
+      </div>
 
-          {/* Breakdown */}
-          {isKnown && (
-            <div className="space-y-1.5 text-[12px] mb-3">
-              {[
-                ['Booking value', `$${result.bookingPrice.toFixed(2)}`],
-                [result.metricType === 'miles' ? 'Drive distance' : 'Drive time',
-                  result.metricType === 'miles'
-                    ? `${result.metricValue.toFixed(1)} mi`
-                    : `${result.metricValue} min`],
-                ['Rate', `$${result.rate.toFixed(2)}/${result.metricType === 'miles' ? 'mi' : 'min'}`],
-                ['Anchor', result.anchorType === 'home' ? 'Home base'
-                         : result.anchorType === 'adjacent' ? 'Adjacent job'
-                         : 'Nearest job'],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="font-medium tabular-nums">{value}</span>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Drive time, origin named */}
+      <p className="text-[13px] text-muted-foreground mt-2.5">
+        Drive Time: est. {Math.round(result.roundTripMinutes / 2)} min
+        <br />
+        {anchorOriginLabel(result.anchorType)}
+      </p>
 
-          {/* Legend */}
-          <div className="border-t border-border/40 pt-2 space-y-1 text-[11px] text-muted-foreground">
-            <p>🟢 <strong>Full</strong> — rate ≥ {fullThr}</p>
-            <p>🟡 <strong>Half</strong> — rate ≥ {halfThr}</p>
-            <p>🔴 <strong>Empty</strong> — rate &lt; {halfThr}</p>
-            {result.metricType === 'minutes' && (
-              <p className="pt-1 opacity-75">NYC address — using drive time</p>
-            )}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+      {/* Fuel and drive-time cost lines — always both, never collapsed (FR-23a) */}
+      <div className="mt-2.5 space-y-1 text-[13px]">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-muted-foreground">Fuel</span>
+          <span className="font-medium tabular-nums">${result.fuelCost.toFixed(2)} · {result.roundTripMiles.toFixed(1)} mi round trip</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-muted-foreground">Drive time</span>
+          <span className="font-medium tabular-nums">${result.driveCost.toFixed(2)} · {Math.round(result.roundTripMinutes)} min round trip</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -311,14 +359,26 @@ export default function BookingNew() {
   // date the user ultimately picks, across all clients, not just a fixed nearby
   // window for one client — same known scaling caveat as `clients.tsx`.
   const bookingsQuery = useListBookings();
+  // Real settings — PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-24/§9.4.
+  // Kept separate from the mock `settings` import above (still used by
+  // `suggestSlots`, out of this PRD's scope) since it's the source for HQ
+  // coordinates, gas price, MPG and technician hourly cost the real Fuel
+  // Gauge needs.
+  const settingsQuery = useGetSettings();
 
   const clients = clientsQuery.data ?? [];
   const packages = packagesQuery.data ?? [];
   const employees = employeesQuery.data ?? [];
   const bookings = useMemo(() => (bookingsQuery.data ?? []).map(adaptBooking), [bookingsQuery.data]);
+  // Raw (un-adapted) bookings — `FuelGaugeBookingInput` needs `googlePlaceId`/
+  // `formattedAddress`, which `adaptBooking`'s mock-shaped `Booking` doesn't
+  // carry. `BookingResult` is already a structural match, so no adapter is
+  // needed here.
+  const rawBookings: FuelGaugeBookingInput[] = bookingsQuery.data ?? [];
+  const realSettings = settingsQuery.data;
 
-  const referenceDataLoading = clientsQuery.isLoading || packagesQuery.isLoading || employeesQuery.isLoading || bookingsQuery.isLoading;
-  const referenceDataFailed = clientsQuery.isError || packagesQuery.isError || employeesQuery.isError || bookingsQuery.isError;
+  const referenceDataLoading = clientsQuery.isLoading || packagesQuery.isLoading || employeesQuery.isLoading || bookingsQuery.isLoading || settingsQuery.isLoading;
+  const referenceDataFailed = clientsQuery.isError || packagesQuery.isError || employeesQuery.isError || bookingsQuery.isError || settingsQuery.isError;
 
   // Form state
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
@@ -330,9 +390,17 @@ export default function BookingNew() {
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState('09:00');
   const [address, setAddress] = useState('');
+  // Non-null only immediately after a suggestion is selected from
+  // `AddressAutocomplete` (FR-14) — any further typing in the field clears
+  // it (see the Location section's `onTextChange` below), since free-typed
+  // text no longer matches these coordinates. `canSave` never depends on
+  // this — a manually-typed, never-selected address still saves fine (FR-17
+  // edge case), it just never geocodes and the gauge stays in its
+  // "no address selected" placeholder forever for that booking.
+  const [addressSelection, setAddressSelection] = useState<AddressAutocompleteSelection | null>(null);
   // Kept exactly as-is per FR-12: the explicit "Team" picker UI is gone, but
-  // Smart Suggestions (`applySuggestion`) and the Fuel Gauge `useMemo` below
-  // both still quietly depend on this state and keep working unchanged.
+  // Smart Suggestions (`applySuggestion`) and the Fuel Gauge below both
+  // still quietly depend on this state and keep working unchanged.
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
   const [notes, setNotes] = useState('');
 
@@ -393,32 +461,81 @@ export default function BookingNew() {
 
   const isMobile = !setup.isStorefront;
 
-  // Fuel gauge — computed whenever address + packages are ready
-  const fuelGauge = useMemo<FuelGaugeResult | null>(() => {
-    if (!address.trim() || address.length < 5 || selectedPackages.length === 0) return null;
-    const syntheticBooking = {
+  // ── Fuel Gauge — real computation, gated on selection (FR-2/FR-14) ────────
+  // `useComputeRoute()`'s hook must live at the component level (React Query
+  // hooks can't be called inside `computeFuelGauge` itself); this wraps
+  // `mutateAsync` into the plain-async `fetchRoute` callback `fuel-gauge.ts`
+  // expects, per its dependency-injection design.
+  const computeRouteMutation = useComputeRoute();
+  const fetchRoute = useCallback<FetchRoute>(async (originPlaceId, destinationPlaceId, departureTimeIso) => {
+    const result = await computeRouteMutation.mutateAsync({
+      data: { originPlaceId, destinationPlaceId, departureTime: departureTimeIso },
+    });
+    return { miles: result.miles, minutes: result.minutes };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computeRouteMutation.mutateAsync]);
+
+  const [gaugeUiState, setGaugeUiState] = useState<GaugeUiState>('no-address');
+  const [gaugeResult, setGaugeResult] = useState<FuelGaugeResult | null>(null);
+  const [gaugeRetryNonce, setGaugeRetryNonce] = useState(0);
+
+  const hqHasCoordinates = !!(realSettings?.hqLatitude != null && realSettings?.hqLongitude != null && realSettings?.hqGooglePlaceId);
+
+  // Recomputes only when a place is *selected* (never on keystroke — the
+  // whole point of FR-2), and again when appointment time, technician, or
+  // priced services change while a place is already selected (§9.3).
+  useEffect(() => {
+    if (!addressSelection) {
+      setGaugeUiState('no-address');
+      setGaugeResult(null);
+      return;
+    }
+    if (selectedPackages.length === 0) {
+      setGaugeUiState('no-service');
+      setGaugeResult(null);
+      return;
+    }
+    if (!realSettings || !hqHasCoordinates) {
+      setGaugeUiState('no-hq');
+      setGaugeResult(null);
+      return;
+    }
+
+    let cancelled = false;
+    setGaugeUiState('calculating');
+
+    const targetInput: FuelGaugeBookingInput = {
       id: -1,
-      clientId: selectedClient ?? -1,
-      packageIds: selectedPackages,
-      // Falls back to the first employee when nothing's been assigned yet
-      // (e.g. via Smart Suggestions) — unchanged per FR-12.
-      employeeIds: selectedEmployees.length > 0 ? selectedEmployees : [employees[0]?.id ?? -1],
       date: date || format(new Date(), 'yyyy-MM-dd'),
       startTime: time || '09:00',
-      address,
-      status: 'pending' as const,
-      depositAmount: 0,
-      parkingCost: 0,
-      notes: '',
-      employeeSplit: [],
+      status: 'pending',
+      employeeIds: selectedEmployees,
+      googlePlaceId: addressSelection.placeId,
+      formattedAddress: addressSelection.formattedAddress,
     };
-    return computeFuelGauge(syntheticBooking, bookings, packages, settings.homeAddress, {
-      fuelGaugeHalfMi:  settings.fuelGaugeHalfMi,
-      fuelGaugeFullMi:  settings.fuelGaugeFullMi,
-      fuelGaugeHalfMin: settings.fuelGaugeHalfMin,
-      fuelGaugeFullMin: settings.fuelGaugeFullMin,
+    const settingsInput: FuelGaugeSettingsInput = {
+      homeAddress: realSettings.homeAddress,
+      hqGooglePlaceId: realSettings.hqGooglePlaceId,
+      gasPrice: realSettings.gasPrice,
+      vehicleMpg: realSettings.vehicleMpg,
+      techHourlyCost: realSettings.techHourlyCost,
+    };
+
+    computeFuelGauge(targetInput, totalPrice, rawBookings, settingsInput, fetchRoute).then((result) => {
+      if (cancelled) return;
+      setGaugeResult(result);
+      setGaugeUiState(result.grade === 'unknown' && result.reason === 'routing-failed' ? 'error' : 'scored');
     });
-  }, [address, selectedPackages, selectedClient, selectedEmployees, date, time, bookings, packages, employees]);
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    addressSelection?.placeId, addressSelection?.latitude, addressSelection?.longitude,
+    selectedPackages, totalPrice, date, time, selectedEmployees,
+    realSettings, hqHasCoordinates, rawBookings, fetchRoute, gaugeRetryNonce,
+  ]);
+
+  const retryGauge = () => setGaugeRetryNonce(n => n + 1);
 
   // Formatted display values
   const dateLabel = (() => {
@@ -450,6 +567,19 @@ export default function BookingNew() {
         date,
         startTime: time,
         address,
+        // PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-14/FR-17: only present
+        // when the address was actually selected from suggestions — omitted
+        // entirely (never sent as `null`) for a manually-typed address, so
+        // the booking is stored with no coordinates and the Fuel Gauge
+        // shows Unknown until it's edited with a selected suggestion.
+        ...(addressSelection
+          ? {
+              latitude: addressSelection.latitude,
+              longitude: addressSelection.longitude,
+              googlePlaceId: addressSelection.placeId,
+              formattedAddress: addressSelection.formattedAddress,
+            }
+          : {}),
         // FR-16: both remain `NOT NULL` columns on the real `bookings` table,
         // so they still need a value — just always zero now that the Deposit
         // & extras section (and the parking-cost field within it) is gone
@@ -664,21 +794,21 @@ export default function BookingNew() {
 
       {/* ── Location ── */}
       <Section title="Location" icon={Fuel}>
-        <input
-          type="text"
-          className="w-full px-4 py-3.5 rounded-2xl border border-border bg-background text-[15px] focus:outline-none focus:border-primary transition-colors placeholder-muted-foreground/60"
-          placeholder="Client address or service location"
+        <AddressAutocomplete
           value={address}
-          onChange={e => setAddress(e.target.value)}
+          onTextChange={(text) => { setAddress(text); setAddressSelection(null); }}
+          onSelect={(place) => { setAddress(place.formattedAddress); setAddressSelection(place); }}
+          originLat={realSettings?.hqLatitude ?? undefined}
+          originLng={realSettings?.hqLongitude ?? undefined}
+          placeholder="Client address or service location"
+          data-testid="input-booking-address"
         />
 
-        {/* Fuel Gauge ROI — shown once address + at least one service are ready */}
-        {isMobile && fuelGauge && <FuelGaugeRow result={fuelGauge} thresholds={settings} />}
-        {isMobile && !fuelGauge && (
-          <p className="text-[12px] text-muted-foreground mt-2 flex items-center gap-1.5">
-            <Fuel className="w-3 h-3" />
-            {address.trim() ? 'Add a service to see ROI' : 'Add address + service to see ROI'}
-          </p>
+        {/* Fuel Gauge — real readout, per §8.1/§8.2. Gated on `isMobile`
+            (mobile-service businesses drive to the job; a storefront
+            business doesn't), matching this section's prior behavior. */}
+        {isMobile && (
+          <FuelGaugeRow uiState={gaugeUiState} result={gaugeResult} onRetry={retryGauge} />
         )}
       </Section>
 
@@ -833,7 +963,18 @@ export default function BookingNew() {
                 {filteredClients.map(c => (
                   <button
                     key={c.id}
-                    onClick={() => { setSelectedClient(c.id); if (c.address) setAddress(c.address); setShowCustomers(false); }}
+                    onClick={() => {
+                      setSelectedClient(c.id);
+                      // FR-18 (existing-client coordinate auto-fill) is
+                      // explicitly Phase 2 — clients don't have stored
+                      // coordinates yet, so this only pre-fills the address
+                      // *text*, same as before. Any prior selection is
+                      // cleared: this text isn't geocoded until the owner
+                      // re-selects it from suggestions.
+                      if (c.address) setAddress(c.address);
+                      setAddressSelection(null);
+                      setShowCustomers(false);
+                    }}
                     className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left min-h-[56px]"
                   >
                     <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[13px] font-semibold shrink-0">

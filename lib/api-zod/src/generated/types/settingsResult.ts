@@ -12,6 +12,10 @@
 export interface SettingsResult {
   /** The business's home base address (`AdminSettings.home_base_address` in the master PRD). Editable via `PATCH /settings`. */
   homeAddress: string;
+  /** PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/FR-24/§9.4 (Phase 1). Null until Home Base is re-saved through the Places-autocomplete address field — an org that hasn't done that yet gets Unknown gauge readings and a setup prompt (frontend concern, next phase), not a fabricated location. */
+  hqLatitude?: number | null;
+  hqLongitude?: number | null;
+  hqGooglePlaceId?: string | null;
   /** Assumed $/gallon fuel price, for Gas Meter cost estimates. */
   gasPrice: number;
   /** Assumed vehicle fuel economy, for Gas Meter cost estimates. */
@@ -30,6 +34,8 @@ export interface SettingsResult {
   fuelGaugeHalfMin: number;
   /** Fuel Gauge "full" band lower bound, $/minute. */
   fuelGaugeFullMin: number;
+  /** PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §6.1/§6.2 (Phase 1). What an hour of a technician's time costs the business — priced into the Fuel Gauge's drive-time cost line. NOT NULL at the DB level with a $22.00 default, so this is always present (unlike the nullable HQ coordinate fields above). */
+  techHourlyCost: number;
   paymentProcessorConnected: boolean;
   cardReaderPaired: boolean;
 }

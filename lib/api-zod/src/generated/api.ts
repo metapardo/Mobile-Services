@@ -120,6 +120,9 @@ export const GetAuthSessionResponse = zod.object({
  */
 export const GetSettingsResponse = zod.object({
   "homeAddress": zod.string().describe('The business\'s home base address (`AdminSettings.home_base_address` in the master PRD). Editable via `PATCH \/settings`.'),
+  "hqLatitude": zod.number().nullish().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2\/FR-24\/§9.4 (Phase 1). Null until Home Base is re-saved through the Places-autocomplete address field — an org that hasn\'t done that yet gets Unknown gauge readings and a setup prompt (frontend concern, next phase), not a fabricated location.'),
+  "hqLongitude": zod.number().nullish(),
+  "hqGooglePlaceId": zod.string().nullish(),
   "gasPrice": zod.number().describe('Assumed $\/gallon fuel price, for Gas Meter cost estimates.'),
   "vehicleMpg": zod.number().describe('Assumed vehicle fuel economy, for Gas Meter cost estimates.'),
   "gasThresholdGreen": zod.number().describe('Gas Meter \"green\" cost-ratio threshold (percent).'),
@@ -129,6 +132,7 @@ export const GetSettingsResponse = zod.object({
   "fuelGaugeFullMi": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/mile.'),
   "fuelGaugeHalfMin": zod.number().describe('Fuel Gauge \"half\" band lower bound, $\/minute.'),
   "fuelGaugeFullMin": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/minute.'),
+  "techHourlyCost": zod.number().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §6.1\/§6.2 (Phase 1). What an hour of a technician\'s time costs the business — priced into the Fuel Gauge\'s drive-time cost line. NOT NULL at the DB level with a $22.00 default, so this is always present (unlike the nullable HQ coordinate fields above).'),
   "paymentProcessorConnected": zod.boolean(),
   "cardReaderPaired": zod.boolean()
 }).describe('Per-organization settings — one row per organization, created automatically at signup. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Settings` interface (see `PRD_MobileDetailingApp.md` Section 3.2\'s Gas Meter feature for what most of these beyond `homeAddress` are used for).')
@@ -139,10 +143,15 @@ export const GetSettingsResponse = zod.object({
  * @summary Update the current organization's settings
  */
 
+export const updateSettingsBodyTechHourlyCostMin = 0;
+
 
 
 export const UpdateSettingsBody = zod.object({
   "homeAddress": zod.string().min(1).optional(),
+  "hqLatitude": zod.number().optional(),
+  "hqLongitude": zod.number().optional(),
+  "hqGooglePlaceId": zod.string().optional(),
   "gasPrice": zod.number().optional(),
   "vehicleMpg": zod.number().optional(),
   "gasThresholdGreen": zod.number().optional(),
@@ -152,12 +161,16 @@ export const UpdateSettingsBody = zod.object({
   "fuelGaugeFullMi": zod.number().optional(),
   "fuelGaugeHalfMin": zod.number().optional(),
   "fuelGaugeFullMin": zod.number().optional(),
+  "techHourlyCost": zod.number().min(updateSettingsBodyTechHourlyCostMin).optional(),
   "paymentProcessorConnected": zod.boolean().optional(),
   "cardReaderPaired": zod.boolean().optional()
 }).describe('Partial update to the current organization\'s settings. All fields optional — omitted fields are left unchanged. Same field set as `SettingsResult`.')
 
 export const UpdateSettingsResponse = zod.object({
   "homeAddress": zod.string().describe('The business\'s home base address (`AdminSettings.home_base_address` in the master PRD). Editable via `PATCH \/settings`.'),
+  "hqLatitude": zod.number().nullish().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2\/FR-24\/§9.4 (Phase 1). Null until Home Base is re-saved through the Places-autocomplete address field — an org that hasn\'t done that yet gets Unknown gauge readings and a setup prompt (frontend concern, next phase), not a fabricated location.'),
+  "hqLongitude": zod.number().nullish(),
+  "hqGooglePlaceId": zod.string().nullish(),
   "gasPrice": zod.number().describe('Assumed $\/gallon fuel price, for Gas Meter cost estimates.'),
   "vehicleMpg": zod.number().describe('Assumed vehicle fuel economy, for Gas Meter cost estimates.'),
   "gasThresholdGreen": zod.number().describe('Gas Meter \"green\" cost-ratio threshold (percent).'),
@@ -167,6 +180,7 @@ export const UpdateSettingsResponse = zod.object({
   "fuelGaugeFullMi": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/mile.'),
   "fuelGaugeHalfMin": zod.number().describe('Fuel Gauge \"half\" band lower bound, $\/minute.'),
   "fuelGaugeFullMin": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/minute.'),
+  "techHourlyCost": zod.number().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §6.1\/§6.2 (Phase 1). What an hour of a technician\'s time costs the business — priced into the Fuel Gauge\'s drive-time cost line. NOT NULL at the DB level with a $22.00 default, so this is always present (unlike the nullable HQ coordinate fields above).'),
   "paymentProcessorConnected": zod.boolean(),
   "cardReaderPaired": zod.boolean()
 }).describe('Per-organization settings — one row per organization, created automatically at signup. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Settings` interface (see `PRD_MobileDetailingApp.md` Section 3.2\'s Gas Meter feature for what most of these beyond `homeAddress` are used for).')
@@ -1066,6 +1080,10 @@ export const ListBookingsResponseItem = zod.object({
   "date": zod.coerce.date(),
   "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
   "address": zod.string(),
+  "latitude": zod.number().nullable().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2\/§9.4 (Phase 1). Null for any booking never re-saved through the Places-autocomplete address field (including every booking that existed before this field shipped) — the Fuel Gauge treats that as Unknown, never a guess.'),
+  "longitude": zod.number().nullable(),
+  "googlePlaceId": zod.string().nullable(),
+  "formattedAddress": zod.string().nullable().describe('Google\'s normalized address string for `latitude`\/`longitude`, distinct from the free-typed `address`.'),
   "depositAmount": zod.number(),
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
@@ -1107,6 +1125,10 @@ export const CreateBookingBody = zod.object({
   "date": zod.coerce.date(),
   "startTime": zod.string(),
   "address": zod.string().min(1),
+  "latitude": zod.number().optional().describe('Set together with `longitude`\/`googlePlaceId`\/`formattedAddress` when the owner selects an address from Places Autocomplete (`POST \/places\/details`\'s response). Omit entirely for a manual\/free-typed address (FR-17) — the booking is stored with no coordinates and the Fuel Gauge shows Unknown until it\'s edited with a selected suggestion.'),
+  "longitude": zod.number().optional(),
+  "googlePlaceId": zod.string().optional(),
+  "formattedAddress": zod.string().optional(),
   "depositAmount": zod.number().min(createBookingBodyDepositAmountMin),
   "parkingCost": zod.number().min(createBookingBodyParkingCostMin),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
@@ -1130,6 +1152,10 @@ export const CreateBookingResponse = zod.object({
   "date": zod.coerce.date(),
   "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
   "address": zod.string(),
+  "latitude": zod.number().nullable().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2\/§9.4 (Phase 1). Null for any booking never re-saved through the Places-autocomplete address field (including every booking that existed before this field shipped) — the Fuel Gauge treats that as Unknown, never a guess.'),
+  "longitude": zod.number().nullable(),
+  "googlePlaceId": zod.string().nullable(),
+  "formattedAddress": zod.string().nullable().describe('Google\'s normalized address string for `latitude`\/`longitude`, distinct from the free-typed `address`.'),
   "depositAmount": zod.number(),
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
@@ -1169,6 +1195,10 @@ export const GetBookingResponse = zod.object({
   "date": zod.coerce.date(),
   "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
   "address": zod.string(),
+  "latitude": zod.number().nullable().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2\/§9.4 (Phase 1). Null for any booking never re-saved through the Places-autocomplete address field (including every booking that existed before this field shipped) — the Fuel Gauge treats that as Unknown, never a guess.'),
+  "longitude": zod.number().nullable(),
+  "googlePlaceId": zod.string().nullable(),
+  "formattedAddress": zod.string().nullable().describe('Google\'s normalized address string for `latitude`\/`longitude`, distinct from the free-typed `address`.'),
   "depositAmount": zod.number(),
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
@@ -1212,6 +1242,10 @@ export const UpdateBookingBody = zod.object({
   "date": zod.coerce.date().optional(),
   "startTime": zod.string().optional(),
   "address": zod.string().min(1).optional(),
+  "latitude": zod.number().optional(),
+  "longitude": zod.number().optional(),
+  "googlePlaceId": zod.string().optional(),
+  "formattedAddress": zod.string().optional(),
   "depositAmount": zod.number().min(updateBookingBodyDepositAmountMin).optional(),
   "parkingCost": zod.number().min(updateBookingBodyParkingCostMin).optional(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']).optional(),
@@ -1235,6 +1269,10 @@ export const UpdateBookingResponse = zod.object({
   "date": zod.coerce.date(),
   "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
   "address": zod.string(),
+  "latitude": zod.number().nullable().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2\/§9.4 (Phase 1). Null for any booking never re-saved through the Places-autocomplete address field (including every booking that existed before this field shipped) — the Fuel Gauge treats that as Unknown, never a guess.'),
+  "longitude": zod.number().nullable(),
+  "googlePlaceId": zod.string().nullable(),
+  "formattedAddress": zod.string().nullable().describe('Google\'s normalized address string for `latitude`\/`longitude`, distinct from the free-typed `address`.'),
   "depositAmount": zod.number(),
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
@@ -1291,6 +1329,10 @@ export const RecordBookingPaymentResponse = zod.object({
   "date": zod.coerce.date(),
   "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
   "address": zod.string(),
+  "latitude": zod.number().nullable().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2\/§9.4 (Phase 1). Null for any booking never re-saved through the Places-autocomplete address field (including every booking that existed before this field shipped) — the Fuel Gauge treats that as Unknown, never a guess.'),
+  "longitude": zod.number().nullable(),
+  "googlePlaceId": zod.string().nullable(),
+  "formattedAddress": zod.string().nullable().describe('Google\'s normalized address string for `latitude`\/`longitude`, distinct from the free-typed `address`.'),
   "depositAmount": zod.number(),
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
@@ -1335,6 +1377,10 @@ export const RefundBookingResponse = zod.object({
   "date": zod.coerce.date(),
   "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
   "address": zod.string(),
+  "latitude": zod.number().nullable().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2\/§9.4 (Phase 1). Null for any booking never re-saved through the Places-autocomplete address field (including every booking that existed before this field shipped) — the Fuel Gauge treats that as Unknown, never a guess.'),
+  "longitude": zod.number().nullable(),
+  "googlePlaceId": zod.string().nullable(),
+  "formattedAddress": zod.string().nullable().describe('Google\'s normalized address string for `latitude`\/`longitude`, distinct from the free-typed `address`.'),
   "depositAmount": zod.number(),
   "parkingCost": zod.number(),
   "status": zod.enum(['confirmed', 'pending', 'completed', 'cancelled', 'no-show']),
@@ -1440,5 +1486,73 @@ export const GetFinancialReportResponse = zod.object({
   "netIncome": zod.number()
 }).describe('One month of the trailing-6-month revenue\/net-income trend chart.'))
 }).describe('Response of `GET \/reports\/financials`. See that path\'s own description, and `calculateFinancialReport` in `@workspace\/db`\'s `reports.ts`, for the exact real-data-vs-fixed-constant breakdown of every field below.')
+
+
+/**
+ * PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-9 through FR-13, FR-19. Server-side proxy to Places API (New) `places:autocomplete` — `GOOGLE_MAPS_API_KEY` never reaches the browser (Section 9.1). Always restricted to `regionCode: "US"` (FR-12). When `originLat`/`originLng` are supplied (the organization's Home Base coordinates, once the frontend has them), results are biased with a `locationBias` circle around that point; Google's `Circle.radius` maximum is 50,000m (~31 mi), so the PRD's 50-mile bias radius is clamped to that API ceiling rather than sent as-is. Omitted entirely — not an error — when no origin is supplied, since Home Base coordinates don't exist in the DB yet. Only `placePrediction` suggestions are returned (each carries a `placeId`); Google's other suggestion type, `queryPrediction`, has no `placeId` and can't be selected as a booking address, so it's filtered out server-side.
+ * @summary Address suggestions from Google Places API (New) Autocomplete
+ */
+
+
+
+
+export const AutocompletePlacesBody = zod.object({
+  "input": zod.string().min(1),
+  "sessionToken": zod.string().min(1).describe('One token per address-entry session (FR-11), reused across every Autocomplete call and the terminating Place Details call in that session.'),
+  "originLat": zod.number().optional(),
+  "originLng": zod.number().optional()
+}).describe('`originLat`\/`originLng` are optional for now — Home Base coordinates don\'t exist in the DB yet (a later phase\'s job); when omitted, `locationBias` is left off the upstream Google request entirely rather than erroring.')
+
+export const AutocompletePlacesResponse = zod.object({
+  "suggestions": zod.array(zod.object({
+  "placeId": zod.string(),
+  "text": zod.string().describe('Full suggestion text, e.g. \"1102 Flatbush Ave, Brooklyn, NY, USA\".'),
+  "matches": zod.array(zod.object({
+  "startOffset": zod.number().int(),
+  "endOffset": zod.number().int()
+})).describe('Matched-substring offsets (FR-13), so the frontend can bold what the owner typed within `text`.')
+}))
+})
+
+
+/**
+ * FR-14. Requests exactly `location,formattedAddress` via the required `X-Goog-FieldMask` header — Google bills Place Details by field mask breadth, so no other field (photos, reviews, hours, etc.) is requested. Passing the same `sessionToken` used for the preceding `/places/autocomplete` calls closes that Autocomplete billing session (FR-11); this is implicit in the call itself — there is no separate "end session" request.
+ * @summary Resolve a selected suggestion to coordinates via Place Details (New)
+ */
+
+
+
+
+export const GetPlaceDetailsBody = zod.object({
+  "placeId": zod.string().min(1),
+  "sessionToken": zod.string().min(1).describe('The same token used for the preceding `\/places\/autocomplete` calls in this address-entry session; passing it here closes that billing session (FR-11).')
+})
+
+export const GetPlaceDetailsResponse = zod.object({
+  "placeId": zod.string(),
+  "latitude": zod.number(),
+  "longitude": zod.number(),
+  "formattedAddress": zod.string()
+})
+
+
+/**
+ * FR-1 through FR-6. Server-side proxy to Routes API `computeRoutes` with `travelMode: DRIVE`, `routingPreference: TRAFFIC_AWARE`, and the given `departureTime` — the actual drive at the actual hour of the appointment (FR-3). Returns a ONE-WAY distance/time; callers (the Fuel Gauge calculation layer) double it themselves for the round trip per PRD §6.1. Never fabricates a distance (FR-5): if Google returns `routes: []` (no routable path — e.g. islands, remote sites), this responds `422 no_route_found` rather than a fake number, so the frontend can show Unknown with a retry instead of a guess.
+ * @summary Traffic-aware one-way drive distance and drive time between two places
+ */
+
+
+
+
+export const ComputeRouteBody = zod.object({
+  "originPlaceId": zod.string().min(1),
+  "destinationPlaceId": zod.string().min(1),
+  "departureTime": zod.coerce.date().describe('The appointment\'s scheduled start (FR-3), ISO 8601.')
+})
+
+export const ComputeRouteResponse = zod.object({
+  "miles": zod.number(),
+  "minutes": zod.number()
+}).describe('One-way distance\/time — callers double it themselves for the round trip (PRD §6.1).')
 
 

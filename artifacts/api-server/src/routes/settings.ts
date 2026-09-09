@@ -17,6 +17,12 @@ const router: IRouter = Router();
 function toWire(row: Settings) {
   return {
     homeAddress: row.homeAddress,
+    // PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/FR-24 (Phase 1) — null until Home
+    // Base is re-saved through the new Places-autocomplete field; see that column's
+    // doc comment in `@workspace/db`'s `schema/settings.ts`.
+    hqLatitude: row.hqLatitude !== null ? Number(row.hqLatitude) : null,
+    hqLongitude: row.hqLongitude !== null ? Number(row.hqLongitude) : null,
+    hqGooglePlaceId: row.hqGooglePlaceId,
     gasPrice: Number(row.gasPrice),
     vehicleMpg: Number(row.vehicleMpg),
     gasThresholdGreen: Number(row.gasThresholdGreen),
@@ -26,6 +32,7 @@ function toWire(row: Settings) {
     fuelGaugeFullMi: Number(row.fuelGaugeFullMi),
     fuelGaugeHalfMin: Number(row.fuelGaugeHalfMin),
     fuelGaugeFullMin: Number(row.fuelGaugeFullMin),
+    techHourlyCost: Number(row.techHourlyCost),
     paymentProcessorConnected: row.paymentProcessorConnected,
     cardReaderPaired: row.cardReaderPaired,
   };
@@ -72,11 +79,31 @@ router.patch("/settings", requireOrgSession, async (req, res) => {
     res.status(400).json({ error: "invalid_request", message: parsed.error.message });
     return;
   }
-  const { gasPrice, vehicleMpg, gasThresholdGreen, gasThresholdAmber, commissionRate, fuelGaugeHalfMi, fuelGaugeFullMi, fuelGaugeHalfMin, fuelGaugeFullMin, ...rest } = parsed.data;
+  const {
+    gasPrice,
+    vehicleMpg,
+    gasThresholdGreen,
+    gasThresholdAmber,
+    commissionRate,
+    fuelGaugeHalfMi,
+    fuelGaugeFullMi,
+    fuelGaugeHalfMin,
+    fuelGaugeFullMin,
+    // FR-2/FR-24/§9.4 (Phase 1): `hqLatitude`/`hqLongitude` round-trip as `number` over
+    // the wire (numeric-mode DB columns, same reasoning as the Gas Meter fields above)
+    // — converted to `string` below. `techHourlyCost` is NOT NULL with a DB default,
+    // but still optional on this partial-update request; only written when supplied.
+    hqLatitude,
+    hqLongitude,
+    techHourlyCost,
+    ...rest
+  } = parsed.data;
 
   try {
     const row = await updateSettings(req.organizationId!, {
       ...rest,
+      ...(hqLatitude !== undefined && { hqLatitude: String(hqLatitude) }),
+      ...(hqLongitude !== undefined && { hqLongitude: String(hqLongitude) }),
       ...(gasPrice !== undefined && { gasPrice: String(gasPrice) }),
       ...(vehicleMpg !== undefined && { vehicleMpg: String(vehicleMpg) }),
       ...(gasThresholdGreen !== undefined && { gasThresholdGreen: String(gasThresholdGreen) }),
@@ -86,6 +113,7 @@ router.patch("/settings", requireOrgSession, async (req, res) => {
       ...(fuelGaugeFullMi !== undefined && { fuelGaugeFullMi: String(fuelGaugeFullMi) }),
       ...(fuelGaugeHalfMin !== undefined && { fuelGaugeHalfMin: String(fuelGaugeHalfMin) }),
       ...(fuelGaugeFullMin !== undefined && { fuelGaugeFullMin: String(fuelGaugeFullMin) }),
+      ...(techHourlyCost !== undefined && { techHourlyCost: String(techHourlyCost) }),
     });
     if (!row) {
       res.status(404).json({ error: "settings_not_found" });

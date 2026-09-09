@@ -24,6 +24,12 @@ export interface BookingResult {
   /** 24-hour HH:MM, e.g. "09:00". */
   startTime: string;
   address: string;
+  /** PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md FR-2/§9.4 (Phase 1). Null for any booking never re-saved through the Places-autocomplete address field (including every booking that existed before this field shipped) — the Fuel Gauge treats that as Unknown, never a guess. */
+  latitude: number | null;
+  longitude: number | null;
+  googlePlaceId: string | null;
+  /** Google's normalized address string for `latitude`/`longitude`, distinct from the free-typed `address`. */
+  formattedAddress: string | null;
   depositAmount: number;
   parkingCost: number;
   status: BookingResultStatus;
