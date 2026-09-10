@@ -605,9 +605,16 @@ export default function BookingNew() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [computeRouteMatrixMutation.mutateAsync]);
 
-  type RecoUiState = 'hidden' | 'searching' | 'empty' | 'error' | 'ready';
+  // BUG-5 (`BUGS_Mobull_2026-09-10.md`) — 'skipped' is new: distinguishes
+  // "genuinely nothing nearby" from "candidates existed but couldn't be
+  // evaluated" (no coordinates, or no technician assigned yet — the
+  // confirmed live cause; see `suggest-slots.ts`'s `SuggestSlotsOutcome`
+  // doc comment). Without this, both collapsed into the same silent
+  // "No nearby jobs" empty state the bug report describes.
+  type RecoUiState = 'hidden' | 'searching' | 'empty' | 'skipped' | 'error' | 'ready';
   const [recoUiState, setRecoUiState] = useState<RecoUiState>('hidden');
   const [recommendations, setRecommendations] = useState<SuggestedSlot[]>([]);
+  const [recoSkipped, setRecoSkipped] = useState({ noCoordinates: 0, noTechnician: 0 });
   const [recoRetryNonce, setRecoRetryNonce] = useState(0);
 
   useEffect(() => {
@@ -669,10 +676,17 @@ export default function BookingNew() {
       settingsInput,
       fetchRouteMatrix,
       fetchRoute,
-    ).then((result) => {
+    ).then((outcome) => {
       if (cancelled) return;
-      setRecommendations(result);
-      setRecoUiState(result.length === 0 ? 'empty' : 'ready');
+      setRecommendations(outcome.slots);
+      setRecoSkipped({ noCoordinates: outcome.skippedNoCoordinates, noTechnician: outcome.skippedNoTechnician });
+      if (outcome.slots.length > 0) {
+        setRecoUiState('ready');
+      } else if (outcome.skippedNoCoordinates > 0 || outcome.skippedNoTechnician > 0) {
+        setRecoUiState('skipped');
+      } else {
+        setRecoUiState('empty');
+      }
     }).catch(() => {
       if (cancelled) return;
       setRecoUiState('error');
@@ -993,6 +1007,24 @@ export default function BookingNew() {
               No nearby jobs in the next 7 days — any time below works.
             </p>
           )}
+
+          {/* BUG-5 — distinct from 'empty': real nearby jobs exist but
+              couldn't be evaluated, either for missing coordinates (a
+              legacy or free-typed address) or no technician assigned yet
+              (the confirmed live cause). Surfacing this instead of the
+              generic empty state is what prevents this exact failure from
+              silently recurring undetected. */}
+          {recoUiState === 'skipped' && (() => {
+            const total = recoSkipped.noCoordinates + recoSkipped.noTechnician;
+            const reasons: string[] = [];
+            if (recoSkipped.noTechnician > 0) reasons.push('need a technician assigned');
+            if (recoSkipped.noCoordinates > 0) reasons.push('need their address re-saved');
+            return (
+              <p className="text-sm text-muted-foreground" data-testid="text-recommendations-skipped">
+                {total} nearby {total === 1 ? 'job' : 'jobs'} couldn't be checked — {reasons.join(' and ')}.
+              </p>
+            );
+          })()}
 
           {recoUiState === 'error' && (
             <div className="flex items-center justify-between gap-3" data-testid="status-recommendations-error">

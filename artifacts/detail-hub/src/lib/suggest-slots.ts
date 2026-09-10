@@ -116,6 +116,27 @@ export type FetchRouteMatrix = (
   departureTimeIso: string,
 ) => Promise<Array<{ destinationPlaceId: string; miles: number | null; minutes: number | null; error: string | null }>>;
 
+/**
+ * BUG-5 (`BUGS_Mobull_2026-09-10.md`) — an empty `slots` array is ambiguous:
+ * it could mean "genuinely nothing nearby" or "candidates existed but
+ * couldn't be evaluated." The bug report's own hypothesis (anchors dropped
+ * for missing `googlePlaceId`) checked out FALSE against live data — every
+ * upcoming real booking already had one. The actual live cause: bookings
+ * created through the ordinary flow can have an empty `employeeSplit` (no
+ * technician assigned yet — this is allowed by design, not itself a bug),
+ * and Step 2 has nothing to check a schedule against for those, so they
+ * silently contribute zero candidates. Both cases are real, both should be
+ * distinguishable from "no nearby jobs" (report's own acceptance criterion,
+ * generalized to the confirmed root cause rather than the guessed one).
+ */
+export interface SuggestSlotsOutcome {
+  slots: SuggestedSlot[];
+  /** Anchors within the 30-mile Haversine pre-filter with no `googlePlaceId` at all — a legacy booking, or one saved via a free-typed (never autocomplete-selected) address. */
+  skippedNoCoordinates: number;
+  /** Anchors that survived the 45-minute drive filter but have zero assigned employees (`employeeIds.length === 0`) — nothing for Step 2 to check a schedule against. The confirmed real cause of BUG-5. */
+  skippedNoTechnician: number;
+}
+
 export interface SuggestedSlot {
   date: string; // YYYY-MM-DD
   startTime: string; // HH:MM
@@ -226,7 +247,19 @@ async function batchedLegs(
   );
   for (const elements of responses) {
     for (const el of elements) {
-      if (el.error || el.miles == null || el.minutes == null) continue;
+      if (el.error || el.miles == null || el.minutes == null) {
+        // BUG-5 secondary suspect (report §"Route Matrix failures return
+        // `continue`, dropping elements silently") — this was already
+        // correct behavior (never fabricate a distance for a failed
+        // element, §10), but silent. Logged now so a real Route Matrix
+        // failure is distinguishable from a genuine no-result during
+        // future debugging, without changing the drop-and-continue logic.
+        if (el.error) {
+          // eslint-disable-next-line no-console -- diagnostic only, matches this module's existing discipline of never surfacing a fabricated distance instead
+          console.warn(`[suggest-slots] Route Matrix element failed for ${el.destinationPlaceId}: ${el.error}`);
+        }
+        continue;
+      }
       result.set(el.destinationPlaceId, { miles: el.miles, minutes: el.minutes });
     }
   }
@@ -309,7 +342,7 @@ export async function suggestSlots(
   settings: SuggestSlotsSettingsInput,
   fetchRouteMatrix: FetchRouteMatrix,
   fetchRoute: FetchRoute,
-): Promise<SuggestedSlot[]> {
+): Promise<SuggestSlotsOutcome> {
   const duration = newDurationMins > 0 ? newDurationMins : 120;
   const newPlaceId = newAddress.googlePlaceId;
 
@@ -327,7 +360,8 @@ export async function suggestSlots(
   const departureTimeIso = new Date(Date.now() + 60_000).toISOString();
 
   const routableAnchors = anchors.filter((a) => !!a.googlePlaceId);
-  if (routableAnchors.length === 0) return [];
+  const skippedNoCoordinates = anchors.length - routableAnchors.length;
+  if (routableAnchors.length === 0) return { slots: [], skippedNoCoordinates, skippedNoTechnician: 0 };
 
   // ── Step 1 — real 45-minute drive-time filter (FR-19/FR-20) ────────────
   const anchorLegs = await batchedLegs(
@@ -341,17 +375,30 @@ export async function suggestSlots(
     const leg = anchorLegs.get(a.googlePlaceId!);
     return !!leg && leg.minutes <= MAX_DRIVE_MINS;
   });
-  if (survivingAnchors.length === 0) return [];
+  if (survivingAnchors.length === 0) return { slots: [], skippedNoCoordinates, skippedNoTechnician: 0 };
 
   // ── Step 2/3 — schedule-gap check + tight placement ─────────────────────
   const schedule = buildSchedule(allBookings, allPackages);
   const raw: RawCandidate[] = [];
+  // BUG-5's confirmed real cause: a booking with real coordinates but no
+  // assigned employee(s) yet (allowed by design — see FR-11 elsewhere in
+  // this app, a booking can be created before a technician is picked)
+  // can never anchor a recommendation, since there's no schedule to check
+  // it against. Counted separately from "no good time fit" (which is a
+  // legitimate outcome, not a data gap) — only a *zero-employee* anchor
+  // counts here.
+  let skippedNoTechnician = 0;
 
   for (const anchor of survivingAnchors) {
     const driveToAnchor = anchorLegs.get(anchor.googlePlaceId!)!;
     const anchorStart = toMins(anchor.startTime);
     const anchorEnd = anchorStart + anchor.durationMinutes;
     const driveMins = Math.round(driveToAnchor.minutes);
+
+    if (anchor.employeeIds.length === 0) {
+      skippedNoTechnician++;
+      continue;
+    }
 
     for (const empId of anchor.employeeIds) {
       const dayMap = schedule.get(dateOnly(anchor.date));
@@ -394,7 +441,7 @@ export async function suggestSlots(
     }
   }
 
-  if (raw.length === 0) return [];
+  if (raw.length === 0) return { slots: [], skippedNoCoordinates, skippedNoTechnician };
 
   // ── Bracketing-peer legs, folded into the Step 1 batch's own origin (new
   //    address) so double-anchor detection costs no extra call — plus Home
@@ -514,5 +561,5 @@ export async function suggestSlots(
   });
 
   // FR-2 — exactly 4, never padded.
-  return deduped.slice(0, 4);
+  return { slots: deduped.slice(0, 4), skippedNoCoordinates, skippedNoTechnician };
 }
