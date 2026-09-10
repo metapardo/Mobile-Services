@@ -31,6 +31,14 @@ import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 
 type PackageCategory = 'Exterior' | 'Interior' | 'Full' | 'Add-on';
 
+// OBS-2 (`BUGS_Mobull_2026-09-10.md`) — a 1-minute service made it into the
+// catalog and every downstream gap/slot-fitting calculation (BUG-3, the
+// Appointment Optimizer) treats it as an instantly-bookable no-op. This is
+// frontend-only client-side validation; no server-side check exists yet
+// (flagged in this batch's report rather than added here — out of scope for
+// this fix).
+const MIN_PACKAGE_DURATION_MINUTES = 5;
+
 interface PackageFormState {
   name: string;
   category: PackageCategory;
@@ -154,6 +162,7 @@ export default function Packages() {
 
   const isSaving = createPackageMutation.isPending || updatePackageMutation.isPending;
   const hasNoPackagesAtAll = !packagesQuery.isLoading && !packagesQuery.isError && allPackages.length === 0;
+  const isDurationValid = formData.durationMinutes >= MIN_PACKAGE_DURATION_MINUTES;
 
   return (
     <div className="min-h-[100dvh] bg-background pb-20 md:pb-6">
@@ -327,10 +336,18 @@ export default function Packages() {
                 <Input
                   id="duration"
                   type="number"
+                  min={MIN_PACKAGE_DURATION_MINUTES}
                   value={formData.durationMinutes}
                   onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 0 })}
                   data-testid="input-duration"
                 />
+                {/* OBS-2 — same inline-error convention as the rest of this
+                    app's forms (e.g. `payroll-run.tsx`'s "Run By" field). */}
+                {!isDurationValid && (
+                  <p className="text-[12px] text-destructive mt-1" data-testid="text-duration-error">
+                    Duration must be at least {MIN_PACKAGE_DURATION_MINUTES} minutes.
+                  </p>
+                )}
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="isAddon">Is Add-on</Label>
@@ -341,7 +358,7 @@ export default function Packages() {
                   data-testid="switch-addon"
                 />
               </div>
-              <Button onClick={handleSave} className="w-full" disabled={isSaving} data-testid="button-save">
+              <Button onClick={handleSave} className="w-full" disabled={isSaving || !isDurationValid} data-testid="button-save">
                 {isSaving ? 'Saving…' : editingPackage ? 'Save Changes' : 'Create Package'}
               </Button>
             </div>
