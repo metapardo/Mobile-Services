@@ -1172,6 +1172,34 @@ export const CreateBookingResponse = zod.object({
 
 
 /**
+ * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19/§5 Step 1 — candidate "anchor" bookings for the scheduling-assist recommendation engine. Returns active (not `cancelled`/`no-show`) bookings within `[today, today + days]` that have real coordinates (`latitude`/`longitude` both non-null — a legacy booking with no coordinates is excluded entirely here, never treated as distance zero, per the PRD §10 edge case table), pre-filtered server-side to within a 30-mile straight-line (Haversine) distance of `(lat, lng)` — computed directly in the SQL `WHERE` clause, not pulled into Node and filtered in memory, since the whole point of FR-19 is cutting the candidate list down before anything more expensive (a Route Matrix call) runs. Per FR-19: "Road distance is never shorter than straight-line, so a 30-mile cut-off cannot produce a false negative" — this can over-include (a candidate that's actually >45 min by road despite being <30mi straight-line) but never wrongly exclude a true anchor, which is exactly the property the caller's later 45-minute Route Matrix filter needs.
+ * @summary Nearby active, future bookings pre-filtered by straight-line distance (FR-19)
+ */
+export const listBookingAnchorsQueryDaysMax = 30;
+
+
+
+export const ListBookingAnchorsQueryParams = zod.object({
+  "lat": zod.coerce.number().describe('Latitude of the new appointment\'s address.'),
+  "lng": zod.coerce.number().describe('Longitude of the new appointment\'s address.'),
+  "days": zod.coerce.number().int().min(1).max(listBookingAnchorsQueryDaysMax).optional().describe('Search window in days from today, inclusive. Defaults to 7 (FR-22 — the search window is a Phase 2 business setting; this endpoint hardcodes the same default today rather than waiting on that setting).')
+})
+
+export const ListBookingAnchorsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "date": zod.coerce.date(),
+  "startTime": zod.string().describe('24-hour HH:MM, e.g. \"09:00\".'),
+  "durationMinutes": zod.number().int().describe('Sum of `durationMinutes` across this booking\'s assigned packages (0 if none are assigned).'),
+  "employeeIds": zod.array(zod.number().int()).describe('Every employee assigned to this booking (its `employee_splits` rows) — the technician(s) this anchor already belongs to (PRD §5 Step 2: \"A technician is never checked against a teammate\'s anchor\").'),
+  "address": zod.string(),
+  "latitude": zod.number(),
+  "longitude": zod.number(),
+  "googlePlaceId": zod.string().nullable()
+}).describe('PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19 — one row per anchor booking returned by `GET \/bookings\/anchors`: an active (not `cancelled`\/`no-show`), future booking with real, non-null coordinates, already pre-filtered in SQL to within a 30-mile straight-line distance of the query point. Never includes a legacy booking with null `latitude`\/`longitude` (PRD §10 — excluded, not treated as distance zero).')
+export const ListBookingAnchorsResponse = zod.array(ListBookingAnchorsResponseItem)
+
+
+/**
  * @summary Get a booking by id
  */
 export const GetBookingParams = zod.object({
@@ -1554,5 +1582,32 @@ export const ComputeRouteResponse = zod.object({
   "miles": zod.number(),
   "minutes": zod.number()
 }).describe('One-way distance\/time — callers double it themselves for the round trip (PRD §6.1).')
+
+
+/**
+ * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20 — the anchor-ranking batch sibling of `POST /routes/compute`: one Route Matrix element batch per search (1 origin x N destinations), never N separate `/routes/compute` calls in a loop, which would bill the same elements, add N round trips of latency, and trip the per-organization rate limiter (FR-21a).
+ * STUB — Phase 1 of this PRD explicitly does not implement the real Google Route Matrix v2 call (`../integrations/google-maps.ts`'s `computeRouteMatrix` always throws `NotImplementedError`, mapped to `501` below); that integration is a later pass's job. This endpoint exists now so the contract, validation, and error-mapping shape are settled ahead of that work — it must never respond `200` with a fabricated or estimated distance in the meantime.
+ * Once implemented, a per-destination Google failure (PRD §10 "Route Matrix partially fails -> drop failed candidates, rank the rest") must surface as that one element's `error` field in a `200` response, not as a whole-request failure — the contract already supports this via `RouteMatrixElementResult`.
+ * @summary Traffic-aware one-way drive distance/time from one origin to many destinations
+ */
+
+
+export const computeRouteMatrixBodyDestinationPlaceIdsMax = 25;
+
+
+
+export const ComputeRouteMatrixBody = zod.object({
+  "originPlaceId": zod.string().min(1),
+  "destinationPlaceIds": zod.array(zod.string().min(1)).min(1).max(computeRouteMatrixBodyDestinationPlaceIdsMax),
+  "departureTime": zod.coerce.date().describe('The new appointment\'s candidate start time, ISO 8601.')
+}).describe('PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a\/FR-20. One origin, many destinations, one Route Matrix batch per search — never N separate `\/routes\/compute` calls in a loop. `destinationPlaceIds.maxItems: 25` is a starting guess pending confirmation against Google\'s live Route Matrix v2 batch-size limits (verify before the real integration lands — do not assume this number is Google-confirmed).')
+
+export const ComputeRouteMatrixResponseItem = zod.object({
+  "destinationPlaceId": zod.string(),
+  "miles": zod.number().nullable(),
+  "minutes": zod.number().nullable(),
+  "error": zod.string().nullable().describe('Null on success; a machine-readable reason string when this element failed.')
+}).describe('One result per requested destination place id. PRD §10: \"Route Matrix partially fails -> drop failed candidates, rank the rest\" — `error` is non-null (and `miles`\/`minutes` are both null) for exactly the destinations that failed, without failing the whole request.')
+export const ComputeRouteMatrixResponse = zod.array(ComputeRouteMatrixResponseItem)
 
 

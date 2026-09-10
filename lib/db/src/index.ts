@@ -12,4 +12,6 @@ export * from "./time-off-requests";
 export * from "./payroll-tax-estimate";
 export * from "./payroll";
 export * from "./reports";
+export * from "./route-cache";
+export * from "./rate-limit";
 export { eq, and, or, gt, isNull, sql } from "drizzle-orm";

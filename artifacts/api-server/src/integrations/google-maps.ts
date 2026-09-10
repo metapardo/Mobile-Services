@@ -340,3 +340,53 @@ export async function computeRoute(params: {
     minutes: durationSeconds / 60,
   };
 }
+
+/**
+ * Thrown by `computeRouteMatrix` below — every call, unconditionally. This is an
+ * intentional placeholder for `PRD_Mobull_Appointment_Optimizer_v1.0.md` FR-18a/FR-20:
+ * the real Google Route Matrix v2 endpoint (distinct from the single-route
+ * `computeRoutes` above — a batch "1 origin x N destinations" call, likely
+ * `POST https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix`, though
+ * that URL/field-mask/response-shape combination has NOT been confirmed against
+ * Google's live docs here) is explicitly a later integrations pass's job, not this
+ * one's. Per this file's header comment, do not "fix" this from memory — the next
+ * implementer must re-verify against Google's current docs before writing the real
+ * request, same as every other function in this module did.
+ */
+export class NotImplementedError extends Error {}
+
+export interface RouteMatrixElementResult {
+  destinationPlaceId: string;
+  /** Null when this element failed (see `error`). */
+  miles: number | null;
+  /** Null when this element failed (see `error`). */
+  minutes: number | null;
+  /** Non-null exactly when this element failed — PRD §10 "Route Matrix partially
+   *  fails -> drop failed candidates, rank the rest" needs a per-destination failure
+   *  marker distinct from the whole request failing. Null on success. */
+  error: string | null;
+}
+
+/**
+ * STUB — see `NotImplementedError`'s doc comment. Always throws `NotImplementedError`
+ * rather than returning a real, estimated, or fabricated distance for any element.
+ * Exists now (rather than being left unbuilt) so the route handler
+ * (`../routes/routing.ts`), the OpenAPI contract (`POST /routes/matrix`), and the
+ * `FetchRouteMatrix` shape downstream callers need all exist and compile today, with
+ * only this one function's body left for the next integrations pass to fill in with
+ * the real batch call, its own caching (`@workspace/db`'s `getCachedRoute`/
+ * `setCachedRoute` — see `lib/db/src/route-cache.ts`) and rate-limit checks
+ * (`checkAndIncrement` — see `lib/db/src/rate-limit.ts`), both already built as of
+ * this pass but not yet wired in here.
+ */
+export async function computeRouteMatrix(params: {
+  originPlaceId: string;
+  destinationPlaceIds: string[];
+  /** RFC3339 UTC, e.g. from `Date#toISOString()`. */
+  departureTime: string;
+}): Promise<RouteMatrixElementResult[]> {
+  throw new NotImplementedError(
+    "computeRouteMatrix is not implemented yet — the real Google Route Matrix v2 " +
+      "integration is a later pass's job (PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20).",
+  );
+}

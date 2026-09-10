@@ -1575,6 +1575,81 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /bookings/anchors:
+    get:
+      operationId: listBookingAnchors
+      tags: [bookings]
+      summary: Nearby active, future bookings pre-filtered by straight-line distance (FR-19)
+      description: >-
+        PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19/§5 Step 1 — candidate "anchor"
+        bookings for the scheduling-assist recommendation engine. Returns active
+        (not `cancelled`/`no-show`) bookings within `[today, today + days]` that have
+        real coordinates (`latitude`/`longitude` both non-null — a legacy booking with
+        no coordinates is excluded entirely here, never treated as distance zero, per
+        the PRD §10 edge case table), pre-filtered server-side to within a 30-mile
+        straight-line (Haversine) distance of `(lat, lng)` — computed directly in the
+        SQL `WHERE` clause, not pulled into Node and filtered in memory, since the
+        whole point of FR-19 is cutting the candidate list down before anything more
+        expensive (a Route Matrix call) runs. Per FR-19: "Road distance is never
+        shorter than straight-line, so a 30-mile cut-off cannot produce a false
+        negative" — this can over-include (a candidate that's actually >45 min by
+        road despite being <30mi straight-line) but never wrongly exclude a true
+        anchor, which is exactly the property the caller's later 45-minute Route
+        Matrix filter needs.
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Latitude of the new appointment's address.
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Longitude of the new appointment's address.
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+          description: >-
+            Search window in days from today, inclusive. Defaults to 7
+            (FR-22 — the search window is a Phase 2 business setting; this endpoint
+            hardcodes the same default today rather than waiting on that setting).
+      responses:
+        "200":
+          description: >-
+            Anchor candidates within the window and straight-line radius, ordered by
+            date then start time. May be an empty array (no error) when nothing
+            qualifies — PRD §10 "No booking within 45 min anywhere in the window".
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AnchorCandidate"
+        "400":
+          description: Invalid/missing lat, lng, or days.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /bookings/{id}:
     get:
       operationId: getBooking
@@ -2022,6 +2097,79 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: Routes API request failed or returned an unexpected shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /routes/matrix:
+    post:
+      operationId: computeRouteMatrix
+      tags: [maps]
+      summary: Traffic-aware one-way drive distance/time from one origin to many destinations
+      description: >-
+        PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20 — the anchor-ranking
+        batch sibling of `POST /routes/compute`: one Route Matrix element batch per
+        search (1 origin x N destinations), never N separate `/routes/compute` calls
+        in a loop, which would bill the same elements, add N round trips of latency,
+        and trip the per-organization rate limiter (FR-21a).
+
+        STUB — Phase 1 of this PRD explicitly does not implement the real Google
+        Route Matrix v2 call (`../integrations/google-maps.ts`'s `computeRouteMatrix`
+        always throws `NotImplementedError`, mapped to `501` below); that integration
+        is a later pass's job. This endpoint exists now so the contract, validation,
+        and error-mapping shape are settled ahead of that work — it must never
+        respond `200` with a fabricated or estimated distance in the meantime.
+
+        Once implemented, a per-destination Google failure (PRD §10 "Route Matrix
+        partially fails -> drop failed candidates, rank the rest") must surface as
+        that one element's `error` field in a `200` response, not as a whole-request
+        failure — the contract already supports this via `RouteMatrixElementResult`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComputeRouteMatrixRequest"
+      responses:
+        "200":
+          description: >-
+            One result per requested destination, in request order. Individual
+            elements may have failed (see `RouteMatrixElementResult.error`) without
+            the whole request failing.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RouteMatrixElementResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: >-
+            Not implemented yet — the real Google Route Matrix v2 integration is a
+            later pass's job (see this operation's description).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Route Matrix request failed or returned an unexpected shape.
           content:
             application/json:
               schema:
@@ -3019,6 +3167,56 @@ components:
           enum: [paid]
       required:
         - status
+    AnchorCandidate:
+      type: object
+      description: >-
+        PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19 — one row per anchor booking
+        returned by `GET /bookings/anchors`: an active (not `cancelled`/`no-show`),
+        future booking with real, non-null coordinates, already pre-filtered in SQL to
+        within a 30-mile straight-line distance of the query point. Never includes a
+        legacy booking with null `latitude`/`longitude` (PRD §10 — excluded, not
+        treated as distance zero).
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+          description: "24-hour HH:MM, e.g. \"09:00\"."
+        durationMinutes:
+          type: integer
+          description: >-
+            Sum of `durationMinutes` across this booking's assigned packages (0 if
+            none are assigned).
+        employeeIds:
+          type: array
+          items:
+            type: integer
+          description: >-
+            Every employee assigned to this booking (its `employee_splits` rows) —
+            the technician(s) this anchor already belongs to (PRD §5 Step 2: "A
+            technician is never checked against a teammate's anchor").
+        address:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        googlePlaceId:
+          type: string
+          nullable: true
+      required:
+        - id
+        - date
+        - startTime
+        - durationMinutes
+        - employeeIds
+        - address
+        - latitude
+        - longitude
+        - googlePlaceId
     BookingResult:
       type: object
       description: >-
@@ -3649,6 +3847,59 @@ components:
       required:
         - miles
         - minutes
+    ComputeRouteMatrixRequest:
+      type: object
+      description: >-
+        PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20. One origin, many
+        destinations, one Route Matrix batch per search — never N separate
+        `/routes/compute` calls in a loop. `destinationPlaceIds.maxItems: 25` is a
+        starting guess pending confirmation against Google's live Route Matrix v2
+        batch-size limits (verify before the real integration lands — do not assume
+        this number is Google-confirmed).
+      properties:
+        originPlaceId:
+          type: string
+          minLength: 1
+        destinationPlaceIds:
+          type: array
+          minItems: 1
+          maxItems: 25
+          items:
+            type: string
+            minLength: 1
+        departureTime:
+          type: string
+          format: date-time
+          description: The new appointment's candidate start time, ISO 8601.
+      required:
+        - originPlaceId
+        - destinationPlaceIds
+        - departureTime
+    RouteMatrixElementResult:
+      type: object
+      description: >-
+        One result per requested destination place id. PRD §10: "Route Matrix
+        partially fails -> drop failed candidates, rank the rest" — `error` is
+        non-null (and `miles`/`minutes` are both null) for exactly the destinations
+        that failed, without failing the whole request.
+      properties:
+        destinationPlaceId:
+          type: string
+        miles:
+          type: number
+          nullable: true
+        minutes:
+          type: number
+          nullable: true
+        error:
+          type: string
+          nullable: true
+          description: Null on success; a machine-readable reason string when this element failed.
+      required:
+        - destinationPlaceId
+        - miles
+        - minutes
+        - error
     ErrorResponse:
       type: object
       properties:

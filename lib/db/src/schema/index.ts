@@ -53,3 +53,9 @@ export * from "./packages";
 export * from "./bookings";
 export * from "./employee-split";
 export * from "./settings";
+
+// PRD_Mobull_Appointment_Optimizer_v1.0.md §8/§9 prerequisites.
+// `route-cache` is the ONE exception to "every table here is org-scoped with RLS" —
+// see that file's doc comment before assuming it's missing organizationId by mistake.
+export * from "./route-cache";
+export * from "./rate-limit-counter";

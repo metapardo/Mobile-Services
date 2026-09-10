@@ -20,10 +20,12 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AnchorCandidate,
   AutocompletePlacesRequest,
   AutocompletePlacesResult,
   BookingResult,
   ClientResult,
+  ComputeRouteMatrixRequest,
   ComputeRouteRequest,
   ComputeRouteResult,
   CreateBookingRequest,
@@ -42,6 +44,7 @@ import type {
   GetPayrollSummaryParams,
   GetPlaceDetailsRequest,
   HealthStatus,
+  ListBookingAnchorsParams,
   ListBookingsParams,
   ListClientsParams,
   ListEmployeesParams,
@@ -59,6 +62,7 @@ import type {
   RecordBookingPaymentRequest,
   RefundBookingRequest,
   ReviewTimeOffRequestRequest,
+  RouteMatrixElementResult,
   SessionResult,
   SettingsResult,
   SignupRequest,
@@ -3143,6 +3147,91 @@ export const useCreateBooking = <TError = ErrorType<ErrorResponse>,
       return useMutation(getCreateBookingMutationOptions(options));
     }
 
+export const getListBookingAnchorsUrl = (params: ListBookingAnchorsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bookings/anchors?${stringifiedParams}` : `/api/bookings/anchors`
+}
+
+/**
+ * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19/§5 Step 1 — candidate "anchor" bookings for the scheduling-assist recommendation engine. Returns active (not `cancelled`/`no-show`) bookings within `[today, today + days]` that have real coordinates (`latitude`/`longitude` both non-null — a legacy booking with no coordinates is excluded entirely here, never treated as distance zero, per the PRD §10 edge case table), pre-filtered server-side to within a 30-mile straight-line (Haversine) distance of `(lat, lng)` — computed directly in the SQL `WHERE` clause, not pulled into Node and filtered in memory, since the whole point of FR-19 is cutting the candidate list down before anything more expensive (a Route Matrix call) runs. Per FR-19: "Road distance is never shorter than straight-line, so a 30-mile cut-off cannot produce a false negative" — this can over-include (a candidate that's actually >45 min by road despite being <30mi straight-line) but never wrongly exclude a true anchor, which is exactly the property the caller's later 45-minute Route Matrix filter needs.
+ * @summary Nearby active, future bookings pre-filtered by straight-line distance (FR-19)
+ */
+export const listBookingAnchors = async (params: ListBookingAnchorsParams, options?: Parameters<typeof customFetch>[1]): Promise<AnchorCandidate[]> => {
+
+  return customFetch<AnchorCandidate[]>(getListBookingAnchorsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBookingAnchorsQueryKey = (params?: ListBookingAnchorsParams,) => {
+    return [
+    `/api/bookings/anchors`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBookingAnchorsQueryOptions = <TData = Awaited<ReturnType<typeof listBookingAnchors>>, TError = ErrorType<ErrorResponse>>(params: ListBookingAnchorsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookingAnchors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBookingAnchorsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBookingAnchors>>> = ({ signal }) => listBookingAnchors(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBookingAnchors>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBookingAnchorsQueryResult = NonNullable<Awaited<ReturnType<typeof listBookingAnchors>>>
+export type ListBookingAnchorsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Nearby active, future bookings pre-filtered by straight-line distance (FR-19)
+ */
+
+export function useListBookingAnchors<TData = Awaited<ReturnType<typeof listBookingAnchors>>, TError = ErrorType<ErrorResponse>>(
+ params: ListBookingAnchorsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookingAnchors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBookingAnchorsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetBookingUrl = (id: number,) => {
 
 
@@ -3810,5 +3899,79 @@ export const useComputeRoute = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getComputeRouteMutationOptions(options));
+    }
+
+export const getComputeRouteMatrixUrl = () => {
+
+
+
+
+  return `/api/routes/matrix`
+}
+
+/**
+ * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20 — the anchor-ranking batch sibling of `POST /routes/compute`: one Route Matrix element batch per search (1 origin x N destinations), never N separate `/routes/compute` calls in a loop, which would bill the same elements, add N round trips of latency, and trip the per-organization rate limiter (FR-21a).
+ * STUB — Phase 1 of this PRD explicitly does not implement the real Google Route Matrix v2 call (`../integrations/google-maps.ts`'s `computeRouteMatrix` always throws `NotImplementedError`, mapped to `501` below); that integration is a later pass's job. This endpoint exists now so the contract, validation, and error-mapping shape are settled ahead of that work — it must never respond `200` with a fabricated or estimated distance in the meantime.
+ * Once implemented, a per-destination Google failure (PRD §10 "Route Matrix partially fails -> drop failed candidates, rank the rest") must surface as that one element's `error` field in a `200` response, not as a whole-request failure — the contract already supports this via `RouteMatrixElementResult`.
+ * @summary Traffic-aware one-way drive distance/time from one origin to many destinations
+ */
+export const computeRouteMatrix = async (computeRouteMatrixRequest: ComputeRouteMatrixRequest, options?: Parameters<typeof customFetch>[1]): Promise<RouteMatrixElementResult[]> => {
+
+  return customFetch<RouteMatrixElementResult[]>(getComputeRouteMatrixUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(computeRouteMatrixRequest)
+  }
+);}
+
+
+
+
+
+export const getComputeRouteMatrixMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeRouteMatrix>>, TError,{data: BodyType<ComputeRouteMatrixRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof computeRouteMatrix>>, TError,{data: BodyType<ComputeRouteMatrixRequest>}, TContext> => {
+
+const mutationKey = ['computeRouteMatrix'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof computeRouteMatrix>>, {data: BodyType<ComputeRouteMatrixRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  computeRouteMatrix(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ComputeRouteMatrixMutationResult = NonNullable<Awaited<ReturnType<typeof computeRouteMatrix>>>
+    export type ComputeRouteMatrixMutationBody = BodyType<ComputeRouteMatrixRequest>
+    export type ComputeRouteMatrixMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Traffic-aware one-way drive distance/time from one origin to many destinations
+ */
+export const useComputeRouteMatrix = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeRouteMatrix>>, TError,{data: BodyType<ComputeRouteMatrixRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof computeRouteMatrix>>,
+        TError,
+        {data: BodyType<ComputeRouteMatrixRequest>},
+        TContext
+      > => {
+      return useMutation(getComputeRouteMatrixMutationOptions(options));
     }
 

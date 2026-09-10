@@ -657,6 +657,24 @@ export interface UpdatePayrollRunRequest {
   status: UpdatePayrollRunRequestStatus;
 }
 
+/**
+ * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19 — one row per anchor booking returned by `GET /bookings/anchors`: an active (not `cancelled`/`no-show`), future booking with real, non-null coordinates, already pre-filtered in SQL to within a 30-mile straight-line distance of the query point. Never includes a legacy booking with null `latitude`/`longitude` (PRD §10 — excluded, not treated as distance zero).
+ */
+export interface AnchorCandidate {
+  id: number;
+  date: string;
+  /** 24-hour HH:MM, e.g. "09:00". */
+  startTime: string;
+  /** Sum of `durationMinutes` across this booking's assigned packages (0 if none are assigned). */
+  durationMinutes: number;
+  /** Every employee assigned to this booking (its `employee_splits` rows) — the technician(s) this anchor already belongs to (PRD §5 Step 2: "A technician is never checked against a teammate's anchor"). */
+  employeeIds: number[];
+  address: string;
+  latitude: number;
+  longitude: number;
+  googlePlaceId: string | null;
+}
+
 export type BookingResultStatus = typeof BookingResultStatus[keyof typeof BookingResultStatus];
 
 
@@ -1012,6 +1030,33 @@ export interface ComputeRouteResult {
   minutes: number;
 }
 
+/**
+ * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20. One origin, many destinations, one Route Matrix batch per search — never N separate `/routes/compute` calls in a loop. `destinationPlaceIds.maxItems: 25` is a starting guess pending confirmation against Google's live Route Matrix v2 batch-size limits (verify before the real integration lands — do not assume this number is Google-confirmed).
+ */
+export interface ComputeRouteMatrixRequest {
+  /** @minLength 1 */
+  originPlaceId: string;
+  /**
+     * @minItems 1
+     * @maxItems 25
+     * @items.minLength 1
+     */
+  destinationPlaceIds: string[];
+  /** The new appointment's candidate start time, ISO 8601. */
+  departureTime: string;
+}
+
+/**
+ * One result per requested destination place id. PRD §10: "Route Matrix partially fails -> drop failed candidates, rank the rest" — `error` is non-null (and `miles`/`minutes` are both null) for exactly the destinations that failed, without failing the whole request.
+ */
+export interface RouteMatrixElementResult {
+  destinationPlaceId: string;
+  miles: number | null;
+  minutes: number | null;
+  /** Null on success; a machine-readable reason string when this element failed. */
+  error: string | null;
+}
+
 export interface ErrorResponse {
   /** Machine-readable error code. */
   error: string;
@@ -1077,6 +1122,23 @@ export type ListBookingsParams = {
 start?: string;
 end?: string;
 clientId?: number;
+};
+
+export type ListBookingAnchorsParams = {
+/**
+ * Latitude of the new appointment's address.
+ */
+lat: number;
+/**
+ * Longitude of the new appointment's address.
+ */
+lng: number;
+/**
+ * Search window in days from today, inclusive. Defaults to 7 (FR-22 — the search window is a Phase 2 business setting; this endpoint hardcodes the same default today rather than waiting on that setting).
+ * @minimum 1
+ * @maximum 30
+ */
+days?: number;
 };
 
 export type GetFinancialReportParams = {

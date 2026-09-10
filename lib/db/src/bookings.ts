@@ -1,8 +1,9 @@
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, notInArray, sql } from "drizzle-orm";
 import {
   bookingsTable,
   bookingPackagesTable,
   employeeSplitsTable,
+  packagesTable,
   type InsertBooking,
   type Booking,
 } from "./schema";
@@ -119,6 +120,152 @@ export async function listBookings(
       ...booking,
       packageIds: packagesByBooking.get(booking.id) ?? [],
       employeeSplit: splitsByBooking.get(booking.id) ?? [],
+    }));
+  });
+}
+
+/**
+ * Miles-per-degree constant for the Haversine formula used by `listAnchorCandidates`
+ * below — Earth's mean radius in miles (3958.8mi / 6371km), the standard constant for
+ * a great-circle-distance-in-miles Haversine expression.
+ */
+const EARTH_RADIUS_MILES = 3958.8;
+
+/** PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19's straight-line pre-filter radius. */
+export const ANCHOR_HAVERSINE_MAX_MILES = 30;
+
+/** PRD_Mobull_Appointment_Optimizer_v1.0.md FR-22's search-window default (the
+ *  setting itself is Phase 2 — this is the hardcoded Phase 1 default). */
+export const ANCHOR_DEFAULT_SEARCH_WINDOW_DAYS = 7;
+
+/** Bookings in these statuses are never anchors — a cancelled/no-show slot isn't
+ *  work the van is actually going to be doing. */
+const INACTIVE_BOOKING_STATUSES: Array<"cancelled" | "no-show"> = ["cancelled", "no-show"];
+
+export type AnchorCandidate = {
+  id: number;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  employeeIds: number[];
+  address: string;
+  latitude: number;
+  longitude: number;
+  googlePlaceId: string | null;
+};
+
+/**
+ * `GET /bookings/anchors` — PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19/§5 Step 1.
+ * Candidate "anchor" bookings for the scheduling-assist recommendation engine: active
+ * (not `cancelled`/`no-show`), within `[today, today + days]`, with non-null
+ * `latitude`/`longitude` (a legacy booking with no coordinates is excluded here,
+ * never treated as distance zero — PRD §10), pre-filtered to within
+ * `ANCHOR_HAVERSINE_MAX_MILES` straight-line (Haversine) miles of `(lat, lng)`.
+ *
+ * The distance expression is computed directly in the SQL `WHERE` clause (not pulled
+ * into Node and filtered in memory) — the entire point of FR-19 is cutting the
+ * candidate list down in Postgres before anything more expensive (a Route Matrix
+ * call) runs. "Road distance is never shorter than straight-line, so a 30-mile
+ * cut-off cannot produce a false negative" (FR-19) — this can over-include a
+ * candidate that's actually >45 minutes by road despite being <30mi straight-line,
+ * but can never wrongly exclude a true anchor, which is exactly what the caller's
+ * later 45-minute Route Matrix filter (a later pass's job) needs from this step.
+ *
+ * `durationMinutes` sums `packages.durationMinutes` across each booking's assigned
+ * packages (via `booking_packages`) — there's no other "total duration of a booking"
+ * derivation anywhere else in this codebase to reuse, so this is the first one.
+ * `employeeIds` comes from `employee_splits`, same relation `listBookings` already
+ * joins, batched the same N+1-avoiding way (one extra query across every candidate id,
+ * not one query per booking).
+ */
+export async function listAnchorCandidates(
+  organizationId: string,
+  opts: { lat: number; lng: number; days?: number },
+): Promise<AnchorCandidate[]> {
+  const days = opts.days ?? ANCHOR_DEFAULT_SEARCH_WINDOW_DAYS;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const endStr = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  return withOrganization(organizationId, async (tx) => {
+    // Great-circle distance in miles between (opts.lat, opts.lng) and each
+    // candidate's (latitude, longitude). `least`/`greatest` clamp the acos() input to
+    // [-1, 1] — floating-point rounding can otherwise push it fractionally outside
+    // that domain (e.g. 1.0000000000000002) for two points very close together or
+    // identical, which would make acos() return NULL instead of ~0.
+    const distanceMilesExpr = sql`(
+      ${EARTH_RADIUS_MILES}::double precision * acos(
+        least(1::double precision, greatest(-1::double precision,
+          cos(radians(${opts.lat}::double precision)) * cos(radians(${bookingsTable.latitude}::double precision))
+            * cos(radians(${bookingsTable.longitude}::double precision) - radians(${opts.lng}::double precision))
+          + sin(radians(${opts.lat}::double precision)) * sin(radians(${bookingsTable.latitude}::double precision))
+        )
+      )
+    )`;
+
+    const candidates = await tx
+      .select({
+        id: bookingsTable.id,
+        date: bookingsTable.date,
+        startTime: bookingsTable.startTime,
+        address: bookingsTable.address,
+        latitude: bookingsTable.latitude,
+        longitude: bookingsTable.longitude,
+        googlePlaceId: bookingsTable.googlePlaceId,
+      })
+      .from(bookingsTable)
+      .where(
+        and(
+          eq(bookingsTable.organizationId, organizationId),
+          notInArray(bookingsTable.status, INACTIVE_BOOKING_STATUSES),
+          isNotNull(bookingsTable.latitude),
+          isNotNull(bookingsTable.longitude),
+          gte(bookingsTable.date, todayStr),
+          lte(bookingsTable.date, endStr),
+          sql`${distanceMilesExpr} <= ${ANCHOR_HAVERSINE_MAX_MILES}`,
+        ),
+      )
+      .orderBy(asc(bookingsTable.date), asc(bookingsTable.startTime));
+
+    if (candidates.length === 0) return [];
+
+    const ids = candidates.map((c) => c.id);
+    const [durationRows, splitRows] = await Promise.all([
+      tx
+        .select({
+          bookingId: bookingPackagesTable.bookingId,
+          totalDurationMinutes: sql<string>`coalesce(sum(${packagesTable.durationMinutes}), 0)`,
+        })
+        .from(bookingPackagesTable)
+        .innerJoin(packagesTable, eq(bookingPackagesTable.packageId, packagesTable.id))
+        .where(and(eq(bookingPackagesTable.organizationId, organizationId), inArray(bookingPackagesTable.bookingId, ids)))
+        .groupBy(bookingPackagesTable.bookingId),
+      tx
+        .select({ bookingId: employeeSplitsTable.bookingId, employeeId: employeeSplitsTable.employeeId })
+        .from(employeeSplitsTable)
+        .where(and(eq(employeeSplitsTable.organizationId, organizationId), inArray(employeeSplitsTable.bookingId, ids))),
+    ]);
+
+    const durationByBooking = new Map<number, number>();
+    for (const row of durationRows) {
+      durationByBooking.set(row.bookingId, Number(row.totalDurationMinutes));
+    }
+    const employeeIdsByBooking = new Map<number, number[]>();
+    for (const row of splitRows) {
+      const list = employeeIdsByBooking.get(row.bookingId) ?? [];
+      list.push(row.employeeId);
+      employeeIdsByBooking.set(row.bookingId, list);
+    }
+
+    return candidates.map((c) => ({
+      id: c.id,
+      date: c.date,
+      startTime: c.startTime,
+      durationMinutes: durationByBooking.get(c.id) ?? 0,
+      employeeIds: employeeIdsByBooking.get(c.id) ?? [],
+      address: c.address,
+      latitude: Number(c.latitude),
+      longitude: Number(c.longitude),
+      googlePlaceId: c.googlePlaceId,
     }));
   });
 }

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './anchorCandidate';
 export * from './authUser';
 export * from './autocompletePlacesRequest';
 export * from './autocompletePlacesResult';
@@ -15,6 +16,7 @@ export * from './bookingResultPaymentMethod';
 export * from './bookingResultRefundStatus';
 export * from './bookingResultStatus';
 export * from './clientResult';
+export * from './computeRouteMatrixRequest';
 export * from './computeRouteRequest';
 export * from './computeRouteResult';
 export * from './createBookingRequest';
@@ -51,6 +53,7 @@ export * from './getPayrollSummaryParams';
 export * from './getPayrollSummaryPeriod';
 export * from './getPlaceDetailsRequest';
 export * from './healthStatus';
+export * from './listBookingAnchorsParams';
 export * from './listBookingsParams';
 export * from './listClientsParams';
 export * from './listEmployeesParams';
@@ -80,6 +83,7 @@ export * from './refundBookingRequest';
 export * from './revenueByEmployeeEntry';
 export * from './reviewTimeOffRequestRequest';
 export * from './reviewTimeOffRequestRequestStatus';
+export * from './routeMatrixElementResult';
 export * from './sessionResult';
 export * from './settingsResult';
 export * from './signupOrganization';

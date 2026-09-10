@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   listBookings,
+  listAnchorCandidates,
   getBookingById,
   createBooking,
   updateBooking,
@@ -13,6 +14,8 @@ import {
 } from "@workspace/db";
 import {
   ListBookingsResponse,
+  ListBookingAnchorsQueryParams,
+  ListBookingAnchorsResponse,
   CreateBookingBody,
   CreateBookingResponse,
   GetBookingParams,
@@ -204,6 +207,38 @@ router.post("/bookings", requireOrgSession, async (req, res) => {
       return;
     }
     logger.error({ err }, "POST /bookings: unexpected failure");
+    await captureAndFlush(err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/**
+ * GET /bookings/anchors — PRD_Mobull_Appointment_Optimizer_v1.0.md FR-19/§5 Step 1.
+ * Registered BEFORE `GET /bookings/:id` below: Express matches routes in
+ * registration order, and `:id` matches any path segment (including the literal
+ * string "anchors") — if `/bookings/:id` were registered first, a request to
+ * `/bookings/anchors` would be routed there instead and fail `GetBookingParams`'s
+ * integer-id parse with a 400, never reaching this handler.
+ *
+ * `lat`/`lng` are required; `days` is optional and defaults to
+ * `ANCHOR_DEFAULT_SEARCH_WINDOW_DAYS` (7, FR-22 — the search window is a Phase 2
+ * business setting, hardcoded here for Phase 1) inside `listAnchorCandidates` itself,
+ * not here, so this route and any other future caller of that function share one
+ * default rather than each hardcoding their own.
+ */
+router.get("/bookings/anchors", requireOrgSession, async (req, res) => {
+  const parsedQuery = ListBookingAnchorsQueryParams.safeParse(req.query);
+  if (!parsedQuery.success) {
+    res.status(400).json({ error: "invalid_request", message: parsedQuery.error.message });
+    return;
+  }
+  const { lat, lng, days } = parsedQuery.data;
+  try {
+    const rows = await listAnchorCandidates(req.organizationId!, { lat, lng, days });
+    const data = ListBookingAnchorsResponse.parse(rows);
+    res.status(200).json(data);
+  } catch (err) {
+    logger.error({ err }, "GET /bookings/anchors: unexpected failure");
     await captureAndFlush(err);
     res.status(500).json({ error: "internal_error" });
   }
