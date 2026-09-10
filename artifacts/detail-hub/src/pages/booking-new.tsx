@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearch, Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -12,6 +12,9 @@ import { evenSplit } from '@/lib/api-adapters';
 import { getSetupProfile } from '@/lib/setup-store';
 import {
   suggestSlots,
+  buildSchedule,
+  WORK_START_MINS,
+  WORK_END_MINS,
   type SuggestedSlot,
   type FetchRouteMatrix,
   type SuggestSlotsSettingsInput,
@@ -139,9 +142,17 @@ function PillBtn({ label, onClick, icon: Icon }: { label: string; onClick: () =>
 }
 
 // ─── Time slots grid ─────────────────────────────────────────────────────────
-const TIMES = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
-               '12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30',
-               '16:00','16:30','17:00','17:30','18:00'];
+// BUG-3 (`BUGS_Mobull_2026-09-10.md`) — this used to be a hardcoded, never-
+// filtered constant (`TIMES`), so an occupied slot was always offered. The
+// conflict-aware list is now computed inside the component (see
+// `availableTimes` below), built from `WORK_START_MINS`/`WORK_END_MINS`
+// (`suggest-slots.ts`) rather than a second hardcoded 08:00 start.
+
+function minsToHHMM(totalMins: number): string {
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
 
 function fmtTime(t: string) {
   try {
@@ -326,6 +337,9 @@ function FuelGaugeRow({
   }
 
   const color = GRADE_COLOR[result.grade];
+  // OBS-1 — single source of rounding for both the one-way and round-trip
+  // minutes displayed below (see comment at the Drive Time line).
+  const oneWayDriveMinutes = Math.round(result.roundTripMinutes / 2);
 
   return (
     <div
@@ -344,9 +358,15 @@ function FuelGaugeRow({
         </div>
       </div>
 
-      {/* Drive time, origin named */}
+      {/* Drive time, origin named. OBS-1 (`BUGS_Mobull_2026-09-10.md`) —
+          round once, at the one-way figure, and derive the round-trip
+          display below from that already-rounded value (doubled) rather
+          than independently rounding `result.roundTripMinutes` a second
+          time — otherwise "11 min" one-way and "21 min round trip" sit
+          adjacent without reconciling (11×2≠21) even though both come from
+          the same underlying number. */}
       <p className="text-[13px] text-muted-foreground mt-2.5">
-        Drive Time: est. {Math.round(result.roundTripMinutes / 2)} min
+        Drive Time: est. {oneWayDriveMinutes} min
         <br />
         {anchorOriginLabel(result.anchorType)}
       </p>
@@ -359,7 +379,7 @@ function FuelGaugeRow({
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Drive time</span>
-          <span className="font-medium tabular-nums">${result.driveCost.toFixed(2)} · {Math.round(result.roundTripMinutes)} min round trip</span>
+          <span className="font-medium tabular-nums">${result.driveCost.toFixed(2)} · {oneWayDriveMinutes * 2} min round trip</span>
         </div>
       </div>
     </div>
@@ -373,6 +393,12 @@ function FuelGaugeRow({
 // address before "Save customer" enabled).
 interface NewClientState { firstName: string; lastName: string; phone: string }
 const EMPTY_NEW_CLIENT: NewClientState = { firstName: '', lastName: '', phone: '' };
+
+// OBS-2 (`BUGS_Mobull_2026-09-10.md`) — same floor as `packages.tsx`'s own
+// package form; this quick-add modal creates packages through a separate
+// code path (`useCreatePackage` called directly from here) and needs the
+// same guard so a 1-minute service can't be seeded through this door either.
+const MIN_PACKAGE_DURATION_MINUTES = 5;
 
 // ─── Quick-add package form state ─────────────────────────────────────────────
 // Grounded in the real `packages` schema (`lib/db/src/schema/packages.ts` +
@@ -447,8 +473,20 @@ export default function BookingNew() {
   const [selectedPackages, setSelectedPackages] = useState<number[]>([]);
   const [newPackage, setNewPackage] = useState<NewPackageState>(EMPTY_NEW_PACKAGE);
   const [creatingPackage, setCreatingPackage] = useState(false);
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [time, setTime] = useState('09:00');
+  // BUG-2 (`BUGS_Mobull_2026-09-10.md`) — seeded from the calendar's tapped
+  // cell (`/booking/new?date=YYYY-MM-DD&time=HH:MM`), falling back to
+  // today/09:00 when the params are absent or malformed, exactly like the
+  // **+** button's existing default. Lazy `useState` initializers (not an
+  // effect) so there's no flash of the wrong default before a real param
+  // applies.
+  const [date, setDate] = useState(() => {
+    const fromUrl = new URLSearchParams(search).get('date');
+    return fromUrl && /^\d{4}-\d{2}-\d{2}$/.test(fromUrl) ? fromUrl : format(new Date(), 'yyyy-MM-dd');
+  });
+  const [time, setTime] = useState(() => {
+    const fromUrl = new URLSearchParams(search).get('time');
+    return fromUrl && /^([01]\d|2[0-3]):[0-5]\d$/.test(fromUrl) ? fromUrl : '09:00';
+  });
   const [address, setAddress] = useState('');
   // Non-null only immediately after a suggestion is selected from
   // `AddressAutocomplete` (FR-14) — any further typing in the field clears
@@ -460,8 +498,16 @@ export default function BookingNew() {
   const [addressSelection, setAddressSelection] = useState<AddressAutocompleteSelection | null>(null);
   // Kept exactly as-is per FR-12: the explicit "Team" picker UI is gone, but
   // Smart Suggestions (`applySuggestion`) and the Fuel Gauge below both
-  // still quietly depend on this state and keep working unchanged.
-  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
+  // still quietly depend on this state and keep working unchanged. Also
+  // seeded from an optional `?employeeId=` query param (BUG-2's fix
+  // direction) for any future calendar view that links in a specific
+  // technician — today's single-column calendar doesn't, so this is inert
+  // in practice but costs nothing to support.
+  const [selectedEmployees, setSelectedEmployees] = useState<number[]>(() => {
+    const fromUrl = new URLSearchParams(search).get('employeeId');
+    const employeeId = fromUrl ? parseInt(fromUrl, 10) : NaN;
+    return Number.isFinite(employeeId) ? [employeeId] : [];
+  });
   const [notes, setNotes] = useState('');
 
   // Page takeovers / sheets
@@ -583,6 +629,112 @@ export default function BookingNew() {
   ]);
 
   const retryGauge = () => setGaugeRetryNonce(n => n + 1);
+
+  // ── BUG-3 (`BUGS_Mobull_2026-09-10.md`) — conflict-aware time slot list ──
+  // Reuses `buildSchedule()` from `suggest-slots.ts` (the exact `date ->
+  // employeeId -> sorted entries` structure the Appointment Optimizer above
+  // already builds from these same `bookingsForOptimizer`/`packages`) rather
+  // than a second schedule map, and the same `fetchRoute` DI callback the
+  // Fuel Gauge already uses above rather than a new distance helper.
+  const daySchedule = useMemo(
+    () => buildSchedule(bookingsForOptimizer, packages),
+    [bookingsForOptimizer, packages],
+  );
+
+  // Each selected employee's own sorted bookings on the selected date — a
+  // valid slot has to be free for every one of them, not just one.
+  const employeeDayEntries = useMemo(() => {
+    const dayMap = daySchedule.get(date);
+    return selectedEmployees.map((empId) => dayMap?.get(empId) ?? []);
+  }, [daySchedule, date, selectedEmployees]);
+
+  const effectiveDuration = totalDuration > 0 ? totalDuration : 30;
+
+  // Synchronous pass — business hours, duration fit, and overlap with the
+  // selected technician(s)' existing bookings. No employee selected yet
+  // means there's no schedule to conflict-check against (same rule
+  // `suggest-slots.ts` itself uses), so every business-hours slot stands.
+  const overlapFilteredStarts = useMemo(() => {
+    const out: number[] = [];
+    for (let start = WORK_START_MINS; start < WORK_END_MINS; start += 30) {
+      const end = start + effectiveDuration;
+      if (end > WORK_END_MINS) continue;
+      const conflict = employeeDayEntries.some((entries) =>
+        entries.some((e) => start < e.endMins && end > e.startMins)
+      );
+      if (conflict) continue;
+      out.push(start);
+    }
+    return out;
+  }, [employeeDayEntries, effectiveDuration]);
+
+  const [availableTimes, setAvailableTimes] = useState<string[]>(() => overlapFilteredStarts.map(minsToHHMM));
+
+  // Second pass — real drive-time-vs-gap check (only possible once an
+  // address is selected, since it needs a real `googlePlaceId` on both
+  // ends). Excludes a slot whose gap to the neighboring booking is smaller
+  // than the real drive time between the two addresses. When a neighbor has
+  // no coordinates (a legacy or free-typed address), that neighbor's gap is
+  // left unfiltered rather than fabricating a distance — same discipline
+  // `suggest-slots.ts` uses throughout.
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!addressSelection) {
+      setAvailableTimes(overlapFilteredStarts.map(minsToHHMM));
+      return;
+    }
+
+    const neighborPlaceIds = Array.from(new Set(
+      employeeDayEntries.flatMap((entries) => entries.map((e) => e.googlePlaceId).filter((id): id is string => !!id))
+    ));
+
+    if (neighborPlaceIds.length === 0) {
+      setAvailableTimes(overlapFilteredStarts.map(minsToHHMM));
+      return;
+    }
+
+    const newPlaceId = addressSelection.placeId;
+    const departureTimeIso = new Date(Date.now() + 60_000).toISOString();
+
+    Promise.all(neighborPlaceIds.map(async (placeId) => {
+      try {
+        const leg = await fetchRoute(newPlaceId, placeId, departureTimeIso);
+        return [placeId, leg.minutes] as const;
+      } catch {
+        return [placeId, null] as const;
+      }
+    })).then((legs) => {
+      if (cancelled) return;
+      const driveMinsByPlaceId = new Map(legs);
+
+      const filtered = overlapFilteredStarts.filter((start) => {
+        const end = start + effectiveDuration;
+        return employeeDayEntries.every((entries) => {
+          const prev = [...entries].reverse().find((e) => e.endMins <= start) ?? null;
+          const next = entries.find((e) => e.startMins >= end) ?? null;
+          if (prev?.googlePlaceId) {
+            const driveMins = driveMinsByPlaceId.get(prev.googlePlaceId);
+            if (driveMins != null && (start - prev.endMins) < driveMins) return false;
+          }
+          if (next?.googlePlaceId) {
+            const driveMins = driveMinsByPlaceId.get(next.googlePlaceId);
+            if (driveMins != null && (next.startMins - end) < driveMins) return false;
+          }
+          return true;
+        });
+      });
+
+      setAvailableTimes(filtered.map(minsToHHMM));
+    }).catch(() => {
+      // Real drive-time check failed outright — fall back to the
+      // overlap-only list rather than blocking every slot on a routing error.
+      if (!cancelled) setAvailableTimes(overlapFilteredStarts.map(minsToHHMM));
+    });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlapFilteredStarts, employeeDayEntries, addressSelection?.placeId, effectiveDuration, fetchRoute]);
 
   // ── Appointment Optimizer — grouping recommendations (FR-1 through FR-3,
   //    FR-6 through FR-11, FR-15 through FR-18) ────────────────────────────
@@ -828,12 +980,17 @@ export default function BookingNew() {
     },
   });
 
+  // OBS-2: floor raised from >= 1 to the same MIN_PACKAGE_DURATION_MINUTES
+  // used by `packages.tsx`'s own form.
+  const newPackageDurationValid =
+    parseInt(newPackage.durationMinutes, 10) >= MIN_PACKAGE_DURATION_MINUTES &&
+    !Number.isNaN(parseInt(newPackage.durationMinutes, 10));
+
   const newPackageValid =
     newPackage.name.trim().length > 0 &&
     parseFloat(newPackage.price) >= 0 &&
     !Number.isNaN(parseFloat(newPackage.price)) &&
-    parseInt(newPackage.durationMinutes, 10) >= 1 &&
-    !Number.isNaN(parseInt(newPackage.durationMinutes, 10)) &&
+    newPackageDurationValid &&
     newPackage.description.trim().length > 0;
 
   const handleCreatePackage = () => {
@@ -1408,7 +1565,7 @@ export default function BookingNew() {
                   <input
                     id="quick-pkg-duration"
                     type="number"
-                    min="1"
+                    min={MIN_PACKAGE_DURATION_MINUTES}
                     step="5"
                     className="flex-1 text-[15px] bg-transparent focus:outline-none"
                     placeholder="Duration"
@@ -1417,6 +1574,14 @@ export default function BookingNew() {
                   />
                   <span className="text-[15px] text-muted-foreground">min</span>
                 </div>
+                {/* OBS-2 — matches this same modal's existing inline-error
+                    convention (see the package price/name validation state
+                    surfaced via the Save button below). */}
+                {newPackage.durationMinutes.trim().length > 0 && !newPackageDurationValid && (
+                  <p className="text-[12px] text-destructive mt-1" data-testid="text-quick-pkg-duration-error">
+                    Duration must be at least {MIN_PACKAGE_DURATION_MINUTES} minutes.
+                  </p>
+                )}
               </div>
               <div>
                 <label htmlFor="quick-pkg-category" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
@@ -1479,19 +1644,28 @@ export default function BookingNew() {
           </div>
           <div>
             <p className="text-[13px] font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Time</p>
-            <div className="grid grid-cols-4 gap-2">
-              {TIMES.map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTime(t)}
-                  className={`py-2.5 rounded-xl text-[13px] font-medium transition-all ${
-                    time === t ? 'bg-primary text-white' : 'bg-muted text-foreground hover:bg-muted/70'
-                  }`}
-                >
-                  {fmtTime(t)}
-                </button>
-              ))}
-            </div>
+            {/* BUG-3 — conflict-aware list (`availableTimes`), not the old
+                hardcoded 08:00–18:00 constant. Recomputes on date, technician
+                and duration changes (see the effect above). */}
+            {availableTimes.length > 0 ? (
+              <div className="grid grid-cols-4 gap-2" data-testid="grid-available-times">
+                {availableTimes.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTime(t)}
+                    className={`py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+                      time === t ? 'bg-primary text-white' : 'bg-muted text-foreground hover:bg-muted/70'
+                    }`}
+                  >
+                    {fmtTime(t)}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-muted-foreground" data-testid="text-no-available-times">
+                No open times for this technician on this date — try another date or technician.
+              </p>
+            )}
           </div>
           <button
             onClick={() => setShowDatePicker(false)}
