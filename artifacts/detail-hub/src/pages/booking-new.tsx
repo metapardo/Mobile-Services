@@ -37,7 +37,10 @@ import {
   type FetchRoute,
 } from '@/lib/fuel-gauge';
 import { AddressAutocomplete, type AddressAutocompleteSelection } from '@/components/address-autocomplete';
-import { format, parse } from 'date-fns';
+// BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — `addDays` for the
+// "tomorrow's first slot" default when the shop's last bookable hour has
+// already passed for today.
+import { format, parse, addDays } from 'date-fns';
 
 // ─── Bottom sheet wrapper ────────────────────────────────────────────────────
 // Still used for the date/time picker (explicitly out of scope for the page-
@@ -160,6 +163,28 @@ function fmtTime(t: string) {
   } catch { return t; }
 }
 
+// ─── BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — client-side past-date
+// guards ──────────────────────────────────────────────────────────────────
+// This page (`/booking/new`) is create-only — editing an existing booking
+// (including a past-dated one) happens on `booking-detail.tsx`, a separate
+// component/route entirely. So none of the guards below need to branch on
+// "am I editing a past booking", the way the ticket's acceptance criterion
+// ("editing an existing past booking still works") might otherwise imply —
+// that's already true by construction, since this file never renders in an
+// edit context.
+function todayStr(): string {
+  return format(new Date(), 'yyyy-MM-dd');
+}
+
+function isPastDateStr(dateStr: string): boolean {
+  return dateStr < todayStr();
+}
+
+function isPastWorkEnd(): boolean {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes() >= WORK_END_MINS;
+}
+
 // ─── Fuel Gauge readout ────────────────────────────────────────────────────
 // Rebuilt per PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §8.1/§8.2 — money
 // first, gauge second, fuel and drive-time cost lines always both present
@@ -229,7 +254,30 @@ function possessive(name: string): string {
   return /s$/i.test(name) ? `${name}'` : `${name}'s`;
 }
 
+// BUG-6 Blocker 1 (`BUGS_Mobull_2026-09-10_Round2.md`) — same "first
+// comma-separated segment" convention `fuel-gauge-icon.tsx`'s `fmtAddr()`
+// already uses to shorten a full formatted address for display.
+function streetOnly(addr: string): string {
+  return addr.split(',')[0]?.trim() || addr;
+}
+
 function recommendationReason(slot: SuggestedSlot, employeeName: string): string {
+  // BUG-6 Blocker 1 — an unassigned anchor's reason line names the job
+  // (its street), never a person — there's no technician to attribute it
+  // to, and inventing one would contradict "leave the technician field
+  // blank" below.
+  if (slot.employeeId === null) {
+    const street = streetOnly(slot.anchorAddress);
+    if (slot.doubleAnchored && slot.otherBookingStartTime) {
+      const [earlier, later] = slot.position === 'before'
+        ? [slot.otherBookingStartTime, slot.anchorStartTime]
+        : [slot.anchorStartTime, slot.otherBookingStartTime];
+      return `Fits between the ${fmtTime(earlier)} and ${fmtTime(later)} jobs on ${street}`;
+    }
+    const relation = slot.position === 'after' ? 'right after' : 'right before';
+    return `Fits ${relation} the ${fmtTime(slot.anchorStartTime)} job on ${street}`;
+  }
+
   const who = possessive(firstName(employeeName));
   if (slot.doubleAnchored && slot.otherBookingStartTime) {
     const [earlier, later] = slot.position === 'before'
@@ -479,13 +527,41 @@ export default function BookingNew() {
   // **+** button's existing default. Lazy `useState` initializers (not an
   // effect) so there's no flash of the wrong default before a real param
   // applies.
+  // BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — a well-formed `?date=`
+  // param used to pass through unchecked as long as it matched the
+  // YYYY-MM-DD shape, even a past one. Now range-checked: a past date
+  // silently falls back to today (same default as the no-param case)
+  // rather than being rejected/erroring. And when *neither* `date` nor
+  // `time` is present (the true "no explicit params" default path, not an
+  // explicit deep link), and the shop's last bookable hour has already
+  // passed for today, default to tomorrow's date at the first bookable
+  // slot instead of today at an hour that's already gone.
+  const hasExplicitDateParam = (() => {
+    const fromUrl = new URLSearchParams(search).get('date');
+    return !!fromUrl && /^\d{4}-\d{2}-\d{2}$/.test(fromUrl);
+  })();
+  const hasExplicitTimeParam = (() => {
+    const fromUrl = new URLSearchParams(search).get('time');
+    return !!fromUrl && /^([01]\d|2[0-3]):[0-5]\d$/.test(fromUrl);
+  })();
+
   const [date, setDate] = useState(() => {
     const fromUrl = new URLSearchParams(search).get('date');
-    return fromUrl && /^\d{4}-\d{2}-\d{2}$/.test(fromUrl) ? fromUrl : format(new Date(), 'yyyy-MM-dd');
+    if (hasExplicitDateParam) {
+      return isPastDateStr(fromUrl!) ? todayStr() : fromUrl!;
+    }
+    if (!hasExplicitTimeParam && isPastWorkEnd()) {
+      return format(addDays(new Date(), 1), 'yyyy-MM-dd');
+    }
+    return todayStr();
   });
   const [time, setTime] = useState(() => {
     const fromUrl = new URLSearchParams(search).get('time');
-    return fromUrl && /^([01]\d|2[0-3]):[0-5]\d$/.test(fromUrl) ? fromUrl : '09:00';
+    if (hasExplicitTimeParam) return fromUrl!;
+    if (!hasExplicitDateParam && isPastWorkEnd()) {
+      return minsToHHMM(WORK_START_MINS);
+    }
+    return '09:00';
   });
   const [address, setAddress] = useState('');
   // Non-null only immediately after a suggestion is selected from
@@ -538,7 +614,23 @@ export default function BookingNew() {
     const key = `${slot.date}|${slot.startTime}|${slot.employeeId}`;
     setDate(slot.date);
     setTime(slot.startTime);
-    setSelectedEmployees([slot.employeeId]);
+    if (slot.employeeId !== null) {
+      setSelectedEmployees([slot.employeeId]);
+    } else {
+      // BUG-6 Blocker 1 (`BUGS_Mobull_2026-09-10_Round2.md`) — an
+      // unassigned-anchor recommendation. Fill date/time only; explicitly
+      // clear (not "leave untouched") the technician selection so a stale
+      // pick from a previous suggestion can't linger and silently become a
+      // fabricated assignment on save — "leaves the technician field
+      // blank" is the acceptance criterion, and `selectedEmployees` is what
+      // `handleSave()` sends as `employeeSplit`. There's no
+      // technician/employee-picker UI anywhere on this page to focus (the
+      // explicit "Team" picker was removed — see comments above on
+      // `selectedEmployees` and in `Section`'s usage below), so there's
+      // nothing to focus; see this task's final report for the judgment
+      // call.
+      setSelectedEmployees([]);
+    }
     setSelectedSuggestion(key);
   };
 
@@ -656,7 +748,13 @@ export default function BookingNew() {
   // `suggest-slots.ts` itself uses), so every business-hours slot stands.
   const overlapFilteredStarts = useMemo(() => {
     const out: number[] = [];
+    // BUG-8 — today's time options exclude hours already passed; no change
+    // for any other date.
+    const now = new Date();
+    const isToday = date === format(now, 'yyyy-MM-dd');
+    const nowMins = now.getHours() * 60 + now.getMinutes();
     for (let start = WORK_START_MINS; start < WORK_END_MINS; start += 30) {
+      if (isToday && start < nowMins) continue;
       const end = start + effectiveDuration;
       if (end > WORK_END_MINS) continue;
       const conflict = employeeDayEntries.some((entries) =>
@@ -666,7 +764,7 @@ export default function BookingNew() {
       out.push(start);
     }
     return out;
-  }, [employeeDayEntries, effectiveDuration]);
+  }, [employeeDayEntries, effectiveDuration, date]);
 
   const [availableTimes, setAvailableTimes] = useState<string[]>(() => overlapFilteredStarts.map(minsToHHMM));
 
@@ -759,14 +857,17 @@ export default function BookingNew() {
 
   // BUG-5 (`BUGS_Mobull_2026-09-10.md`) — 'skipped' is new: distinguishes
   // "genuinely nothing nearby" from "candidates existed but couldn't be
-  // evaluated" (no coordinates, or no technician assigned yet — the
-  // confirmed live cause; see `suggest-slots.ts`'s `SuggestSlotsOutcome`
-  // doc comment). Without this, both collapsed into the same silent
-  // "No nearby jobs" empty state the bug report describes.
+  // evaluated". BUG-6 (`BUGS_Mobull_2026-09-10_Round2.md`) replaced the
+  // mis-diagnosed "no technician assigned" cause (nothing can reach that
+  // anymore — see `suggest-slots.ts`'s Blocker 1 fix) with the real silent
+  // drops: no coordinates, an anchor missing from the schedule map, and a
+  // Route Matrix element failure. Without this, all of these collapsed
+  // into the same silent "No nearby jobs" empty state the bug report
+  // describes.
   type RecoUiState = 'hidden' | 'searching' | 'empty' | 'skipped' | 'error' | 'ready';
   const [recoUiState, setRecoUiState] = useState<RecoUiState>('hidden');
   const [recommendations, setRecommendations] = useState<SuggestedSlot[]>([]);
-  const [recoSkipped, setRecoSkipped] = useState({ noCoordinates: 0, noTechnician: 0 });
+  const [recoSkipped, setRecoSkipped] = useState({ noCoordinates: 0, notInSchedule: 0, matrixFailure: 0 });
   const [recoRetryNonce, setRecoRetryNonce] = useState(0);
 
   useEffect(() => {
@@ -831,10 +932,14 @@ export default function BookingNew() {
     ).then((outcome) => {
       if (cancelled) return;
       setRecommendations(outcome.slots);
-      setRecoSkipped({ noCoordinates: outcome.skippedNoCoordinates, noTechnician: outcome.skippedNoTechnician });
+      setRecoSkipped({
+        noCoordinates: outcome.skippedNoCoordinates,
+        notInSchedule: outcome.skippedNotInSchedule,
+        matrixFailure: outcome.skippedMatrixFailure,
+      });
       if (outcome.slots.length > 0) {
         setRecoUiState('ready');
-      } else if (outcome.skippedNoCoordinates > 0 || outcome.skippedNoTechnician > 0) {
+      } else if (outcome.skippedNoCoordinates > 0 || outcome.skippedNotInSchedule > 0 || outcome.skippedMatrixFailure > 0) {
         setRecoUiState('skipped');
       } else {
         setRecoUiState('empty');
@@ -1165,17 +1270,20 @@ export default function BookingNew() {
             </p>
           )}
 
-          {/* BUG-5 — distinct from 'empty': real nearby jobs exist but
-              couldn't be evaluated, either for missing coordinates (a
-              legacy or free-typed address) or no technician assigned yet
-              (the confirmed live cause). Surfacing this instead of the
-              generic empty state is what prevents this exact failure from
-              silently recurring undetected. */}
+          {/* BUG-5/BUG-6 — distinct from 'empty': real nearby jobs exist
+              but couldn't be evaluated. "Need a technician assigned" no
+              longer exists as a reason (BUG-6 Blocker 1 fixed that case to
+              recommend, not skip) — the remaining reasons are the other
+              three silent-drop counters from `suggest-slots.ts`'s
+              `SuggestSlotsOutcome`. Surfacing this instead of the generic
+              empty state is what prevents any of these from silently
+              recurring undetected. */}
           {recoUiState === 'skipped' && (() => {
-            const total = recoSkipped.noCoordinates + recoSkipped.noTechnician;
+            const total = recoSkipped.noCoordinates + recoSkipped.notInSchedule + recoSkipped.matrixFailure;
             const reasons: string[] = [];
-            if (recoSkipped.noTechnician > 0) reasons.push('need a technician assigned');
             if (recoSkipped.noCoordinates > 0) reasons.push('need their address re-saved');
+            if (recoSkipped.notInSchedule > 0) reasons.push('have a scheduling data issue');
+            if (recoSkipped.matrixFailure > 0) reasons.push('had a distance check fail');
             return (
               <p className="text-sm text-muted-foreground" data-testid="text-recommendations-skipped">
                 {total} nearby {total === 1 ? 'job' : 'jobs'} couldn't be checked — {reasons.join(' and ')}.
@@ -1637,6 +1745,11 @@ export default function BookingNew() {
             <p className="text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Date</p>
             <input
               type="date"
+              // BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — this page is
+              // create-only (see the note above `todayStr()`), so a hard
+              // `min` of today is always correct here; no edit-mode
+              // back-dating case exists on this component to preserve.
+              min={todayStr()}
               className="w-full px-4 py-3.5 rounded-2xl border border-border text-[15px] bg-background focus:outline-none focus:border-primary"
               value={date}
               onChange={e => setDate(e.target.value)}

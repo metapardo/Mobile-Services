@@ -25,13 +25,21 @@
  * Step 2 — Can that anchor's own technician take the job?
  *   For each surviving anchor, only that anchor's own assigned
  *   employee(s)' schedule that day is inspected (never a teammate's
- *   schedule). This mirrors the PRD's Step 2/3 wording literally: the
- *   open-time check and the tight-placement formula both use only ONE
- *   drive-time term (new<->anchor) — there's no additional physical-transit
- *   buffer budgeted for the neighboring booking's own leg. That's a
- *   simplification inherent in the PRD's own formulas, not an invention of
- *   this file; flagged in the frontend-engineer's report as a Phase 2/3
- *   candidate if finer feasibility modeling is ever wanted.
+ *   schedule). This mirrors the PRD's Step 2/3 wording literally.
+ *
+ *   `BUGS_Mobull_2026-09-10_Round2.md` BUG-6 Blocker 1 — an anchor with
+ *   *no* assigned employee(s) yet (the ordinary case for a freshly-booked
+ *   job, not an edge case) is no longer dropped. It still recommends: the
+ *   relevant conflict set becomes every booking that day at any
+ *   technician (`buildDaySchedule()`, a day-level sibling of `schedule`
+ *   below), business hours are still enforced, and the resulting
+ *   `SuggestedSlot.employeeId` is `null` — never a guessed assignment.
+ *
+ *   Also per Round 2 ("also fix while in here"): the open-time check and
+ *   tight-placement formula now budget a real drive-time buffer against
+ *   the neighboring booking on the *new job's* side too (not just the
+ *   anchor's own leg) — see the buffer filter after the peer/home legs are
+ *   fetched, below.
  *
  * Step 3 — Place the slot tight against the anchor, per the PRD's exact
  *   formulas.
@@ -65,7 +73,12 @@
  *
  * ── Output ──────────────────────────────────────────────────────────────
  * Exactly 4 (FR-2), never padded. FR-5 (>=2/technician-day cap) and FR-2a
- * ("see more") are explicitly Phase 2 — not implemented here.
+ * ("see more") are explicitly Phase 2 — not implemented here, and this is
+ * unchanged by BUG-6 Round 2 for the assigned-technician path. The
+ * unassigned-anchor path (Blocker 1) gets its own, narrower cap instead —
+ * at most one before-candidate and one after-candidate per anchor (there's
+ * no employee to iterate, so this falls out of the loop structure itself,
+ * not a separate counting mechanism).
  */
 
 import type { FetchRoute } from './fuel-gauge';
@@ -121,27 +134,53 @@ export type FetchRouteMatrix = (
  * it could mean "genuinely nothing nearby" or "candidates existed but
  * couldn't be evaluated." The bug report's own hypothesis (anchors dropped
  * for missing `googlePlaceId`) checked out FALSE against live data — every
- * upcoming real booking already had one. The actual live cause: bookings
- * created through the ordinary flow can have an empty `employeeSplit` (no
- * technician assigned yet — this is allowed by design, not itself a bug),
- * and Step 2 has nothing to check a schedule against for those, so they
- * silently contribute zero candidates. Both cases are real, both should be
- * distinguishable from "no nearby jobs" (report's own acceptance criterion,
- * generalized to the confirmed root cause rather than the guessed one).
+ * upcoming real booking already had one.
+ *
+ * BUG-6 (`BUGS_Mobull_2026-09-10_Round2.md`) reopened this: the *real* live
+ * cause was mis-diagnosed in Round 1 as "no technician assigned" and that
+ * case was silently dropped instead of handled (Blocker 1 — now fixed, an
+ * unassigned anchor recommends with `employeeId: null` and no longer
+ * appears here at all). Round 2's directive is absolute — "nothing may be
+ * discarded without being counted" — so every other silent `continue` in
+ * this module's pipeline now has a counter here too.
  */
 export interface SuggestSlotsOutcome {
   slots: SuggestedSlot[];
   /** Anchors within the 30-mile Haversine pre-filter with no `googlePlaceId` at all — a legacy booking, or one saved via a free-typed (never autocomplete-selected) address. */
   skippedNoCoordinates: number;
-  /** Anchors that survived the 45-minute drive filter but have zero assigned employees (`employeeIds.length === 0`) — nothing for Step 2 to check a schedule against. The confirmed real cause of BUG-5. */
-  skippedNoTechnician: number;
+  /**
+   * BUG-6 Blocker 2 — an anchor with an assigned technician whose own
+   * booking record can't be found in `schedule` (built from `allBookings`,
+   * a *different* dataset than `anchors` — different date window, query,
+   * or pagination can make them diverge). Previously a fully silent
+   * `continue` with no counter at all, indistinguishable from "no nearby
+   * jobs". Never incremented for the unassigned-anchor path (Blocker 1),
+   * which uses `buildDaySchedule()` instead and doesn't need to "find" the
+   * anchor in a per-employee list.
+   */
+  skippedNotInSchedule: number;
+  /**
+   * BUG-6 Blocker 4 — a Route Matrix element for an otherwise-routable
+   * anchor came back with `error` set (or a missing miles/minutes), so no
+   * real distance was ever available for it — correctly never fabricated
+   * as zero (§10), but previously uncounted, making a partial API failure
+   * indistinguishable from a genuine no-result.
+   */
+  skippedMatrixFailure: number;
 }
 
 export interface SuggestedSlot {
   date: string; // YYYY-MM-DD
   startTime: string; // HH:MM
   endTime: string; // HH:MM — the new job's computed end
-  employeeId: number;
+  /**
+   * BUG-6 Blocker 1 — `null` when the anchor this slot is tight against has
+   * no technician assigned yet (the ordinary case for a freshly-booked
+   * job). Never a guessed/invented assignment — the caller (`applySuggestion`
+   * in `booking-new.tsx`) must leave the technician selection alone when
+   * this is `null`, not auto-fill it.
+   */
+  employeeId: number | null;
   position: 'before' | 'after';
 
   anchorBookingId: number;
@@ -325,10 +364,49 @@ export function buildSchedule(
   return schedule;
 }
 
+/**
+ * BUG-6 Blocker 1 (`BUGS_Mobull_2026-09-10_Round2.md`) — day-level sibling
+ * of `buildSchedule()`, for anchors with no assigned technician yet
+ * (`employeeIds: []`). `buildSchedule()` only ever inserts a booking under
+ * its assigned employee id(s), so it has no entry at all for an anchor with
+ * none — this builds `date -> every booking that day (any employee, or
+ * none), sorted by start time` instead, letting the unassigned-anchor path
+ * validate against the whole day's schedule rather than one person's
+ * calendar. Built once, up front, so the main loop below never re-scans
+ * `allBookings` per anchor.
+ */
+export function buildDaySchedule(
+  allBookings: SuggestSlotsBookingInput[],
+  allPackages: SuggestSlotsPackageInput[],
+): Map<string, ScheduleEntry[]> {
+  const pkgMap = new Map(allPackages.map((p) => [p.id, p.durationMinutes]));
+  const dayMap = new Map<string, ScheduleEntry[]>();
+
+  for (const b of allBookings) {
+    if (ACTIVE_STATUSES_EXCLUDED.has(b.status)) continue;
+    const dur = bookingDuration(b, pkgMap);
+    const startMins = toMins(b.startTime);
+    const entry: ScheduleEntry = {
+      id: b.id,
+      startMins,
+      endMins: startMins + dur,
+      startTime: b.startTime,
+      googlePlaceId: b.googlePlaceId,
+    };
+
+    const bDate = dateOnly(b.date);
+    if (!dayMap.has(bDate)) dayMap.set(bDate, []);
+    dayMap.get(bDate)!.push(entry);
+  }
+  for (const arr of dayMap.values()) arr.sort((a, b) => a.startMins - b.startMins);
+  return dayMap;
+}
+
 /** A raw, feasible (business-hours, non-overlapping) candidate slot — before ranking math is applied. */
 interface RawCandidate {
   anchor: SuggestSlotsAnchorInput;
-  employeeId: number;
+  /** `null` for an unassigned anchor (BUG-6 Blocker 1) — never a guessed assignment. */
+  employeeId: number | null;
   position: 'before' | 'after';
   slotStart: number;
   slotEnd: number;
@@ -336,6 +414,54 @@ interface RawCandidate {
   /** The bracketing peer on the "new job" side — `null` means Home Base (or day start/end with no Home Base set). */
   peer: ScheduleEntry | null;
   driveToAnchor: RouteLeg;
+}
+
+/**
+ * Shared before/after tight-placement logic (PRD Step 3), used by both the
+ * assigned-technician path (one call per `employeeId`) and the
+ * unassigned-anchor path (one call, `employeeId: null`) — factored out so
+ * Blocker 1's new unassigned case doesn't duplicate/drift from the existing
+ * formula. Pushes 0, 1, or 2 feasible candidates (before/after) onto `raw`.
+ */
+function pushBeforeAfterCandidates(
+  anchor: SuggestSlotsAnchorInput,
+  employeeId: number | null,
+  anchorStart: number,
+  anchorEnd: number,
+  driveMins: number,
+  prev: ScheduleEntry | null,
+  next: ScheduleEntry | null,
+  duration: number,
+  driveToAnchor: RouteLeg,
+  raw: RawCandidate[],
+): void {
+  // Before anchor.
+  {
+    const slotEnd = anchorStart - driveMins;
+    const slotStart = slotEnd - duration;
+    const gapStart = prev ? prev.endMins : WORK_START_MINS;
+    if (slotStart >= gapStart && slotStart >= WORK_START_MINS && slotEnd <= WORK_END_MINS) {
+      raw.push({
+        anchor, employeeId, position: 'before',
+        slotStart, slotEnd, unusedGapMinutes: slotStart - gapStart,
+        peer: prev, driveToAnchor,
+      });
+    }
+  }
+
+  // After anchor.
+  {
+    const slotStart = anchorEnd + driveMins;
+    const slotEnd = slotStart + duration;
+    const gapEnd = next ? next.startMins : WORK_END_MINS;
+    if (slotEnd <= gapEnd && slotEnd <= WORK_END_MINS) {
+      raw.push({
+        anchor, employeeId, position: 'after',
+        slotStart, slotEnd, unusedGapMinutes: gapEnd - slotEnd,
+        peer: next, driveToAnchor,
+      });
+    }
+  }
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -373,7 +499,9 @@ export async function suggestSlots(
 
   const routableAnchors = anchors.filter((a) => !!a.googlePlaceId);
   const skippedNoCoordinates = anchors.length - routableAnchors.length;
-  if (routableAnchors.length === 0) return { slots: [], skippedNoCoordinates, skippedNoTechnician: 0 };
+  if (routableAnchors.length === 0) {
+    return { slots: [], skippedNoCoordinates, skippedNotInSchedule: 0, skippedMatrixFailure: 0 };
+  }
 
   // ── Step 1 — real 45-minute drive-time filter (FR-19/FR-20) ────────────
   const anchorLegs = await batchedLegs(
@@ -383,23 +511,36 @@ export async function suggestSlots(
     fetchRouteMatrix,
   );
 
+  // BUG-6 Blocker 4 — every routable anchor either gets a resolved leg in
+  // `anchorLegs` or doesn't; `batchedLegs()` already never fabricates a
+  // distance for a failed/errored Route Matrix element (§10), it just used
+  // to drop it silently. The diff here is exactly that dropped population —
+  // distinct from an anchor that resolved fine but is simply >45 min away
+  // (that's a legitimate exclusion below, not a matrix failure).
+  const skippedMatrixFailure = routableAnchors.length - anchorLegs.size;
+
   const survivingAnchors = routableAnchors.filter((a) => {
     const leg = anchorLegs.get(a.googlePlaceId!);
     return !!leg && leg.minutes <= MAX_DRIVE_MINS;
   });
-  if (survivingAnchors.length === 0) return { slots: [], skippedNoCoordinates, skippedNoTechnician: 0 };
+  if (survivingAnchors.length === 0) {
+    return { slots: [], skippedNoCoordinates, skippedNotInSchedule: 0, skippedMatrixFailure };
+  }
 
   // ── Step 2/3 — schedule-gap check + tight placement ─────────────────────
   const schedule = buildSchedule(allBookings, allPackages);
+  // BUG-6 Blocker 1 — day-level view for anchors with no technician
+  // assigned yet, built once up front (see `buildDaySchedule()`'s doc
+  // comment).
+  const daySchedule = buildDaySchedule(allBookings, allPackages);
   const raw: RawCandidate[] = [];
-  // BUG-5's confirmed real cause: a booking with real coordinates but no
-  // assigned employee(s) yet (allowed by design — see FR-11 elsewhere in
-  // this app, a booking can be created before a technician is picked)
-  // can never anchor a recommendation, since there's no schedule to check
-  // it against. Counted separately from "no good time fit" (which is a
-  // legitimate outcome, not a data gap) — only a *zero-employee* anchor
-  // counts here.
-  let skippedNoTechnician = 0;
+  // BUG-6 Blocker 2 — an anchor with an assigned technician whose own
+  // booking record isn't found in `schedule` (a different dataset than
+  // `anchors`). Previously two fully silent `continue`s with zero counting
+  // at all; now both increment this. Never touched by the unassigned-anchor
+  // branch below, which uses `daySchedule` instead and has no per-employee
+  // "find the anchor in this list" step to fail.
+  let skippedNotInSchedule = 0;
 
   for (const anchor of survivingAnchors) {
     const driveToAnchor = anchorLegs.get(anchor.googlePlaceId!)!;
@@ -408,52 +549,42 @@ export async function suggestSlots(
     const driveMins = Math.round(driveToAnchor.minutes);
 
     if (anchor.employeeIds.length === 0) {
-      skippedNoTechnician++;
+      // BUG-6 Blocker 1 (the reported failure) — an anchor with nobody
+      // assigned yet still carries the two facts that matter: an address
+      // and a date. Recommend against it anyway, validated against every
+      // booking that day at any technician (not one person's calendar,
+      // since there's no "that anchor's technician" to check).
+      const dayEntries = daySchedule.get(dateOnly(anchor.date)) ?? [];
+      const others = dayEntries.filter((e) => e.id !== anchor.id);
+      const prev = [...others].reverse().find((e) => e.endMins <= anchorStart) ?? null;
+      const next = others.find((e) => e.startMins >= anchorEnd) ?? null;
+
+      // Exactly one before-candidate + one after-candidate per anchor here
+      // (never per-employee, since there's no employee to iterate) —
+      // naturally satisfies the ticket's "cap recommendations per anchor at
+      // 2" rule for this path without any extra bookkeeping.
+      pushBeforeAfterCandidates(anchor, null, anchorStart, anchorEnd, driveMins, prev, next, duration, driveToAnchor, raw);
       continue;
     }
 
     for (const empId of anchor.employeeIds) {
       const dayMap = schedule.get(dateOnly(anchor.date));
       const empDay = dayMap?.get(empId);
-      if (!empDay) continue;
+      if (!empDay) { skippedNotInSchedule++; continue; }
 
       const anchorIdx = empDay.findIndex((b) => b.id === anchor.id);
-      if (anchorIdx === -1) continue;
+      if (anchorIdx === -1) { skippedNotInSchedule++; continue; }
 
       const prev = empDay[anchorIdx - 1] ?? null;
       const next = empDay[anchorIdx + 1] ?? null;
 
-      // Before anchor.
-      {
-        const slotEnd = anchorStart - driveMins;
-        const slotStart = slotEnd - duration;
-        const gapStart = prev ? prev.endMins : WORK_START_MINS;
-        if (slotStart >= gapStart && slotStart >= WORK_START_MINS && slotEnd <= WORK_END_MINS) {
-          raw.push({
-            anchor, employeeId: empId, position: 'before',
-            slotStart, slotEnd, unusedGapMinutes: slotStart - gapStart,
-            peer: prev, driveToAnchor,
-          });
-        }
-      }
-
-      // After anchor.
-      {
-        const slotStart = anchorEnd + driveMins;
-        const slotEnd = slotStart + duration;
-        const gapEnd = next ? next.startMins : WORK_END_MINS;
-        if (slotEnd <= gapEnd && slotEnd <= WORK_END_MINS) {
-          raw.push({
-            anchor, employeeId: empId, position: 'after',
-            slotStart, slotEnd, unusedGapMinutes: gapEnd - slotEnd,
-            peer: next, driveToAnchor,
-          });
-        }
-      }
+      pushBeforeAfterCandidates(anchor, empId, anchorStart, anchorEnd, driveMins, prev, next, duration, driveToAnchor, raw);
     }
   }
 
-  if (raw.length === 0) return { slots: [], skippedNoCoordinates, skippedNoTechnician };
+  if (raw.length === 0) {
+    return { slots: [], skippedNoCoordinates, skippedNotInSchedule, skippedMatrixFailure };
+  }
 
   // ── Bracketing-peer legs, folded into the Step 1 batch's own origin (new
   //    address) so double-anchor detection costs no extra call — plus Home
@@ -469,9 +600,35 @@ export async function suggestSlots(
   // Unified new-address-origin lookup: anchor legs + peer/home legs.
   const newOriginLegs = new Map<string, RouteLeg>([...anchorLegs, ...peerLegs]);
 
+  // ── "Also fix while in here" (BUG-6, Round 2) — drive-time buffer
+  //    against the neighboring booking on the *new job's* side. The
+  //    before/after placement above only ever budgeted the anchor's own
+  //    drive time (`driveMins`); the drive from the previous job to the
+  //    new address (before-case) or from the new address to the next job
+  //    (after-case) was never subtracted from the gap, so a slot could be
+  //    offered that's physically impossible (finish one job and be across
+  //    town instantly) — the same overlap class as Round 1's BUG-3.
+  //    Reuses the peer/home legs already fetched above (`newOriginLegs`) —
+  //    no second distance-computation helper, per this file's own
+  //    dependency-injected-routing convention (see header). When a
+  //    neighbor has no coordinates or its leg wasn't resolved, the buffer
+  //    is left unenforced for that side rather than fabricating a distance
+  //    (§10, same discipline as everywhere else here). Not a countable
+  //    "skip" — same as any other candidate dropped for not fitting a gap,
+  //    this is a legitimate scheduling outcome, not a data gap.
+  const bufferedRaw = raw.filter((c) => {
+    if (!c.peer?.googlePlaceId) return true;
+    const peerLeg = newOriginLegs.get(c.peer.googlePlaceId);
+    if (!peerLeg) return true;
+    const bufferMins = Math.round(peerLeg.minutes);
+    return c.position === 'before'
+      ? c.slotStart >= c.peer.endMins + bufferMins
+      : c.slotEnd + bufferMins <= c.peer.startMins;
+  });
+
   // ── Ranking math: added drive time + added cost (FR-3/FR-17), one
   //    different-origin baseline call per candidate slot (FR-20's spirit).
-  const slots = await Promise.all(raw.map(async (c): Promise<SuggestedSlot> => {
+  const slots = await Promise.all(bufferedRaw.map(async (c): Promise<SuggestedSlot> => {
     const peerPlaceId = c.peer?.googlePlaceId ?? null;
     const homePlaceId = settings.hqGooglePlaceId ?? null;
 
@@ -573,5 +730,5 @@ export async function suggestSlots(
   });
 
   // FR-2 — exactly 4, never padded.
-  return { slots: deduped.slice(0, 4), skippedNoCoordinates, skippedNoTechnician };
+  return { slots: deduped.slice(0, 4), skippedNoCoordinates, skippedNotInSchedule, skippedMatrixFailure };
 }
