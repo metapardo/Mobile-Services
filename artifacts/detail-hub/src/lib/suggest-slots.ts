@@ -163,6 +163,24 @@ const ACTIVE_STATUSES_EXCLUDED = new Set(['cancelled', 'no-show']);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * `AnchorCandidate.date`/`BookingResult.date` round-trip as UTC-midnight ISO
+ * *datetime* strings ("2026-09-10T00:00:00.000Z"), not the bare `YYYY-MM-DD`
+ * this module's own `SuggestSlotsAnchorInput`/`SuggestSlotsBookingInput`
+ * interfaces declare — confirmed live: without this, `SuggestedSlot.date`
+ * carried the raw ISO string straight through, which `applySuggestion()` in
+ * `booking-new.tsx` writes directly into the booking form's `date` field
+ * (breaking FR-9's "fills date, time and technician" for a selected
+ * recommendation, not just display). Same fix `isoDateOnly()` in
+ * `lib/api-adapters.ts` already applies for `BookingResult` elsewhere in this
+ * app — reimplemented locally (a one-line slice) rather than imported, to
+ * keep this module free of app-level dependencies, matching its existing
+ * "no React, no fetch, nothing but pure/async logic" discipline.
+ */
+function dateOnly(iso: string): string {
+  return iso.slice(0, 10);
+}
+
 function toMins(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
@@ -248,8 +266,9 @@ function buildSchedule(
       googlePlaceId: b.googlePlaceId,
     };
 
-    if (!schedule.has(b.date)) schedule.set(b.date, new Map());
-    const dayMap = schedule.get(b.date)!;
+    const bDate = dateOnly(b.date);
+    if (!schedule.has(bDate)) schedule.set(bDate, new Map());
+    const dayMap = schedule.get(bDate)!;
     for (const empId of b.employeeIds) {
       if (!dayMap.has(empId)) dayMap.set(empId, []);
       dayMap.get(empId)!.push(entry);
@@ -335,7 +354,7 @@ export async function suggestSlots(
     const driveMins = Math.round(driveToAnchor.minutes);
 
     for (const empId of anchor.employeeIds) {
-      const dayMap = schedule.get(anchor.date);
+      const dayMap = schedule.get(dateOnly(anchor.date));
       const empDay = dayMap?.get(empId);
       if (!empDay) continue;
 
@@ -446,7 +465,7 @@ export async function suggestSlots(
     const anchorEnd = anchorStart + c.anchor.durationMinutes;
 
     return {
-      date: c.anchor.date,
+      date: dateOnly(c.anchor.date),
       startTime: fromMins(c.slotStart),
       endTime: fromMins(c.slotEnd),
       employeeId: c.employeeId,
