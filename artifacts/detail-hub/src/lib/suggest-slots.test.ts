@@ -159,6 +159,28 @@ test('regression — an anchor with an assigned technician still recommends and 
   assert.equal(outcome.skippedNotInSchedule, 0);
 });
 
+test('recommended start times snap to the 15-minute grid, never an arbitrary minute', async () => {
+  // driveMins=9 (not a multiple of 15) reproduces the live case that
+  // prompted this: a tight-placement time of "10:09 AM" instead of a clean
+  // quarter-hour. Anchor at 09:00-10:00, employeeIds: [] (unassigned path,
+  // simplest to isolate) — after-slot's raw earliest start is 10:00+9=10:09,
+  // which must snap up to 10:15, never appear as :09.
+  const anchors = [anchor({ id: 7, employeeIds: [], startTime: '09:00', durationMinutes: 60, googlePlaceId: 'place-anchor-7' })];
+  const outcome = await suggestSlots(
+    NEW_ADDRESS, 60, anchors, [], NO_PACKAGES, SETTINGS,
+    makeFetchRouteMatrix({ 'place-anchor-7': { miles: 5, minutes: 9 } }),
+    fetchRoute,
+  );
+
+  assert.ok(outcome.slots.length > 0, 'expected at least one recommended slot');
+  for (const slot of outcome.slots) {
+    const minutes = parseInt(slot.startTime.split(':')[1], 10);
+    assert.ok(minutes % 15 === 0, `expected ${slot.startTime} to land on a 15-minute mark`);
+  }
+  const afterSlot = outcome.slots.find((s) => s.position === 'after');
+  assert.equal(afterSlot?.startTime, '10:15', 'the after-anchor slot should snap 10:09 up to 10:15, never down or left unaligned');
+});
+
 test('the true empty state still appears when nothing survives the 45-minute filter', async () => {
   const anchors = [anchor({ id: 6, googlePlaceId: 'place-far' })];
   const outcome = await suggestSlots(

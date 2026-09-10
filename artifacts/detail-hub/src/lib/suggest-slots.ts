@@ -416,12 +416,46 @@ interface RawCandidate {
   driveToAnchor: RouteLeg;
 }
 
+const RECOMMENDATION_GRID_MINS = 15;
+
+/**
+ * Largest multiple of `RECOMMENDATION_GRID_MINS` that is `<= mins`.
+ * Used for a before-anchor slot's start time: rounding down only moves the
+ * slot earlier (more buffer against the anchor), never violating the
+ * drive-time gap the tight-placement math already guaranteed.
+ */
+function floorToGrid(mins: number): number {
+  return Math.floor(mins / RECOMMENDATION_GRID_MINS) * RECOMMENDATION_GRID_MINS;
+}
+
+/**
+ * Smallest multiple of `RECOMMENDATION_GRID_MINS` that is `>= mins`.
+ * Used for an after-anchor slot's start time: rounding up only moves the
+ * slot later (more buffer against the anchor), never violating the
+ * drive-time gap the tight-placement math already guaranteed.
+ */
+function ceilToGrid(mins: number): number {
+  return Math.ceil(mins / RECOMMENDATION_GRID_MINS) * RECOMMENDATION_GRID_MINS;
+}
+
 /**
  * Shared before/after tight-placement logic (PRD Step 3), used by both the
  * assigned-technician path (one call per `employeeId`) and the
  * unassigned-anchor path (one call, `employeeId: null`) — factored out so
  * Blocker 1's new unassigned case doesn't duplicate/drift from the existing
  * formula. Pushes 0, 1, or 2 feasible candidates (before/after) onto `raw`.
+ *
+ * Recommended start times land on a clean 15-minute grid (:00/:15/:30/:45)
+ * rather than the exact minute the drive-time math produces (e.g. "10:09
+ * AM") — requested after live testing surfaced arbitrary-minute
+ * recommendations. The tight-placement formula still determines the
+ * *feasible window* a slot must fall in (business hours, the neighboring
+ * booking's gap, the real drive-time buffer to/from the anchor); only the
+ * chosen start time within that window is snapped to the grid, and always
+ * snapped *toward* the anchor — floor (earlier) for a before-slot, ceil
+ * (later) for an after-slot — so the snap can only add buffer, never remove
+ * it. If no grid-aligned start time fits the window, the candidate is
+ * dropped rather than shown at an unsafe or unaligned time.
  */
 function pushBeforeAfterCandidates(
   anchor: SuggestSlotsAnchorInput,
@@ -435,11 +469,15 @@ function pushBeforeAfterCandidates(
   driveToAnchor: RouteLeg,
   raw: RawCandidate[],
 ): void {
-  // Before anchor.
+  // Before anchor. Feasible window for slotStart is [gapStart, latestStart],
+  // where latestStart keeps slotEnd at or before the anchor's drive-time
+  // buffer. Snap to the latest grid-aligned start in that window (tightest
+  // against the anchor).
   {
-    const slotEnd = anchorStart - driveMins;
-    const slotStart = slotEnd - duration;
     const gapStart = prev ? prev.endMins : WORK_START_MINS;
+    const latestStart = anchorStart - driveMins - duration;
+    const slotStart = floorToGrid(latestStart);
+    const slotEnd = slotStart + duration;
     if (slotStart >= gapStart && slotStart >= WORK_START_MINS && slotEnd <= WORK_END_MINS) {
       raw.push({
         anchor, employeeId, position: 'before',
@@ -449,9 +487,13 @@ function pushBeforeAfterCandidates(
     }
   }
 
-  // After anchor.
+  // After anchor. Feasible window for slotStart is [earliestStart, gapEnd -
+  // duration], where earliestStart is the anchor's drive-time buffer. Snap
+  // to the earliest grid-aligned start in that window (tightest against the
+  // anchor).
   {
-    const slotStart = anchorEnd + driveMins;
+    const earliestStart = anchorEnd + driveMins;
+    const slotStart = ceilToGrid(earliestStart);
     const slotEnd = slotStart + duration;
     const gapEnd = next ? next.startMins : WORK_END_MINS;
     if (slotEnd <= gapEnd && slotEnd <= WORK_END_MINS) {
