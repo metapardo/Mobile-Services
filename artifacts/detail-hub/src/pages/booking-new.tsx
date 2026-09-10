@@ -1,22 +1,29 @@
-import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useSearch, Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useListClients, useListPackages, useListEmployees, useListBookings,
   useCreateBooking, useCreateClient, useCreatePackage,
-  useGetSettings, useComputeRoute,
-  getListBookingsQueryKey, getListClientsQueryKey, getListPackagesQueryKey,
-  type CreateBookingRequestStatus, type CreatePackageRequestCategory,
+  useGetSettings, useComputeRoute, useListBookingAnchors, useComputeRouteMatrix,
+  getListBookingsQueryKey, getListClientsQueryKey, getListPackagesQueryKey, getListBookingAnchorsQueryKey,
+  type CreateBookingRequestStatus, type CreatePackageRequestCategory, type BookingResult,
 } from '@workspace/api-client-react';
-import { adaptBooking, evenSplit } from '@/lib/api-adapters';
-import { settings } from '@/lib/mock-data';
+import { evenSplit } from '@/lib/api-adapters';
 import { getSetupProfile } from '@/lib/setup-store';
-import { suggestSlots, SuggestedSlot } from '@/lib/suggest-slots';
+import {
+  suggestSlots,
+  type SuggestedSlot,
+  type FetchRouteMatrix,
+  type SuggestSlotsSettingsInput,
+} from '@/lib/suggest-slots';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { Skeleton } from '@workspace/blue-glass-design-system/components/ui/skeleton';
+import { Card } from '@workspace/blue-glass-design-system/components/ui/card';
+import { Badge } from '@workspace/blue-glass-design-system/components/ui/badge';
+import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import {
   X, Check, ChevronDown, ArrowLeft, UserPlus, Plus,
-  Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Zap, Loader2, RotateCw,
+  Fuel, Search, Clock, DollarSign, Calendar, Users, FileText, Loader2, RotateCw,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/blue-glass-design-system/components/ui/select';
 import {
@@ -191,6 +198,49 @@ function anchorOriginLabel(type: FuelGaugeResult['anchorType']): string {
   return type === 'home'     ? 'from Home Base'
        : type === 'adjacent' ? 'from previous/next job'
        : 'from nearest job';
+}
+
+// ─── Appointment Optimizer — recommendation card copy (FR-6/FR-7/FR-8) ────────
+// The reason line is the product (§7.2): it must read as something a
+// dispatcher would say out loud, name the anchor job, never mention money,
+// and never say "you keep" (that phrase is reserved for the Fuel Gauge
+// above). Both patterns below are lifted verbatim from the PRD's own
+// examples — "Fits between his 12:30 and 4:00 jobs" for a double-anchored
+// slot, "8 min from Maria's 9:00 AM job" for a single-anchored one — rather
+// than inventing a third neighborhood-name style ("already in Bay Ridge
+// that morning") that would require guessing at a neighborhood from a
+// formatted address string with no real data backing the guess.
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+function possessive(name: string): string {
+  return /s$/i.test(name) ? `${name}'` : `${name}'s`;
+}
+
+function recommendationReason(slot: SuggestedSlot, employeeName: string): string {
+  const who = possessive(firstName(employeeName));
+  if (slot.doubleAnchored && slot.otherBookingStartTime) {
+    const [earlier, later] = slot.position === 'before'
+      ? [slot.otherBookingStartTime, slot.anchorStartTime]
+      : [slot.anchorStartTime, slot.otherBookingStartTime];
+    return `Fits between ${who} ${fmtTime(earlier)} and ${fmtTime(later)} jobs`;
+  }
+  return `${slot.driveToAnchorMinutes} min from ${who} ${fmtTime(slot.anchorStartTime)} job`;
+}
+
+// Supporting detail (§7.2) — plain words, small type, money confined here
+// and only "gas" (fuel alone, never fuel+labor summed — FR-23a-style
+// separation reused from Fuel Gauge) and omitted entirely below $0.50 so a
+// double-anchored slot with a trivial detour can stand on its logistics
+// reason alone, per FR-7.
+function recommendationDetail(slot: SuggestedSlot): string | null {
+  const parts: string[] = [];
+  parts.push(slot.doubleAnchored ? `${slot.addedDriveMinutes} min detour` : `${slot.addedDriveMinutes} min added drive`);
+  if (slot.addedFuelCostDollars >= 0.5) {
+    parts.push(`adds $${slot.addedFuelCostDollars.toFixed(2)} of gas`);
+  }
+  return parts.join(' · ');
 }
 
 type GaugeUiState = 'no-address' | 'no-service' | 'no-hq' | 'calculating' | 'scored' | 'error';
@@ -369,12 +419,16 @@ export default function BookingNew() {
   const clients = clientsQuery.data ?? [];
   const packages = packagesQuery.data ?? [];
   const employees = employeesQuery.data ?? [];
-  const bookings = useMemo(() => (bookingsQuery.data ?? []).map(adaptBooking), [bookingsQuery.data]);
   // Raw (un-adapted) bookings — `FuelGaugeBookingInput` needs `googlePlaceId`/
   // `formattedAddress`, which `adaptBooking`'s mock-shaped `Booking` doesn't
   // carry. `BookingResult` is already a structural match, so no adapter is
   // needed here.
   const rawBookings: FuelGaugeBookingInput[] = bookingsQuery.data ?? [];
+  // Same underlying data as `rawBookings`, typed as the full `BookingResult`
+  // (not narrowed to `FuelGaugeBookingInput`'s field set) — the Appointment
+  // Optimizer's schedule-gap check needs `packageIds` too, to size each
+  // peer booking's duration.
+  const bookingsForOptimizer: BookingResult[] = bookingsQuery.data ?? [];
   const realSettings = settingsQuery.data;
 
   // Deliberately excludes `settingsQuery` — an org with no settings row yet
@@ -433,19 +487,6 @@ export default function BookingNew() {
 
   // Suggested slots
   const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null); // key = date|time|empId
-
-  const suggestions = useMemo<SuggestedSlot[]>(() => {
-    if (!address.trim() || address.length < 6) return [];
-    const dur = selectedPackages.reduce((s, id) => {
-      const pkg = packages.find(p => p.id === id);
-      return s + (pkg?.durationMinutes ?? 0);
-    }, 0);
-    const price = selectedPackages.reduce((s, id) => {
-      const pkg = packages.find(p => p.id === id);
-      return s + (pkg?.price ?? 0);
-    }, 0);
-    return suggestSlots(address, dur || 120, price || 0, bookings, packages, settings);
-  }, [address, selectedPackages, bookings, packages]);
 
   const applySuggestion = (slot: SuggestedSlot) => {
     const key = `${slot.date}|${slot.startTime}|${slot.employeeId}`;
@@ -542,6 +583,115 @@ export default function BookingNew() {
   ]);
 
   const retryGauge = () => setGaugeRetryNonce(n => n + 1);
+
+  // ── Appointment Optimizer — grouping recommendations (FR-1 through FR-3,
+  //    FR-6 through FR-11, FR-15 through FR-18) ────────────────────────────
+  // Second, independent DI-routing consumer alongside the Fuel Gauge above —
+  // same pattern (a thin `mutateAsync` wrapper into the plain-async contract
+  // `suggest-slots.ts` expects), different endpoint (batch matrix, FR-18a).
+  // Gated on `addressSelection` (FR-10), never the raw typed `address`
+  // string — `useListBookingAnchors` only fires once a place is selected.
+  const anchorsParams = { lat: addressSelection?.latitude ?? 0, lng: addressSelection?.longitude ?? 0 };
+  const anchorsQuery = useListBookingAnchors(
+    anchorsParams,
+    { query: { queryKey: getListBookingAnchorsQueryKey(anchorsParams), enabled: !!addressSelection } },
+  );
+
+  const computeRouteMatrixMutation = useComputeRouteMatrix();
+  const fetchRouteMatrix = useCallback<FetchRouteMatrix>(async (originPlaceId, destinationPlaceIds, departureTimeIso) => {
+    return computeRouteMatrixMutation.mutateAsync({
+      data: { originPlaceId, destinationPlaceIds, departureTime: departureTimeIso },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computeRouteMatrixMutation.mutateAsync]);
+
+  type RecoUiState = 'hidden' | 'searching' | 'empty' | 'error' | 'ready';
+  const [recoUiState, setRecoUiState] = useState<RecoUiState>('hidden');
+  const [recommendations, setRecommendations] = useState<SuggestedSlot[]>([]);
+  const [recoRetryNonce, setRecoRetryNonce] = useState(0);
+
+  useEffect(() => {
+    if (!addressSelection) {
+      setRecoUiState('hidden');
+      setRecommendations([]);
+      return;
+    }
+
+    // Anchors query failed outright (not a partial per-element failure —
+    // those are handled inside `suggest-slots.ts` itself, per §10) — closest
+    // FR-11 state is "Routing failed".
+    if (anchorsQuery.isError) {
+      setRecoUiState('error');
+      return;
+    }
+
+    // Settings are required for the cost/added-drive math (FR-3/FR-17) —
+    // there's no dedicated FR-11 state for "no settings row yet" (a rare,
+    // legacy-org edge case; the Fuel Gauge above already surfaces its own
+    // "no-hq" placeholder for the same org), so once the settings fetch has
+    // genuinely settled with nothing, this collapses into the same
+    // "Routing failed" + Retry state as any other reason the search can't
+    // run — never a silent, permanently-spinning section.
+    if (settingsQuery.isError) {
+      setRecoUiState('error');
+      return;
+    }
+
+    if (anchorsQuery.isLoading || !anchorsQuery.data || !realSettings) {
+      setRecoUiState('searching');
+      return;
+    }
+
+    const anchors = anchorsQuery.data;
+    if (anchors.length === 0) {
+      setRecoUiState('empty');
+      setRecommendations([]);
+      return;
+    }
+
+    let cancelled = false;
+    setRecoUiState('searching');
+
+    const settingsInput: SuggestSlotsSettingsInput = {
+      homeAddress: realSettings.homeAddress,
+      hqGooglePlaceId: realSettings.hqGooglePlaceId,
+      gasPrice: realSettings.gasPrice,
+      vehicleMpg: realSettings.vehicleMpg,
+      techHourlyCost: realSettings.techHourlyCost,
+    };
+
+    suggestSlots(
+      { googlePlaceId: addressSelection.placeId, latitude: addressSelection.latitude, longitude: addressSelection.longitude },
+      totalDuration,
+      anchors,
+      bookingsForOptimizer,
+      packages,
+      settingsInput,
+      fetchRouteMatrix,
+      fetchRoute,
+    ).then((result) => {
+      if (cancelled) return;
+      setRecommendations(result);
+      setRecoUiState(result.length === 0 ? 'empty' : 'ready');
+    }).catch(() => {
+      if (cancelled) return;
+      setRecoUiState('error');
+    });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    addressSelection?.placeId, addressSelection?.latitude, addressSelection?.longitude,
+    anchorsQuery.data, anchorsQuery.isLoading, anchorsQuery.isError,
+    settingsQuery.isError, realSettings, totalDuration, bookingsForOptimizer, packages,
+    fetchRouteMatrix, fetchRoute, recoRetryNonce,
+  ]);
+
+  const retryRecommendations = () => {
+    if (anchorsQuery.isError) anchorsQuery.refetch();
+    if (settingsQuery.isError) settingsQuery.refetch();
+    setRecoRetryNonce(n => n + 1);
+  };
 
   // Formatted display values
   const dateLabel = (() => {
@@ -818,59 +968,75 @@ export default function BookingNew() {
         )}
       </Section>
 
-      {/* ── Suggested times pills ── */}
-      {suggestions.length > 0 && (
-        <div className="px-5 pt-6 pb-4 border-b border-border/40">
-          <div className="flex items-center gap-1.5 mb-2.5">
-            <Zap className="w-3.5 h-3.5 text-primary" />
-            <p className="text-[12px] font-semibold text-primary uppercase tracking-wide">Smart suggestions</p>
-          </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
-            {suggestions.map(slot => {
-              const key = `${slot.date}|${slot.startTime}|${slot.employeeId}`;
-              const isSelected = selectedSuggestion === key;
-              const emp = employees.find(e => e.id === slot.employeeId);
-              const dayLabel = (() => {
-                try { return format(new Date(slot.date + 'T00:00:00'), 'EEE'); } catch { return ''; }
-              })();
-              const dateShort = (() => {
-                try { return format(new Date(slot.date + 'T00:00:00'), 'M/d'); } catch { return slot.date; }
-              })();
-              const timeLabel = fmtTime(slot.startTime);
-              return (
-                <button
-                  key={key}
-                  onClick={() => applySuggestion(slot)}
-                  className={`flex-shrink-0 flex flex-col items-center gap-0.5 px-2 py-2.5 rounded-2xl border-2 transition-all
-                    w-[calc((100%-5*6px)/6)] min-w-[54px]
-                    ${isSelected
-                      ? 'border-primary bg-primary text-white'
-                      : 'border-border bg-background hover:border-primary/50'
-                    }`}
-                  style={{ minWidth: 54 }}
-                >
-                  <span className={`text-[11px] font-bold leading-none ${isSelected ? 'text-white' : 'text-foreground'}`}>
-                    {dayLabel}
-                  </span>
-                  <span className={`text-[10px] leading-none mt-0.5 ${isSelected ? 'text-white/80' : 'text-muted-foreground'}`}>
-                    {dateShort}
-                  </span>
-                  <span className={`text-[10px] font-semibold leading-none mt-1 ${isSelected ? 'text-white' : 'text-foreground'}`}>
-                    {timeLabel.replace(' ', ' ')}
-                  </span>
-                  {emp && (
-                    <span
-                      className="w-2 h-2 rounded-full mt-1 shrink-0"
-                      style={{ backgroundColor: isSelected ? 'rgba(255,255,255,0.7)' : emp.color }}
-                    />
-                  )}
-                  {slot.doubleAnchored && !isSelected && (
-                    <Zap className="w-2.5 h-2.5 text-primary mt-0.5" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+      {/* ── Recommended — groups with nearby work (FR-1/§7.1) ── */}
+      {/* No address selected -> section hidden entirely, no empty shell (FR-11). */}
+      {addressSelection && recoUiState !== 'hidden' && (
+        <div className="px-5 pt-6 pb-4 border-b border-border/40 bg-muted/40" data-testid="section-recommendations">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
+            Recommended — groups with nearby work
+          </p>
+
+          {recoUiState === 'searching' && (
+            <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar" data-testid="status-recommendations-searching">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="w-64 shrink-0 rounded-xl border p-4 space-y-2.5">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-3.5 w-full" />
+                  <Skeleton className="h-3 w-2/3" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {recoUiState === 'empty' && (
+            <p className="text-sm text-muted-foreground" data-testid="text-recommendations-empty">
+              No nearby jobs in the next 7 days — any time below works.
+            </p>
+          )}
+
+          {recoUiState === 'error' && (
+            <div className="flex items-center justify-between gap-3" data-testid="status-recommendations-error">
+              <p className="text-sm text-muted-foreground">Couldn't check drive times</p>
+              <Button variant="ghost" size="sm" onClick={retryRecommendations} data-testid="button-recommendations-retry">
+                <RotateCw className="w-3.5 h-3.5" /> Retry
+              </Button>
+            </div>
+          )}
+
+          {recoUiState === 'ready' && recommendations.length > 0 && (
+            <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar snap-x snap-mandatory">
+              {recommendations.map(slot => {
+                const key = `${slot.date}|${slot.startTime}|${slot.employeeId}`;
+                const isSelected = selectedSuggestion === key;
+                const emp = employees.find(e => e.id === slot.employeeId);
+                const employeeName = emp?.name ?? 'Unassigned';
+                const dayLabel = (() => {
+                  try { return format(new Date(slot.date + 'T00:00:00'), 'EEE MMM d'); } catch { return slot.date; }
+                })();
+                const detail = recommendationDetail(slot);
+                return (
+                  <Card
+                    key={key}
+                    onClick={() => applySuggestion(slot)}
+                    className={`w-[85%] sm:w-72 shrink-0 snap-start p-4 cursor-pointer ${isSelected ? 'border-primary' : ''}`}
+                    data-testid={`card-recommendation-${key}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[16px] font-semibold leading-tight">
+                        {dayLabel} · {fmtTime(slot.startTime)}
+                      </p>
+                      <Badge variant="secondary" className="shrink-0">{employeeName}</Badge>
+                    </div>
+                    <p className="text-sm text-foreground mt-1.5">{recommendationReason(slot, employeeName)}</p>
+                    {detail && <p className="text-xs text-muted-foreground mt-1">{detail}</p>}
+                    {slot.doubleAnchored && (
+                      <Badge variant="outline" className="mt-2">Best fit</Badge>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
