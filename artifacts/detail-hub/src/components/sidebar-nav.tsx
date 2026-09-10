@@ -1,7 +1,7 @@
 import { Calendar, Users, DollarSign, Users2, BarChart3, Package, Settings, LogOut, Loader2 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useLogout } from '@/hooks/use-logout';
-import rareAerMark from '@/assets/rare-aer-mark.png';
+import mobullMark from '@/assets/mobull-mark.png';
 
 export function SidebarNav() {
   const [location] = useLocation();
@@ -25,7 +25,7 @@ export function SidebarNav() {
   return (
     <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex-col">
       <div className="p-6 flex items-center gap-2.5">
-        <img src={rareAerMark} alt="Mobull logo mark" className="h-9 w-9 object-contain" data-testid="img-sidebar-logo" />
+        <img src={mobullMark} alt="Mobull logo mark" className="h-9 w-9 object-contain" data-testid="img-sidebar-logo" />
         <span className="text-lg font-bold tracking-tight text-foreground">mobull</span>
       </div>
 

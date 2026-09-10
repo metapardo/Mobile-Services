@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { format, addDays, addWeeks, subWeeks, startOfWeek, isToday, isSameDay } from 'date-fns';
+import { format, addDays, addWeeks, subWeeks, startOfWeek, startOfDay, isToday, isSameDay, isBefore } from 'date-fns';
 import { adaptBooking } from '@/lib/api-adapters';
 import { useListBookings, useListClients, useListEmployees, useListPackages, getListBookingsQueryKey } from '@workspace/api-client-react';
 import { Link } from 'wouter';
@@ -137,6 +137,11 @@ export default function Calendar() {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const startMinutes = GRID_START_HOUR * 60;
   const nowTopPx = ((nowMinutes - startMinutes) / 60) * HOUR_HEIGHT;
+
+  // BUG-9: the viewed day itself is before today — every empty-slot cell on
+  // it is inert, regardless of time of day. Computed once per render rather
+  // than per-cell since it doesn't depend on the cell's hour/minute.
+  const selectedDayIsPast = isBefore(startOfDay(selectedDate), startOfDay(now));
 
   function prevWeek() {
     const prev = subWeeks(weekAnchor, 1);
@@ -315,13 +320,39 @@ export default function Calendar() {
               booking cards' `z-10` — a card always wins a tap over the empty
               cell underneath it. Rendered as `Link`s (real anchors), so
               they're keyboard-reachable by default with a real accessible
-              name via `aria-label`. */}
+              name via `aria-label`.
+
+              BUG-9: a cell whose slot has already passed — the whole viewed
+              day is before today, or (on today's column specifically) the
+              slot's own time has already gone by — renders as an inert,
+              non-interactive `div` instead: no `Link`, no hover/active/focus
+              treatment, reduced opacity, default cursor, and no
+              `aria-label`/`data-testid` claiming it's an actionable
+              create-link. This only touches these empty-slot cells — actual
+              booking cards (rendered separately below) stay visible and
+              tappable on past days so history remains readable. */}
           {Array.from({ length: GRID_HOURS * 2 }, (_, i) => i).map(i => {
             const minsFromGridStart = i * 30;
             const hour = GRID_START_HOUR + Math.floor(minsFromGridStart / 60);
             const minute = minsFromGridStart % 60;
             const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
             const label = format(new Date(2000, 0, 1, hour, minute), 'h:mm a');
+            const cellMinutesOfDay = hour * 60 + minute;
+            const isPastCell =
+              selectedDayIsPast || (isToday(selectedDate) && cellMinutesOfDay < nowMinutes);
+
+            if (isPastCell) {
+              return (
+                <div
+                  key={`cell-${i}`}
+                  aria-hidden="true"
+                  className="absolute z-0 block rounded-sm opacity-40 cursor-default"
+                  style={{ top: `${i * (HOUR_HEIGHT / 2)}px`, height: `${HOUR_HEIGHT / 2}px`, left: '60px', right: '12px' }}
+                  data-testid={`calendar-cell-past-${selectedStr}-${timeStr}`}
+                />
+              );
+            }
+
             return (
               <Link
                 key={`cell-${i}`}

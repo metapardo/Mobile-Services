@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-08T00:00:00.000Z",
+  "title": "Design System: Mobull",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "#2DA8FF",
+        "tonalRamp": ["#06283F", "#0A3D63", "#0F5A8F", "#1478BE", "#1D93E0", "#2DA8FF", "#6BC4FF", "#C3E7FF"]
+      },
+      "abyssal-navy": {
+        "role": "neutral",
+        "displayName": "Abyssal Navy",
+        "canonical": "#03111F",
+        "tonalRamp": ["#010810", "#03111F", "#0A2035", "#0B2944", "#12395C", "#2C5C82", "#6C93B3", "#C8DCEC"]
+      },
+      "quiet-teal": { "role": "secondary", "displayName": "Quiet Teal", "canonical": "#0E3A5F" },
+      "harbor-accent": { "role": "tertiary", "displayName": "Harbor Accent", "canonical": "#164E7A" },
+      "alert-coral": { "role": "destructive", "displayName": "Alert Coral", "canonical": "#DB6574" },
+      "frost-white": { "role": "foreground", "displayName": "Frost White", "canonical": "#F3F8FC" },
+      "hairline-blue": { "role": "border", "displayName": "Hairline Blue", "canonical": "#1B3E5C" },
+      "recessed-navy": { "role": "sidebar", "displayName": "Recessed Navy", "canonical": "#061928" }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "Body", "purpose": "Default UI copy, the large majority of on-screen text." },
+      "label": { "displayName": "Eyebrow / Label", "purpose": "Section labels — always uppercase, 0.18em-tracked, Signal Blue." }
+    },
+    "shadows": [
+      { "name": "primary-button-rest", "value": "0 8px 24px rgba(45,168,255,0.22)", "purpose": "Resting shadow under primary buttons only — the one element allowed a shadow at rest, per the Single-Accent Rule." },
+      { "name": "card-hover-glow", "value": "0 20px 45px rgba(0,0,0,0.36), 0 0 28px rgba(45,168,255,0.14)", "purpose": "Combined lift shadow + blue halo on card/button hover, per the Quiet-At-Rest Rule." }
+    ],
+    "motion": [
+      { "name": "glass-lift", "value": "transform 300ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Card/button hover lift and settle." },
+      { "name": "shimmer-sweep", "value": "1.2s cubic-bezier(0.2, 0.65, 0.35, 1)", "purpose": "Diagonal light sweep across a surface on hover/focus, structural not ambient." }
+    ],
+    "breakpoints": [
+      { "name": "md", "value": "768px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one clear action per view. Signal Blue fill with a resting glow, lift + shimmer on hover.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { position: relative; overflow: hidden; isolation: isolate; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #2DA8FF; color: #03111F; border: 1px solid #2DA8FF; border-radius: 12px; padding: 8px 16px; font: 600 14px Inter, sans-serif; box-shadow: 0 8px 24px rgba(45,168,255,0.22); transition: transform 220ms cubic-bezier(0.22,1,0.36,1), box-shadow 220ms ease, border-color 220ms ease; } .ds-btn-primary:hover, .ds-btn-primary:focus-visible { border-color: #6BC4FF; box-shadow: 0 9px 24px rgba(45,168,255,0.28), inset 0 1px 0 rgba(255,255,255,0.18); transform: translateY(-2px); } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A filled action a visible step down from primary — Quiet Teal, no resting glow.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #0E3A5F; color: #E7F4FF; border: 1px solid #0E3A5F; border-radius: 12px; padding: 8px 16px; font: 600 14px Inter, sans-serif; transition: transform 220ms cubic-bezier(0.22,1,0.36,1), border-color 220ms ease; } .ds-btn-secondary:hover, .ds-btn-secondary:focus-visible { border-color: rgba(45,168,255,0.58); transform: translateY(-2px); } .ds-btn-secondary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Transparent, low-emphasis action that inherits whatever surface it sits on.",
+      "html": "<button class=\"ds-btn-outline\">Learn more</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: transparent; color: #F3F8FC; border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 8px 16px; font: 600 14px Inter, sans-serif; transition: border-color 220ms ease; } .ds-btn-outline:hover, .ds-btn-outline:focus-visible { border-color: rgba(45,168,255,0.58); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The system's signature surface — layered translucent glass with a fine inner highlight, quiet at rest, glowing lift on hover.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Today's revenue</div><div class=\"ds-card-body\">$1,240 across 6 completed jobs.</div></div>",
+      "css": ".ds-card { position: relative; overflow: hidden; isolation: isolate; background: linear-gradient(145deg, rgba(8,34,57,0.48), rgba(10,32,53,0.64)); border: 1px solid rgba(243,248,252,0.16); border-radius: 16px; padding: 24px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 18px 45px rgba(0,0,0,0.36); backdrop-filter: blur(24px) saturate(145%); transition: transform 300ms cubic-bezier(0.22,1,0.36,1), border-color 300ms ease, box-shadow 300ms ease; } .ds-card:hover, .ds-card:focus-visible { border-color: rgba(45,168,255,0.48); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 20px 45px rgba(0,0,0,0.36), 0 0 28px rgba(45,168,255,0.14); transform: translateY(-5px); } .ds-card-title { font: 600 18px Inter, sans-serif; color: #F3F8FC; margin-bottom: 6px; } .ds-card-body { font: 400 14px Inter, sans-serif; color: #9BB6CB; }"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge-default",
+      "description": "Fully pill-shaped, dense status/tag indicator. Never wraps.",
+      "html": "<span class=\"ds-badge\">Completed</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; white-space: nowrap; background: #2DA8FF; color: #03111F; border: 1px solid transparent; border-radius: 9999px; padding: 2px 10px; font: 600 12px Inter, sans-serif; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Deliberately flat and transparent — the one control that never gets glass treatment, so typed text stays legible.",
+      "html": "<input class=\"ds-input\" placeholder=\"you@business.com\" />",
+      "css": ".ds-input { display: block; width: 100%; height: 36px; background: transparent; color: #F3F8FC; border: 1px solid #1B3E5C; border-radius: 10px; padding: 0 12px; font: 400 14px Inter, sans-serif; transition: box-shadow 150ms ease; } .ds-input::placeholder { color: #9BB6CB; } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 1px #63BFFF; }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Recessed chrome one shade darker than content surfaces; Signal Blue marks the active route.",
+      "html": "<div class=\"ds-sidebar\"><a class=\"ds-nav-item ds-nav-item--active\">Calendar</a><a class=\"ds-nav-item\">Clients</a></div>",
+      "css": ".ds-sidebar { background: #061928; padding: 12px; border-radius: 12px; display: flex; flex-direction: column; gap: 4px; } .ds-nav-item { display: block; padding: 8px 12px; border-radius: 10px; font: 500 14px Inter, sans-serif; color: #D3E4F0; text-decoration: none; transition: background 150ms ease, color 150ms ease; } .ds-nav-item:hover { background: rgba(45,168,255,0.10); } .ds-nav-item--active { background: rgba(45,168,255,0.16); color: #6BC4FF; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Instrument Panel",
+    "overview": "Mobull's screens read like a precision instrument at night — a deep, near-black navy foundation with electric blue readouts, translucent glass surfaces, and quiet hairline borders. Nothing glows or announces itself until it's touched; the system stays calm and legible at rest, and Signal Blue reserves itself for the single clearest action in any view. This fits a product whose whole premise is telling a mobile business owner the truth about a job's real cost before they commit — the interface itself should feel like something you'd trust to give you a straight answer in the dark. The system explicitly rejects the flat, interchangeable look of a generic SaaS admin dashboard. Depth — real translucency, blur, and a restrained blue halo — is the point, not an incumbent style to strip away in the name of simplicity.",
+    "keyCharacteristics": [
+      "Dark-first: the product ships in dark mode only today; light-mode tokens exist in the source but are not currently reachable in the shipped app.",
+      "Layered glass, not flat cards: panels and buttons carry real translucency, blur, and a fine inner highlight rather than a solid fill.",
+      "Structural glow, not ambient decoration: every halo, shimmer, and lift is a direct response to hover/focus/active.",
+      "One accent, used sparingly: Signal Blue marks the one clear action per view."
+    ],
+    "rules": [
+      { "name": "The Single-Accent Rule", "body": "Signal Blue marks the one clear action per view. If two elements on the same screen both want the primary treatment, one of them is wrong.", "section": "colors" },
+      { "name": "The Recessed Chrome Rule", "body": "Navigation chrome (the sidebar) always sits one shade darker than the content surfaces it frames, so wayfinding never visually competes with content.", "section": "colors" },
+      { "name": "The Eyebrow Rule", "body": "Section labels are always uppercase, semibold, 0.18em-tracked, and colored Signal Blue — this is the system's one recurring typographic flourish.", "section": "typography" },
+      { "name": "The Quiet-At-Rest Rule", "body": "Every glass surface is flat and quiet until it's touched — halo, shimmer, and lift only appear on hover, focus, or active.", "section": "elevation" },
+      { "name": "The Flat Input Rule", "body": "Form fields stay flat and transparent — glass treatment is reserved for containers and actions, never for data-entry fields.", "section": "components" }
+    ],
+    "dos": [
+      "Do reserve Signal Blue for the one clearest action per view.",
+      "Do keep every glow, shimmer, and lift a direct response to hover/focus/active.",
+      "Do use a real Empty state (icon + title + description + actionable CTA) for zero-data screens instead of seeded or fabricated example content.",
+      "Do keep the sidebar/nav chrome one shade darker than the content surfaces it frames."
+    ],
+    "donts": [
+      "Don't apply glass-panel treatment to form inputs.",
+      "Don't let the system drift toward a flat, generic SaaS-dashboard look.",
+      "Don't add ambient or idle animation to a surface at rest.",
+      "Don't reintroduce the retired orange/coral gradient wordmark."
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import mobullMark from '@/assets/mobull-mark.png';
 
 /**
  * Shared full-screen background (gradient orbs) + centered glass-card shell used by
@@ -40,7 +41,15 @@ export function AuthShell({
       >
         <div className="glass-panel rounded-3xl px-8 py-10 sm:px-10 sm:py-12 flex flex-col items-center w-full max-w-[420px]">
           {showLogo && (
-            <h1 className="text-3xl font-bold mb-8 tracking-tight text-foreground">RareAir</h1>
+            <div className="flex flex-col items-center mb-8">
+              <img
+                src={mobullMark}
+                alt="Mobull logo mark"
+                className="h-12 w-12 object-contain mb-3"
+                data-testid="img-auth-logo"
+              />
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">Mobull</h1>
+            </div>
           )}
           {children}
         </div>

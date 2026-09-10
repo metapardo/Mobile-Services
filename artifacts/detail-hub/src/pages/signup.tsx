@@ -36,14 +36,13 @@ import { useSignup, getGetAuthSessionQueryKey } from '@workspace/api-client-reac
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { useSession } from '@/hooks/use-session';
 import { useQueryClient } from '@tanstack/react-query';
-import rareAerMark from '@/assets/rare-aer-mark.png';
+import mobullMark from '@/assets/mobull-mark.png';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
 import './signup.css';
 
 // ─────────────────────────────────────────────────────────────────────────
-// This page is a full port of the `Rare-Aer-Marketing-Site` one-pager design
-// (see `Rare-Aer-Marketing-Site/artifacts/rare-aer/src/App.tsx`) — visual
+// This page is a full port of an earlier one-pager marketing design — visual
 // structure and section content only, not that project's app shell
 // (its own QueryClientProvider/Router/Toaster are not brought in; `detail-hub`
 // already provides all of that at its own root in `App.tsx`).
@@ -361,7 +360,7 @@ function Logo() {
       data-testid="link-brand"
     >
       <span className="brand-mark">
-        <img src={rareAerMark} alt="Mobull logo mark" data-testid="img-logo" />
+        <img src={mobullMark} alt="Mobull logo mark" data-testid="img-logo" />
       </span>
       <span>mobull</span>
     </a>
