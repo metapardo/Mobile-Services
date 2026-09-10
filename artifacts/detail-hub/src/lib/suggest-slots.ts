@@ -514,10 +514,14 @@ export async function suggestSlots(
   // BUG-6 Blocker 4 — every routable anchor either gets a resolved leg in
   // `anchorLegs` or doesn't; `batchedLegs()` already never fabricates a
   // distance for a failed/errored Route Matrix element (§10), it just used
-  // to drop it silently. The diff here is exactly that dropped population —
-  // distinct from an anchor that resolved fine but is simply >45 min away
-  // (that's a legitimate exclusion below, not a matrix failure).
-  const skippedMatrixFailure = routableAnchors.length - anchorLegs.size;
+  // to drop it silently. Counted per-anchor (not `routableAnchors.length -
+  // anchorLegs.size`) because `anchorLegs` is keyed by destination place id:
+  // two anchors sharing one address (same `googlePlaceId`) collapse to a
+  // single map entry, and a raw size diff would misreport that pair as a
+  // failure even when the shared leg resolved fine. Distinct from an anchor
+  // that resolved fine but is simply >45 min away (a legitimate exclusion
+  // below, not a matrix failure).
+  const skippedMatrixFailure = routableAnchors.filter((a) => !anchorLegs.has(a.googlePlaceId!)).length;
 
   const survivingAnchors = routableAnchors.filter((a) => {
     const leg = anchorLegs.get(a.googlePlaceId!);
