@@ -10,6 +10,7 @@ import {
   refundBooking,
   BookingValidationError,
   BookingOverlapError,
+  BookingPastDateError,
   CardProcessingUnavailableError,
   type BookingWithRelations,
 } from "@workspace/db";
@@ -204,6 +205,13 @@ router.post("/bookings", requireOrgSession, async (req, res) => {
       res.status(409).json({ error: "booking_overlap", message: err.message });
       return;
     }
+    if (err instanceof BookingPastDateError) {
+      // BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — "the one that closes the hole":
+      // 400, distinct from `booking_overlap`/`invalid_employee_split` — the request is
+      // well-formed shape-wise, it's a date-validation failure.
+      res.status(400).json({ error: "past_date", message: err.message });
+      return;
+    }
     if (err instanceof BookingValidationError) {
       res.status(400).json({ error: "invalid_employee_split", message: err.message });
       return;
@@ -321,6 +329,12 @@ router.patch("/bookings/:id", requireOrgSession, async (req, res) => {
       // employee(s). Also catches an update that moves this booking's own
       // time/employee/address INTO conflict with another booking.
       res.status(409).json({ error: "booking_overlap", message: err.message });
+      return;
+    }
+    if (err instanceof BookingPastDateError) {
+      // BUG-8 — only reachable here when the patch itself includes `date` and the new
+      // value is in the past; an update that leaves `date` untouched never throws this.
+      res.status(400).json({ error: "past_date", message: err.message });
       return;
     }
     if (err instanceof BookingValidationError) {

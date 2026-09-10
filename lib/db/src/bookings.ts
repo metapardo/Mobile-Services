@@ -52,6 +52,33 @@ export class BookingValidationError extends Error {}
 export class BookingOverlapError extends Error {}
 
 /**
+ * BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — "the one that closes the hole": thrown
+ * by `createBooking` (always, `bookingFields.date` is always present on a create) and
+ * `updateBooking` (only when the patch itself moves `date`) when the effective date
+ * being written is in the past. Same catch-and-map convention as `BookingOverlapError`
+ * except routes should respond `400` `{ error: "past_date", ... }`, not `409` — this
+ * is a validation failure on the request itself, not a conflict with existing state.
+ *
+ * Deliberately does NOT block an update that leaves `date` untouched, even on an
+ * already-past-dated booking — "allow back-dating existing bookings... correcting
+ * history is legitimate" (ticket). It also never compares against the booking's
+ * *current* date, only whether the *new* value being written is in the past.
+ */
+export class BookingPastDateError extends Error {}
+
+/**
+ * Plain `YYYY-MM-DD` string comparison against "today" — same convention
+ * `listAnchorCandidates` above already uses (`todayStr`), reused here rather than a
+ * `Date` object comparison to avoid timezone bugs (a `Date`-based compare can flip
+ * "today" depending on the server's local timezone vs. the plain date string the
+ * client sent).
+ */
+function isPastDate(dateStr: string): boolean {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return dateStr < todayStr;
+}
+
+/**
  * `computeRoute` from `artifacts/api-server/src/integrations/google-maps.ts` — `lib/db`
  * can't import that module directly (it lives in a different workspace package that
  * itself depends on `@workspace/db`, and isn't part of `api-server`'s published
@@ -558,6 +585,15 @@ export async function createBooking(
   const { packageIds, employeeSplit, ...bookingFields } = input;
   validateEmployeeSplit(employeeSplit);
 
+  // BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — reject a past-dated create outright.
+  // `bookingFields.date` is always present on a create (unlike a patch), so this is
+  // checked unconditionally, before the transaction even opens.
+  if (isPastDate(bookingFields.date)) {
+    throw new BookingPastDateError(
+      `Cannot create a booking dated ${bookingFields.date} — that date is in the past.`,
+    );
+  }
+
   return withOrganization(organizationId, async (tx) => {
     // BUG-3 (`BUGS_Mobull_2026-09-10.md`) — reject a booking that double-books one of
     // its assigned employees before ever writing it. Skipped only when the booking
@@ -613,6 +649,17 @@ export async function updateBooking(
 ): Promise<BookingWithRelations | null> {
   const { packageIds, employeeSplit, ...bookingFields } = patch;
   if (employeeSplit !== undefined) validateEmployeeSplit(employeeSplit);
+
+  // BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — "guard updates only when the date
+  // moves": only checked when the patch itself includes `date`. An update that leaves
+  // `date` untouched (even on an already-past-dated booking — back-dating history is
+  // legitimate) must never be blocked here; never compared against the booking's
+  // *current* date, only the new value being written.
+  if (bookingFields.date !== undefined && isPastDate(bookingFields.date)) {
+    throw new BookingPastDateError(
+      `Cannot move this booking to ${bookingFields.date} — that date is in the past.`,
+    );
+  }
 
   return withOrganization(organizationId, async (tx) => {
     // Read the current row unconditionally (not only when `bookingFields` is empty,
