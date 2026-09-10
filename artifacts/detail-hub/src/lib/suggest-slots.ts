@@ -299,8 +299,13 @@ export async function suggestSlots(
   // departure isn't achievable in a single batched request without
   // defeating FR-20's whole point (one call per search). "Now" is used as
   // the best available real-traffic proxy for both the 45-minute filter and
-  // every leg below, matching `fuel-gauge.ts`'s own clamp-to-now precedent.
-  const departureTimeIso = new Date().toISOString();
+  // every leg below, matching `fuel-gauge.ts`'s `toDepartureIso` clamp.
+  // The +60s buffer is load-bearing, not cosmetic: Google's Routes API
+  // rejects a `departureTime` that has already passed by the time the
+  // request lands server-side (confirmed live — "Timestamp must be set to
+  // a future time", the same failure `fuel-gauge.ts` clamps around), and a
+  // bare `new Date().toISOString()` is already stale by then.
+  const departureTimeIso = new Date(Date.now() + 60_000).toISOString();
 
   const routableAnchors = anchors.filter((a) => !!a.googlePlaceId);
   if (routableAnchors.length === 0) return [];
