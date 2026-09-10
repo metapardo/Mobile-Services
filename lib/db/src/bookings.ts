@@ -192,13 +192,19 @@ export async function listAnchorCandidates(
     // [-1, 1] — floating-point rounding can otherwise push it fractionally outside
     // that domain (e.g. 1.0000000000000002) for two points very close together or
     // identical, which would make acos() return NULL instead of ~0.
+    // Paren count, since this is easy to get wrong by one: outer wrapper (1) ->
+    // acos( (2) -> least( (3) -> greatest( (4) -> body -> ))  closes greatest
+    // then least -> ) closes acos -> ) closes the outer wrapper. Four opens,
+    // four closes — a prior version of this template was short one closing
+    // paren on the outer wrapper, which Postgres reported as a syntax error
+    // right before `order by` (the next token after this WHERE fragment).
     const distanceMilesExpr = sql`(
       ${EARTH_RADIUS_MILES}::double precision * acos(
         least(1::double precision, greatest(-1::double precision,
           cos(radians(${opts.lat}::double precision)) * cos(radians(${bookingsTable.latitude}::double precision))
             * cos(radians(${bookingsTable.longitude}::double precision) - radians(${opts.lng}::double precision))
           + sin(radians(${opts.lat}::double precision)) * sin(radians(${bookingsTable.latitude}::double precision))
-        )
+        ))
       )
     )`;
 
