@@ -175,8 +175,11 @@ export interface SuggestedSlot {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const WORK_START_MINS = 8 * 60; // 08:00
-const WORK_END_MINS = 18 * 60; // 18:00
+// Exported per BUG-3 (`BUGS_Mobull_2026-09-10.md`) — `booking-new.tsx`'s time
+// slot list needs the same business-hours bounds this module already uses,
+// rather than a second hardcoded 08:00/18:00 pair.
+export const WORK_START_MINS = 8 * 60; // 08:00
+export const WORK_END_MINS = 18 * 60; // 18:00
 const MAX_DRIVE_MINS = 45;
 const MATRIX_CHUNK_SIZE = 25; // ComputeRouteMatrixRequest.destinationPlaceIds.maxItems
 
@@ -266,7 +269,12 @@ async function batchedLegs(
   return result;
 }
 
-interface ScheduleEntry {
+/**
+ * Exported per BUG-3 (`BUGS_Mobull_2026-09-10.md`) — `booking-new.tsx`'s
+ * conflict-aware time slot list reuses this exact shape, computed by the
+ * same `buildSchedule()` below, rather than building a second schedule map.
+ */
+export interface ScheduleEntry {
   id: number;
   startMins: number;
   endMins: number;
@@ -279,8 +287,12 @@ function bookingDuration(b: SuggestSlotsBookingInput, pkgMap: Map<number, number
   return dur > 0 ? dur : 60;
 }
 
-/** date -> employeeId -> that employee's bookings that day, sorted by start time. */
-function buildSchedule(
+/**
+ * date -> employeeId -> that employee's bookings that day, sorted by start
+ * time. Exported per BUG-3 — `booking-new.tsx`'s time slot list reuses this
+ * directly rather than building a second schedule map.
+ */
+export function buildSchedule(
   allBookings: SuggestSlotsBookingInput[],
   allPackages: SuggestSlotsPackageInput[],
 ): Map<string, Map<number, ScheduleEntry[]>> {
