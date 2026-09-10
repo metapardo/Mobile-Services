@@ -1586,8 +1586,9 @@ export const ComputeRouteResponse = zod.object({
 
 /**
  * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20 — the anchor-ranking batch sibling of `POST /routes/compute`: one Route Matrix element batch per search (1 origin x N destinations), never N separate `/routes/compute` calls in a loop, which would bill the same elements, add N round trips of latency, and trip the per-organization rate limiter (FR-21a).
- * STUB — Phase 1 of this PRD explicitly does not implement the real Google Route Matrix v2 call (`../integrations/google-maps.ts`'s `computeRouteMatrix` always throws `NotImplementedError`, mapped to `501` below); that integration is a later pass's job. This endpoint exists now so the contract, validation, and error-mapping shape are settled ahead of that work — it must never respond `200` with a fabricated or estimated distance in the meantime.
- * Once implemented, a per-destination Google failure (PRD §10 "Route Matrix partially fails -> drop failed candidates, rank the rest") must surface as that one element's `error` field in a `200` response, not as a whole-request failure — the contract already supports this via `RouteMatrixElementResult`.
+ * Calls the real Google Route Matrix v2 endpoint (`../integrations/google-maps.ts`'s `computeRouteMatrix`), cache-aside on `route_cache` (FR-21, 30-day TTL keyed on `(originPlaceId, destinationPlaceId, hourOfWeek)`) and rate-limited per organization (FR-21a, bucket `"routing"`, shared with `POST /routes/compute`).
+ * A per-destination Google failure (PRD §10 "Route Matrix partially fails -> drop failed candidates, rank the rest") surfaces as that one element's `error` field in a `200` response, not as a whole-request failure.
+ * PRD §10 "Rate limit hit mid-search -> return cached-only results with a notice, not an error": when the calling organization is over its rate-limit bucket, this endpoint still responds `200` — Google is not called at all, only `route_cache` is consulted, and every cache miss comes back as `RouteMatrixElementResult.error: "rate_limited"` rather than a thrown error. The frontend should treat that string specifically as "some results were skipped due to load, not a hard failure" (distinct from other `error` values).
  * @summary Traffic-aware one-way drive distance/time from one origin to many destinations
  */
 
@@ -1600,7 +1601,7 @@ export const ComputeRouteMatrixBody = zod.object({
   "originPlaceId": zod.string().min(1),
   "destinationPlaceIds": zod.array(zod.string().min(1)).min(1).max(computeRouteMatrixBodyDestinationPlaceIdsMax),
   "departureTime": zod.coerce.date().describe('The new appointment\'s candidate start time, ISO 8601.')
-}).describe('PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a\/FR-20. One origin, many destinations, one Route Matrix batch per search — never N separate `\/routes\/compute` calls in a loop. `destinationPlaceIds.maxItems: 25` is a starting guess pending confirmation against Google\'s live Route Matrix v2 batch-size limits (verify before the real integration lands — do not assume this number is Google-confirmed).')
+}).describe('PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a\/FR-20. One origin, many destinations, one Route Matrix batch per search — never N separate `\/routes\/compute` calls in a loop. `destinationPlaceIds.maxItems: 25` is confirmed safe against Google\'s live Route Matrix v2 (distanceMatrix\/v2) limits: origins+destinations (by placeId) must each total <=50 and origins x destinations <=625 for `routingPreference: TRAFFIC_AWARE` (the stricter <=100 cap only applies to `TRAFFIC_AWARE_OPTIMAL`\/`TRANSIT`, neither of which this endpoint uses) — 1 origin x 25 destinations is well inside both.')
 
 export const ComputeRouteMatrixResponseItem = zod.object({
   "destinationPlaceId": zod.string(),

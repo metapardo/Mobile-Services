@@ -1,16 +1,10 @@
 import { Router, type IRouter } from "express";
 import { ComputeRouteBody, ComputeRouteResponse, ComputeRouteMatrixBody, ComputeRouteMatrixResponse } from "@workspace/api-zod";
 import { requireOrgSession } from "../middlewares/require-org-session";
+import { rateLimitMiddleware } from "../middlewares/rate-limit";
 import { logger } from "../lib/logger";
 import { captureAndFlush } from "../lib/sentry";
-import {
-  computeRoute,
-  computeRouteMatrix,
-  GoogleMapsConfigError,
-  GoogleMapsUpstreamError,
-  NoRouteFoundError,
-  NotImplementedError,
-} from "../integrations/google-maps";
+import { computeRoute, computeRouteMatrix, GoogleMapsConfigError, GoogleMapsUpstreamError, NoRouteFoundError } from "../integrations/google-maps";
 
 const router: IRouter = Router();
 
@@ -26,8 +20,20 @@ const router: IRouter = Router();
  * successfully found no route" are distinguished — 502 vs 422 — so the frontend can
  * always land on Unknown-with-retry rather than ever fabricate a grade, regardless of
  * which one happened.
+ *
+ * FR-21a: rate-limited (bucket `"routing"`, shared with `POST /routes/matrix` below).
+ * This route has no cache layer to fall back on (unlike the matrix route), so a
+ * limit-exceeded organization gets a plain 429 rather than a degraded 200 — PRD §10's
+ * "cached-only results with a notice" behavior only applies to `/routes/matrix`.
  */
-router.post("/routes/compute", requireOrgSession, async (req, res) => {
+router.post("/routes/compute", requireOrgSession, rateLimitMiddleware("routing"), async (req, res) => {
+  if (req.underRateLimit === false) {
+    res.status(429).json({
+      error: "rate_limited",
+      message: "Too many route lookups right now. Try again shortly.",
+    });
+    return;
+  }
   const parsedBody = ComputeRouteBody.safeParse(req.body);
   if (!parsedBody.success) {
     res.status(400).json({ error: "invalid_request", message: parsedBody.error.message });
@@ -74,13 +80,15 @@ router.post("/routes/compute", requireOrgSession, async (req, res) => {
  * Matrix element batch per search rather than N separate `/routes/compute` calls in
  * a loop — see that PRD's §9 cost mitigations).
  *
- * STUB: `computeRouteMatrix` (`../integrations/google-maps.ts`) is an intentional
- * placeholder pending a later integrations pass — it always throws
- * `NotImplementedError`, mapped to 501 here. This route/contract exists now so the
- * validation and error-mapping shape are settled ahead of that work; it must never
- * fabricate or estimate a distance in the meantime.
+ * FR-21/FR-21a: cache-aside and rate limiting both live inside `computeRouteMatrix`
+ * (cache) and this handler (rate limit), sharing the `"routing"` bucket with
+ * `POST /routes/compute` above. PRD §10 "Rate limit hit mid-search -> return
+ * cached-only results with a notice, not an error": unlike `/routes/compute`, a
+ * limit-exceeded organization here still gets a `200` — `allowUpstreamCall: false`
+ * tells `computeRouteMatrix` to skip Google entirely and return cache hits plus
+ * `error: "rate_limited"` for every cache miss, never a 429.
  */
-router.post("/routes/matrix", requireOrgSession, async (req, res) => {
+router.post("/routes/matrix", requireOrgSession, rateLimitMiddleware("routing"), async (req, res) => {
   const parsedBody = ComputeRouteMatrixBody.safeParse(req.body);
   if (!parsedBody.success) {
     res.status(400).json({ error: "invalid_request", message: parsedBody.error.message });
@@ -92,18 +100,11 @@ router.post("/routes/matrix", requireOrgSession, async (req, res) => {
       originPlaceId: body.originPlaceId,
       destinationPlaceIds: body.destinationPlaceIds,
       departureTime: body.departureTime.toISOString(),
+      allowUpstreamCall: req.underRateLimit !== false,
     });
     const data = ComputeRouteMatrixResponse.parse(result);
     res.status(200).json(data);
   } catch (err) {
-    if (err instanceof NotImplementedError) {
-      logger.warn({ err }, "POST /routes/matrix: computeRouteMatrix is not implemented yet");
-      res.status(501).json({
-        error: "not_implemented",
-        message: "Batch route matrix isn't implemented yet.",
-      });
-      return;
-    }
     if (err instanceof GoogleMapsConfigError) {
       logger.error({ err }, "POST /routes/matrix: GOOGLE_MAPS_API_KEY not configured");
       await captureAndFlush(err);

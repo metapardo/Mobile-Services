@@ -1,6 +1,7 @@
 /**
  * Server-side proxy calls to Google Maps Platform, for
- * `PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md` Phase 1 (Section 5.1, 7.1, 7.2, 9.1).
+ * `PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md` Phase 1 (Section 5.1, 7.1, 7.2, 9.1) and
+ * `PRD_Mobull_Appointment_Optimizer_v1.0.md` Phase 1 (Section 8, 9, FR-18a/FR-20/FR-21).
  *
  * This is the ONLY module in the codebase allowed to read `GOOGLE_MAPS_API_KEY`. The
  * key is sent to Google exclusively via the `X-Goog-Api-Key` header (confirmed from
@@ -15,14 +16,18 @@
  * legacy Maps JavaScript API / Directions API most LLM training data describes. Do not
  * "fix" field names here from memory; re-check Google's live docs first.
  *
- * Explicit Phase 1 scope: no caching (route_cache table is Phase 3, §9.2) and no
- * rate limiting (also Phase 3) live in this file — just the three proxy calls,
- * matching Google's contract precisely. Callers (the route handlers in
- * `../routes/places.ts` and `../routes/routing.ts`) own request validation and HTTP
- * status mapping; this module only talks to Google and throws typed errors.
+ * `autocompletePlaces`/`getPlaceDetails`/`computeRoute` are plain proxy calls — no
+ * caching or rate limiting, by design (Fuel Gauge Phase 1 scope). `computeRouteMatrix`
+ * is the one function in this file that owns caching (`route_cache` via
+ * `@workspace/db`'s `getCachedRoute`/`setCachedRoute`, FR-21) directly, since the
+ * cache-aside logic (which destinations to even send to Google) has to live wherever
+ * the batching decision is made. Rate limiting (FR-21a) stays a caller concern in all
+ * four cases — see `../middlewares/rate-limit.ts` and `computeRouteMatrix`'s
+ * `allowUpstreamCall` param below.
  */
 
 import { logger } from "../lib/logger";
+import { getCachedRoute, setCachedRoute } from "@workspace/db";
 
 const PLACES_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete";
 const PLACES_DETAILS_BASE_URL = "https://places.googleapis.com/v1/places";
@@ -341,19 +346,7 @@ export async function computeRoute(params: {
   };
 }
 
-/**
- * Thrown by `computeRouteMatrix` below — every call, unconditionally. This is an
- * intentional placeholder for `PRD_Mobull_Appointment_Optimizer_v1.0.md` FR-18a/FR-20:
- * the real Google Route Matrix v2 endpoint (distinct from the single-route
- * `computeRoutes` above — a batch "1 origin x N destinations" call, likely
- * `POST https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix`, though
- * that URL/field-mask/response-shape combination has NOT been confirmed against
- * Google's live docs here) is explicitly a later integrations pass's job, not this
- * one's. Per this file's header comment, do not "fix" this from memory — the next
- * implementer must re-verify against Google's current docs before writing the real
- * request, same as every other function in this module did.
- */
-export class NotImplementedError extends Error {}
+const ROUTE_MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
 
 export interface RouteMatrixElementResult {
   destinationPlaceId: string;
@@ -363,30 +356,270 @@ export interface RouteMatrixElementResult {
   minutes: number | null;
   /** Non-null exactly when this element failed — PRD §10 "Route Matrix partially
    *  fails -> drop failed candidates, rank the rest" needs a per-destination failure
-   *  marker distinct from the whole request failing. Null on success. */
+   *  marker distinct from the whole request failing. Null on success.
+   *
+   *  `"rate_limited"` is a specific, load-bearing value the frontend should treat
+   *  differently from every other string here (PRD §10 "Rate limit hit mid-search ->
+   *  return cached-only results with a notice, not an error") — see
+   *  `computeRouteMatrix`'s `allowUpstreamCall` param below. */
   error: string | null;
 }
 
+/** Shape of one element in the Route Matrix v2 response array — confirmed via
+ *  Google's live docs (`/maps/documentation/routes/compute_route_matrix`, the
+ *  `.../reference/rest/v2/TopLevel/computeRouteMatrix` reference, and the
+ *  `RouteMatrixElement` reference under `.../reference/rest/v2/RouteMatrixElement`).
+ *  `status` is a `google.rpc.Status`-shaped object — an empty object (or `code`
+ *  absent/`0`) means OK; anything else means this element failed independently of the
+ *  rest of the batch. Docs explicitly warn: omitting `status` from the field mask
+ *  makes every element look OK, so it's always included below. */
+interface RawRouteMatrixElement {
+  originIndex?: number;
+  destinationIndex?: number;
+  status?: { code?: number; message?: string };
+  condition?: "ROUTE_EXISTS" | "ROUTE_NOT_FOUND" | string;
+  distanceMeters?: number;
+  duration?: string;
+}
+
 /**
- * STUB — see `NotImplementedError`'s doc comment. Always throws `NotImplementedError`
- * rather than returning a real, estimated, or fabricated distance for any element.
- * Exists now (rather than being left unbuilt) so the route handler
- * (`../routes/routing.ts`), the OpenAPI contract (`POST /routes/matrix`), and the
- * `FetchRouteMatrix` shape downstream callers need all exist and compile today, with
- * only this one function's body left for the next integrations pass to fill in with
- * the real batch call, its own caching (`@workspace/db`'s `getCachedRoute`/
- * `setCachedRoute` — see `lib/db/src/route-cache.ts`) and rate-limit checks
- * (`checkAndIncrement` — see `lib/db/src/rate-limit.ts`), both already built as of
- * this pass but not yet wired in here.
+ * Computes the `hourOfWeek` cache-bucket convention documented in
+ * `lib/db/src/route-cache.ts` (`dayOfWeek * 24 + hourOfDay`, 0-167, JS
+ * `Date#getDay()` convention where Sunday=0) from an RFC3339 `departureTime`. Uses the
+ * UTC accessors, not local-timezone ones: every `departureTime` this module handles is
+ * already RFC3339 UTC end to end (see `computeRoute`'s doc comment), and `route_cache`
+ * is a single global table shared by every organization/process — bucketing on local
+ * time would make the bucket depend on whatever timezone the server process happens to
+ * be running in, which a shared cache key must never do.
+ */
+function hourOfWeekFromDepartureTime(departureTimeIso: string): number {
+  const date = new Date(departureTimeIso);
+  return date.getUTCDay() * 24 + date.getUTCHours();
+}
+
+/**
+ * Route Matrix v2 `computeRouteMatrix` — `POST https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix`.
+ * The batch sibling of `computeRoute` above (1 origin x N destinations in a single
+ * call) for `PRD_Mobull_Appointment_Optimizer_v1.0.md` FR-18a/FR-20.
+ *
+ * Confirmed via Google's live docs (`/maps/documentation/routes/compute_route_matrix`
+ * and the `.../reference/rest/v2/TopLevel/computeRouteMatrix` /
+ * `.../reference/rest/v2/RouteMatrixOrigin` /
+ * `.../reference/rest/v2/RouteMatrixElement` references):
+ *   - Same auth convention as every other call in this module: `X-Goog-Api-Key`
+ *     header, never a query param.
+ *   - Unlike `computeRoutes`'s `Waypoint.placeId` sent as a bare sibling of
+ *     `origin`/`destination`, the matrix endpoint's `origins`/`destinations` are
+ *     arrays of `RouteMatrixOrigin`/`RouteMatrixDestination`, each wrapping a
+ *     `Waypoint` under a `waypoint` field — i.e. `{ waypoint: { placeId } }`, not
+ *     `{ placeId }` directly. This really is a different shape from `computeRoutes`,
+ *     confirmed against the docs rather than assumed to match.
+ *   - `X-Goog-FieldMask` is required; Google's own docs warn that omitting `status`
+ *     from the mask makes every element look OK regardless of its real status, so the
+ *     mask here is exactly `originIndex,destinationIndex,status,condition,distanceMeters,duration`.
+ *   - Response body is a single JSON array of `RouteMatrixElement` objects (confirmed
+ *     via the docs' own example response) — NOT wrapped in a top-level key, and not
+ *     newline-delimited despite the endpoint being described as "streaming" at the
+ *     gRPC layer; `res.json()` parses it directly as an array.
+ *   - Each element has `originIndex`/`destinationIndex` (this module always sends
+ *     exactly one origin, so `originIndex` is always `0` here — `destinationIndex` is
+ *     what matters, indexing into the exact `destinations` array sent on this
+ *     request), `status`, `condition` (`ROUTE_EXISTS`/`ROUTE_NOT_FOUND`),
+ *     `distanceMeters`, `duration` (same `"1234s"` seconds-string format as
+ *     `computeRoutes`, parsed with the same logic below — not reimplemented
+ *     differently).
+ *   - Size limits confirmed via the docs: origins+destinations (via `placeId`) must
+ *     each total <=50, and origins x destinations <=625 for
+ *     `routingPreference: TRAFFIC_AWARE` (the stricter <=100 cap is only for
+ *     `TRAFFIC_AWARE_OPTIMAL`/`TRANSIT`, neither used here) — the OpenAPI contract's
+ *     `destinationPlaceIds.maxItems: 25` (1 origin, so product = destination count) is
+ *     comfortably inside both.
+ *
+ * Cache-aside (FR-21): checks `route_cache` (`getCachedRoute`/`setCachedRoute`,
+ * `@workspace/db`) for every destination before calling Google at all. Only the
+ * destinations that miss cache go into ONE batched Google request (FR-20 — never N
+ * individual `computeRoute` calls); if every destination hits cache, Google is never
+ * called. Freshly-computed elements are written through to the cache after a
+ * successful response; failed elements are not cached (a transient per-element
+ * failure must not poison the cache for 30 days). `condition: "ROUTE_NOT_FOUND"` is
+ * a stable geographic fact (no drivable road exists between two fixed places) and
+ * would be reasonable to cache too, but is deliberately NOT cached here: `route_cache`
+ * `miles`/`minutes` columns are NOT NULL `numeric` (see `lib/db/src/schema/route-
+ * cache.ts`), so there's no schema-level way to record "confirmed no route" distinct
+ * from "not yet computed" without inventing a sentinel value (e.g. `-1`) that any
+ * future reader of this table would need to know to special-case — judged not worth
+ * that landmine for this pass. Worth a dedicated column (or small side table) if
+ * `ROUTE_NOT_FOUND` turns out to be common enough in production to matter for cost.
+ *
+ * Rate limiting (FR-21a) is intentionally NOT checked inside this function — it's the
+ * caller's (`../routes/routing.ts`) job, via `rateLimitMiddleware`, because the
+ * PRD-mandated behavior on limit-exceeded ("return cached-only results with a notice,
+ * not an error", PRD §10) differs per endpoint and this module has no HTTP-response
+ * concerns. `allowUpstreamCall: false` is how the caller communicates "you're over the
+ * limit — cache only, no Google call" down into this function.
  */
 export async function computeRouteMatrix(params: {
   originPlaceId: string;
   destinationPlaceIds: string[];
   /** RFC3339 UTC, e.g. from `Date#toISOString()`. */
   departureTime: string;
+  /** Set to `false` when the caller has already determined this organization is over
+   *  its rate-limit bucket (FR-21a) — skips the Google call entirely regardless of
+   *  cache misses, returning `error: "rate_limited"` for every miss instead. Defaults
+   *  to `true`. */
+  allowUpstreamCall?: boolean;
 }): Promise<RouteMatrixElementResult[]> {
-  throw new NotImplementedError(
-    "computeRouteMatrix is not implemented yet — the real Google Route Matrix v2 " +
-      "integration is a later pass's job (PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20).",
+  const allowUpstreamCall = params.allowUpstreamCall ?? true;
+  const hourOfWeek = hourOfWeekFromDepartureTime(params.departureTime);
+
+  const cacheChecks = await Promise.all(
+    params.destinationPlaceIds.map(async (destinationPlaceId) => ({
+      destinationPlaceId,
+      cached: await getCachedRoute(params.originPlaceId, destinationPlaceId, hourOfWeek),
+    })),
   );
+
+  const results = new Map<string, RouteMatrixElementResult>();
+  const missingDestinationIds: string[] = [];
+  for (const { destinationPlaceId, cached } of cacheChecks) {
+    if (cached) {
+      results.set(destinationPlaceId, { destinationPlaceId, miles: cached.miles, minutes: cached.minutes, error: null });
+    } else if (!missingDestinationIds.includes(destinationPlaceId)) {
+      // De-duplicated: a repeated destinationPlaceId in the request only needs to be
+      // sent to Google once — the merge step below fans the single answer back out to
+      // every occurrence.
+      missingDestinationIds.push(destinationPlaceId);
+    }
+  }
+
+  const toResponse = (): RouteMatrixElementResult[] =>
+    params.destinationPlaceIds.map((id) => {
+      const result = results.get(id);
+      if (!result) {
+        // Should be unreachable — every id is either a cache hit, a Google result, or
+        // an explicit rate-limited/error fallback below. Guarded anyway rather than
+        // risking a thrown error on a malformed upstream response.
+        return { destinationPlaceId: id, miles: null, minutes: null, error: "missing_result" };
+      }
+      return result;
+    });
+
+  if (missingDestinationIds.length === 0) {
+    // FR-20/FR-21: every destination was already cached — Google is never called.
+    return toResponse();
+  }
+
+  if (!allowUpstreamCall) {
+    // FR-21a / PRD §10 "Rate limit hit mid-search -> return cached-only results with a
+    // notice, not an error" — `../routes/routing.ts` has already determined this
+    // organization is over its rate-limit bucket for this window.
+    for (const destinationPlaceId of missingDestinationIds) {
+      results.set(destinationPlaceId, { destinationPlaceId, miles: null, minutes: null, error: "rate_limited" });
+    }
+    return toResponse();
+  }
+
+  const res = await fetch(ROUTE_MATRIX_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": getApiKey(),
+      "X-Goog-FieldMask": "originIndex,destinationIndex,status,condition,distanceMeters,duration",
+    },
+    body: JSON.stringify({
+      origins: [{ waypoint: { placeId: params.originPlaceId } }],
+      destinations: missingDestinationIds.map((placeId) => ({ waypoint: { placeId } })),
+      travelMode: "DRIVE",
+      routingPreference: "TRAFFIC_AWARE",
+      departureTime: params.departureTime,
+    }),
+  });
+
+  if (!res.ok) {
+    logger.warn(
+      { status: res.status, body: await safeReadText(res) },
+      "Route Matrix v2 computeRouteMatrix: non-2xx response from Google",
+    );
+    throw new GoogleMapsUpstreamError(`Route Matrix computeRouteMatrix failed with status ${res.status}`, res.status);
+  }
+
+  const json = (await res.json()) as unknown;
+  if (!Array.isArray(json)) {
+    logger.warn({ body: json }, "Route Matrix v2: response was not a JSON array as expected");
+    throw new GoogleMapsUpstreamError("Route Matrix v2 response was not a JSON array as expected");
+  }
+  const elements = json as RawRouteMatrixElement[];
+
+  for (const element of elements) {
+    const destinationIndex = element.destinationIndex ?? 0;
+    const destinationPlaceId = missingDestinationIds[destinationIndex];
+    if (destinationPlaceId === undefined) {
+      logger.warn({ element }, "Route Matrix v2: destinationIndex out of range, dropping element");
+      continue;
+    }
+
+    const statusCode = element.status?.code;
+    const isOk = statusCode === undefined || statusCode === 0;
+    if (!isOk) {
+      results.set(destinationPlaceId, {
+        destinationPlaceId,
+        miles: null,
+        minutes: null,
+        error: element.status?.message ? `google_error: ${element.status.message}` : `google_status_code_${statusCode}`,
+      });
+      continue;
+    }
+
+    if (element.condition === "ROUTE_NOT_FOUND") {
+      // FR-5-equivalent for the matrix endpoint: a valid, successful per-element
+      // response with no drivable path. Not cached — see this function's doc comment.
+      results.set(destinationPlaceId, { destinationPlaceId, miles: null, minutes: null, error: "no_route_found" });
+      continue;
+    }
+
+    if (element.distanceMeters === undefined || !element.duration) {
+      results.set(destinationPlaceId, {
+        destinationPlaceId,
+        miles: null,
+        minutes: null,
+        error: "missing_distance_or_duration",
+      });
+      continue;
+    }
+
+    const durationSeconds = Number(element.duration.replace(/s$/, ""));
+    if (!Number.isFinite(durationSeconds)) {
+      results.set(destinationPlaceId, {
+        destinationPlaceId,
+        miles: null,
+        minutes: null,
+        error: `unexpected_duration_format: "${element.duration}"`,
+      });
+      continue;
+    }
+
+    const miles = element.distanceMeters / METERS_PER_MILE;
+    const minutes = durationSeconds / 60;
+    results.set(destinationPlaceId, { destinationPlaceId, miles, minutes, error: null });
+    // Write-through cache (FR-21). Fire-and-forget within this loop would risk an
+    // unhandled rejection; awaited sequentially instead — matrix batches are small
+    // (<=25 destinations per the OpenAPI contract) so this isn't a latency concern.
+    await setCachedRoute(params.originPlaceId, destinationPlaceId, hourOfWeek, { miles, minutes });
+  }
+
+  // Any destinationIndex Google's response didn't cover (shouldn't happen per the
+  // docs, but this module's own convention is to verify rather than assume) still
+  // needs a result so every requested destination gets exactly one element back.
+  for (const destinationPlaceId of missingDestinationIds) {
+    if (!results.has(destinationPlaceId)) {
+      results.set(destinationPlaceId, {
+        destinationPlaceId,
+        miles: null,
+        minutes: null,
+        error: "missing_from_google_response",
+      });
+    }
+  }
+
+  return toResponse();
 }

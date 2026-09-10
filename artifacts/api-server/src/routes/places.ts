@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { AutocompletePlacesBody, AutocompletePlacesResponse, GetPlaceDetailsBody, GetPlaceDetailsResponse } from "@workspace/api-zod";
 import { requireOrgSession } from "../middlewares/require-org-session";
+import { rateLimitMiddleware } from "../middlewares/rate-limit";
 import { logger } from "../lib/logger";
 import { captureAndFlush } from "../lib/sentry";
 import { autocompletePlaces, getPlaceDetails, GoogleMapsConfigError, GoogleMapsUpstreamError } from "../integrations/google-maps";
@@ -18,8 +19,19 @@ const router: IRouter = Router();
  * never fires on a keystroke) — that debounce/suppress-under-3-chars/select-only
  * behavior lives entirely in the frontend (Phase 2's job); this route just answers
  * whatever request it's given.
+ *
+ * FR-21a: rate-limited (bucket `"places"`). No cache layer exists for Places calls (a
+ * user's in-progress keystrokes/session aren't cacheable the way fixed origin/
+ * destination pairs are), so a limit-exceeded organization gets a plain 429.
  */
-router.post("/places/autocomplete", requireOrgSession, async (req, res) => {
+router.post("/places/autocomplete", requireOrgSession, rateLimitMiddleware("places"), async (req, res) => {
+  if (req.underRateLimit === false) {
+    res.status(429).json({
+      error: "rate_limited",
+      message: "Too many address lookups right now. Try again shortly.",
+    });
+    return;
+  }
   const parsedBody = AutocompletePlacesBody.safeParse(req.body);
   if (!parsedBody.success) {
     res.status(400).json({ error: "invalid_request", message: parsedBody.error.message });
@@ -56,8 +68,17 @@ router.post("/places/autocomplete", requireOrgSession, async (req, res) => {
  * closes the Autocomplete session that `sessionToken` was used for — see
  * `../integrations/google-maps.ts`'s doc comment for the confirmed session-token
  * semantics (a query param on this same call, not a separate request).
+ *
+ * FR-21a: rate-limited (bucket `"places"`, shared with `/places/autocomplete` above).
  */
-router.post("/places/details", requireOrgSession, async (req, res) => {
+router.post("/places/details", requireOrgSession, rateLimitMiddleware("places"), async (req, res) => {
+  if (req.underRateLimit === false) {
+    res.status(429).json({
+      error: "rate_limited",
+      message: "Too many address lookups right now. Try again shortly.",
+    });
+    return;
+  }
   const parsedBody = GetPlaceDetailsBody.safeParse(req.body);
   if (!parsedBody.success) {
     res.status(400).json({ error: "invalid_request", message: parsedBody.error.message });

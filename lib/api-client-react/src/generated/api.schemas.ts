@@ -1031,7 +1031,7 @@ export interface ComputeRouteResult {
 }
 
 /**
- * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20. One origin, many destinations, one Route Matrix batch per search — never N separate `/routes/compute` calls in a loop. `destinationPlaceIds.maxItems: 25` is a starting guess pending confirmation against Google's live Route Matrix v2 batch-size limits (verify before the real integration lands — do not assume this number is Google-confirmed).
+ * PRD_Mobull_Appointment_Optimizer_v1.0.md FR-18a/FR-20. One origin, many destinations, one Route Matrix batch per search — never N separate `/routes/compute` calls in a loop. `destinationPlaceIds.maxItems: 25` is confirmed safe against Google's live Route Matrix v2 (distanceMatrix/v2) limits: origins+destinations (by placeId) must each total <=50 and origins x destinations <=625 for `routingPreference: TRAFFIC_AWARE` (the stricter <=100 cap only applies to `TRAFFIC_AWARE_OPTIMAL`/`TRANSIT`, neither of which this endpoint uses) — 1 origin x 25 destinations is well inside both.
  */
 export interface ComputeRouteMatrixRequest {
   /** @minLength 1 */
