@@ -10,6 +10,12 @@ import { FuelGaugeIcon } from '@/components/fuel-gauge-icon';
 import { PaymentMethodBadge } from '@/components/payment-method-badge';
 import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@workspace/blue-glass-design-system/components/ui/dropdown-menu';
+import {
   Empty,
   EmptyHeader,
   EmptyMedia,
@@ -53,7 +59,6 @@ const CALENDAR_UNSCORED_GAUGE: FuelGaugeResult = {
 export default function Calendar() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekAnchor, setWeekAnchor] = useState(new Date());
-  const [showNewMenu, setShowNewMenu] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to current time on mount
@@ -171,36 +176,29 @@ export default function Calendar() {
           </button>
         </div>
 
-        {/* New booking button */}
-        <div className="relative">
-          <button
-            onClick={() => setShowNewMenu(v => !v)}
-            className="w-9 h-9 flex items-center justify-center rounded-full gradient-btn text-white shadow-lg"
-            data-testid="button-new-booking"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-          {showNewMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowNewMenu(false)} />
-              <div className="absolute right-0 top-11 z-50 glass rounded-2xl overflow-hidden min-w-[200px] py-1 shadow-2xl">
-                <Link href="/booking/new" onClick={() => setShowNewMenu(false)}>
-                  <div className="px-5 py-3.5 text-[15px] font-medium hover:bg-white/10 transition-colors cursor-pointer">
-                    Create appointment
-                  </div>
-                </Link>
-                <div className="h-px bg-white/10 mx-4" />
-                <div className="px-5 py-3.5 text-[15px] font-medium text-muted-foreground cursor-default">
-                  Create class
-                </div>
-                <div className="h-px bg-white/10 mx-4" />
-                <div className="px-5 py-3.5 text-[15px] font-medium text-muted-foreground cursor-default">
-                  Create personal event
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+        {/* New booking button — BUG-1 (`BUGS_Mobull_2026-09-10.md`): the
+            design-system `DropdownMenu` primitive replaces the old hand-rolled
+            `fixed inset-0` overlay + positioned panel, which inherited none of
+            the system's tokens, dismissal, or focus handling. "Create class"
+            is removed entirely (Mobull has no class concept), not hidden. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="w-9 h-9 flex items-center justify-center rounded-full gradient-btn text-white shadow-lg"
+              data-testid="button-new-booking"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[200px]">
+            <DropdownMenuItem asChild data-testid="menu-item-create-appointment">
+              <Link href="/booking/new">Create appointment</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled className="cursor-default">
+              Create personal event
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {loadFailed ? (
@@ -279,11 +277,13 @@ export default function Calendar() {
           className="relative"
           style={{ height: `${GRID_HOURS * HOUR_HEIGHT}px` }}
         >
-          {/* Hour rows */}
+          {/* Hour rows — `pointer-events-none` so these purely decorative
+              lines never intercept a tap meant for the clickable 30-min
+              cells rendered below (BUG-2). */}
           {hours.map(hour => (
             <div
               key={hour}
-              className="absolute w-full flex items-start"
+              className="absolute w-full flex items-start pointer-events-none"
               style={{ top: `${(hour - GRID_START_HOUR) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
             >
               <div className="w-14 shrink-0 text-right pr-3 text-[11px] font-medium text-muted-foreground select-none"
@@ -305,6 +305,34 @@ export default function Calendar() {
               <div className="flex-1 border-t border-white/[0.04]" />
             </div>
           ))}
+
+          {/* ── Tappable 30-min cells (BUG-2) ── one per half-hour slot,
+              sized/positioned to match the booking cards' own geometry
+              (`left: 60px`, `right: 12px`) so the click target lines up with
+              where a card would render. `z-0` (explicit, so it participates
+              in the same stacking context as the booking cards below rather
+              than relying on DOM order) keeps these strictly beneath the
+              booking cards' `z-10` — a card always wins a tap over the empty
+              cell underneath it. Rendered as `Link`s (real anchors), so
+              they're keyboard-reachable by default with a real accessible
+              name via `aria-label`. */}
+          {Array.from({ length: GRID_HOURS * 2 }, (_, i) => i).map(i => {
+            const minsFromGridStart = i * 30;
+            const hour = GRID_START_HOUR + Math.floor(minsFromGridStart / 60);
+            const minute = minsFromGridStart % 60;
+            const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+            const label = format(new Date(2000, 0, 1, hour, minute), 'h:mm a');
+            return (
+              <Link
+                key={`cell-${i}`}
+                href={`/booking/new?date=${selectedStr}&time=${timeStr}`}
+                aria-label={`Create appointment at ${label}`}
+                className="absolute z-0 block rounded-sm transition-colors hover:bg-white/[0.05] active:bg-white/[0.08] focus-visible:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+                style={{ top: `${i * (HOUR_HEIGHT / 2)}px`, height: `${HOUR_HEIGHT / 2}px`, left: '60px', right: '12px' }}
+                data-testid={`calendar-cell-${selectedStr}-${timeStr}`}
+              />
+            );
+          })}
 
           {/* ── Current time indicator ── */}
           {isToday(selectedDate) && nowTopPx >= 0 && nowTopPx <= GRID_HOURS * HOUR_HEIGHT && (
