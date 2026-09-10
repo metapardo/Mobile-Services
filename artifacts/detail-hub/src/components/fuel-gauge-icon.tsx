@@ -133,13 +133,25 @@ export function FuelGaugeIcon({ result, clientName }: FuelGaugeIconProps) {
 
   const color = GRADE_COLOR[result.grade] ?? GRADE_COLOR.unknown;
   const isKnown = result.grade !== 'unknown';
+  // OBS-1 (`BUGS_Mobull_2026-09-10.md`) — round once, at the one-way figure,
+  // then derive the round-trip display from that already-rounded value
+  // (doubled) rather than independently rounding `result.roundTripMinutes`
+  // a second time. Keeps this dialog's round-trip minutes consistent with
+  // `booking-new.tsx`'s inline gauge row, which does the same derivation.
+  const roundTripMinutesDisplay = Math.round(result.roundTripMinutes / 2) * 2;
 
   return (
     <>
+      {/* BUG-4 (`BUGS_Mobull_2026-09-10.md`) — explicit small, fixed tap
+          target (not `shrink-0` alone, which only stops the button from
+          shrinking, never from being a large fraction of a short card's
+          corner). `w-6 h-6` with a little internal padding keeps the hit
+          area to roughly the glyph itself, so the card's own `Link` — the
+          dominant surface — wins an ordinary tap anywhere else on the card,
+          even at the shortest card height the calendar renders. */}
       <button
         onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(true); }}
-        className="shrink-0 flex items-center justify-center rounded-md hover:opacity-80 active:opacity-60 transition-opacity"
-        style={{ lineHeight: 0 }}
+        className="shrink-0 w-6 h-6 p-0.5 flex items-center justify-center rounded-md hover:opacity-80 active:opacity-60 transition-opacity"
         aria-label={`Fuel gauge: ${result.grade}`}
         data-testid="fuel-gauge-icon"
       >
@@ -151,7 +163,10 @@ export function FuelGaugeIcon({ result, clientName }: FuelGaugeIconProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <GaugeSVG grade={result.grade} />
-              <span>Fuel Gauge{clientName ? ` · ${clientName}` : ''}</span>
+              {/* BUG-4: renamed from "Fuel Gauge · {clientName}" — a title
+                  led with the client's name read as "the client's profile
+                  popped up" when the icon was tapped unintentionally. */}
+              <span>Trip cost{clientName ? ` · ${clientName}` : ''}</span>
             </DialogTitle>
           </DialogHeader>
 
@@ -179,7 +194,7 @@ export function FuelGaugeIcon({ result, clientName }: FuelGaugeIconProps) {
                 <div className="flex items-start justify-between gap-3 text-[14px]">
                   <span className="text-muted-foreground">Drive time</span>
                   <span className="font-medium tabular-nums text-right">
-                    ${result.driveCost.toFixed(2)} · {Math.round(result.roundTripMinutes)} min round trip
+                    ${result.driveCost.toFixed(2)} · {roundTripMinutesDisplay} min round trip
                   </span>
                 </div>
                 {result.anchorAddress && (
