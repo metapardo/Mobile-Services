@@ -10,7 +10,8 @@
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts && node ./scripts/apply-rls.mjs",
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts && node ./scripts/apply-rls.mjs",
-    "apply-rls": "node ./scripts/apply-rls.mjs"
+    "apply-rls": "node ./scripts/apply-rls.mjs",
+    "backfill-booking-coordinates": "tsx ./scripts/backfill-booking-coordinates.ts"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
@@ -22,6 +23,7 @@
     "@types/node": "catalog:",
     "@types/pg": "^8.20.0",
     "dotenv": "^16.4.7",
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "tsx": "catalog:"
   }
 }

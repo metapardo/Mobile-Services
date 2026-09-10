@@ -346,6 +346,96 @@ export async function computeRoute(params: {
   };
 }
 
+export interface GeocodeAddressResult {
+  placeId: string;
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
+}
+
+const PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
+
+/**
+ * Places API (New) Text Search — `POST https://places.googleapis.com/v1/places:searchText`.
+ *
+ * Added for `BUGS_Mobull_2026-09-10_Round2.md` BUG-6 Blocker 3's one-time legacy-
+ * booking coordinate backfill (`lib/db/scripts/backfill-booking-coordinates.ts`) — NOT
+ * part of the live address-autocomplete flow. `autocompletePlaces`/`getPlaceDetails`
+ * above are built around a two-step, session-tokened, partial-input UX flow
+ * (Autocomplete predicts suggestions as the owner types; Details resolves the ONE
+ * suggestion they select) — neither fits resolving a complete, already-known address
+ * *string* with no user interaction, which is what a batch backfill needs (misusing
+ * the session-token flow for that — inventing a fresh, immediately-discarded session
+ * token per address — would be forcing a UX-shaped API onto a job it wasn't designed
+ * for). Text Search takes free text and returns full Place resources directly in one
+ * call; no session token involved (that's an Autocomplete-specific billing mechanism
+ * this endpoint doesn't use).
+ *
+ * Confirmed via Google's live docs (`/maps/documentation/places/web-service/text-search`,
+ * the `.../reference/rest/v1/places/searchText` REST reference, and the `Place`
+ * resource reference under `.../reference/rest/v1/Place`):
+ *   - Auth: `X-Goog-Api-Key` header — same convention as every other call in this file.
+ *   - `X-Goog-FieldMask` is REQUIRED; set here to exactly
+ *     `places.id,places.formattedAddress,places.location` — `id` is the place ID (a
+ *     Text Search/Details response is a full `Place` resource, whose ID field is
+ *     `id`, distinct from an Autocomplete `placePrediction.placeId` above),
+ *     `formattedAddress`, and `location.{latitude,longitude}` — the only three fields
+ *     this backfill needs.
+ *   - Request body: `{ "textQuery": "<free text>", "regionCode": "US" }` — same
+ *     always-US convention `autocompletePlaces` uses (FR-12), this app has no
+ *     international addresses.
+ *   - Response: `{ "places": [...] }`. An empty/absent array is a valid, successful
+ *     response for an address Google can't resolve (typo, incomplete, demolished
+ *     address, etc.) — not an error condition — so this returns `null` for that case
+ *     rather than throwing, letting the backfill script skip-and-log instead of
+ *     aborting the whole run (ticket: "skip... don't fail the whole run").
+ */
+export async function geocodeAddress(address: string): Promise<GeocodeAddressResult | null> {
+  const res = await fetch(PLACES_TEXT_SEARCH_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": getApiKey(),
+      "X-Goog-FieldMask": "places.id,places.formattedAddress,places.location",
+    },
+    body: JSON.stringify({ textQuery: address, regionCode: "US" }),
+  });
+
+  if (!res.ok) {
+    logger.warn(
+      { status: res.status, body: await safeReadText(res) },
+      "Places Text Search (New): non-2xx response from Google",
+    );
+    throw new GoogleMapsUpstreamError(`Places Text Search failed with status ${res.status}`, res.status);
+  }
+
+  const json = (await res.json()) as {
+    places?: Array<{
+      id?: string;
+      formattedAddress?: string;
+      location?: { latitude?: number; longitude?: number };
+    }>;
+  };
+
+  const place = json.places?.[0];
+  if (
+    !place ||
+    !place.id ||
+    !place.formattedAddress ||
+    place.location?.latitude === undefined ||
+    place.location?.longitude === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    placeId: place.id,
+    latitude: place.location.latitude,
+    longitude: place.location.longitude,
+    formattedAddress: place.formattedAddress,
+  };
+}
+
 const ROUTE_MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
 
 export interface RouteMatrixElementResult {
