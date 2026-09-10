@@ -9,9 +9,11 @@ import {
   recordBookingPayment,
   refundBooking,
   BookingValidationError,
+  BookingOverlapError,
   CardProcessingUnavailableError,
   type BookingWithRelations,
 } from "@workspace/db";
+import { computeRoute } from "../integrations/google-maps";
 import {
   ListBookingsResponse,
   ListBookingAnchorsQueryParams,
@@ -191,10 +193,17 @@ router.post("/bookings", requireOrgSession, async (req, res) => {
       // also what keeps FR-5's "credit_card must be rejected, no processor connected"
       // guard as a single enforced choke point rather than something a generic
       // `PATCH /bookings/:id` could quietly bypass.
-    });
+    }, computeRoute);
     const data = CreateBookingResponse.parse(toWire(row));
     res.status(201).json(data);
   } catch (err) {
+    if (err instanceof BookingOverlapError) {
+      // BUG-3 (`BUGS_Mobull_2026-09-10.md`) — 409, not 400: the request is
+      // well-formed, it just conflicts with an existing booking for the same
+      // employee(s).
+      res.status(409).json({ error: "booking_overlap", message: err.message });
+      return;
+    }
     if (err instanceof BookingValidationError) {
       res.status(400).json({ error: "invalid_employee_split", message: err.message });
       return;
@@ -298,7 +307,7 @@ router.patch("/bookings/:id", requireOrgSession, async (req, res) => {
       ...(body.notes !== undefined && { notes: body.notes }),
       // See `POST /bookings`'s comment above — payment/refund fields are only
       // settable via `POST /bookings/:id/payment` and `POST /bookings/:id/refund`.
-    });
+    }, computeRoute);
     if (!row) {
       res.status(404).json({ error: "booking_not_found" });
       return;
@@ -306,6 +315,14 @@ router.patch("/bookings/:id", requireOrgSession, async (req, res) => {
     const data = UpdateBookingResponse.parse(toWire(row));
     res.status(200).json(data);
   } catch (err) {
+    if (err instanceof BookingOverlapError) {
+      // BUG-3 (`BUGS_Mobull_2026-09-10.md`) — 409, not 400: the request is
+      // well-formed, it just conflicts with an existing booking for the same
+      // employee(s). Also catches an update that moves this booking's own
+      // time/employee/address INTO conflict with another booking.
+      res.status(409).json({ error: "booking_overlap", message: err.message });
+      return;
+    }
     if (err instanceof BookingValidationError) {
       res.status(400).json({ error: "invalid_employee_split", message: err.message });
       return;

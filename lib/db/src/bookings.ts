@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNotNull, lte, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, ne, notInArray, sql } from "drizzle-orm";
 import {
   bookingsTable,
   bookingPackagesTable,
@@ -8,6 +8,7 @@ import {
   type Booking,
 } from "./schema";
 import { withOrganization } from "./tenant";
+import { db } from "./client";
 
 export type EmployeeSplitInput = { employeeId: number; percentage: string };
 
@@ -38,6 +39,35 @@ export type UpdateBookingInput = Partial<Omit<InsertBooking, "organizationId" | 
  * sum to 100, or require at least one employee).
  */
 export class BookingValidationError extends Error {}
+
+/**
+ * Thrown by `assertNoBookingOverlap` (called from `createBooking`/`updateBooking`)
+ * for BUG-3 in `BUGS_Mobull_2026-09-10.md` — a booking that double-books one of its
+ * assigned employees, either a literal `[start, start+duration)` time overlap with
+ * another active booking, or a gap to a neighboring booking smaller than the real
+ * drive time between the two addresses. Same catch-and-map convention as
+ * `BookingValidationError`, except routes should respond `409` (a conflict with
+ * existing state), not `400` — see `assertNoBookingOverlap`'s doc comment below.
+ */
+export class BookingOverlapError extends Error {}
+
+/**
+ * `computeRoute` from `artifacts/api-server/src/integrations/google-maps.ts` — `lib/db`
+ * can't import that module directly (it lives in a different workspace package that
+ * itself depends on `@workspace/db`, and isn't part of `api-server`'s published
+ * `package.json` `exports` anyway; see that package's doc comment on why `exports`
+ * only exposes `./src/app.ts`), so the route handler injects it here instead. This
+ * type's shape matches `computeRoute` exactly (`{ originPlaceId, destinationPlaceId,
+ * departureTime }` -> `{ miles, minutes }`), so a caller can pass that function
+ * straight through with no wrapper — `assertNoBookingOverlap` below reuses it as-is
+ * and never builds a parallel distance/duration helper.
+ */
+export type ComputeRouteFn = (params: {
+  originPlaceId: string;
+  destinationPlaceId: string;
+  /** RFC3339 UTC, e.g. from `Date#toISOString()`. */
+  departureTime: string;
+}) => Promise<{ miles: number; minutes: number }>;
 
 export function validateEmployeeSplit(employeeSplit: EmployeeSplitInput[]): void {
   if (employeeSplit.length === 0) return;
@@ -276,6 +306,217 @@ export async function listAnchorCandidates(
   });
 }
 
+/** Shared "tx" type for the helpers below — same derivation `tenant.ts`'s
+ *  `withOrganization` already uses for its own callback parameter, reused here rather
+ *  than typed ad hoc. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Duration to assume for a booking whose assigned packages sum to zero (or has none
+ *  assigned yet) — same convention (and same literal fallback) as the frontend's own
+ *  `bookingDuration` helper in `detail-hub`'s `suggest-slots.ts`, reused here rather
+ *  than invented independently so a booking "looks" the same size to both the
+ *  client-side slot filter (BUG-3's UI half, a separate pass) and this server-side
+ *  guard. */
+const DEFAULT_BOOKING_DURATION_MINUTES = 60;
+
+function timeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(total: number): string {
+  const clamped = Math.max(0, Math.round(total));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function isInactiveBookingStatus(status: string): boolean {
+  return (INACTIVE_BOOKING_STATUSES as readonly string[]).includes(status);
+}
+
+/**
+ * Sums `packages.durationMinutes` across a set of package ids scoped to this
+ * organization — the "how long is this booking" derivation `listAnchorCandidates`
+ * above already needs for EXISTING bookings (via `booking_packages`), reused here for
+ * a booking that doesn't have a `booking_packages` row yet (a not-yet-inserted
+ * create, or a `packageIds` patch not yet written). Falls back to
+ * `DEFAULT_BOOKING_DURATION_MINUTES` when the set is empty or sums to zero — same
+ * convention as `suggest-slots.ts`'s `bookingDuration`.
+ */
+async function sumPackageDurationMinutes(tx: Tx, organizationId: string, packageIds: number[]): Promise<number> {
+  if (packageIds.length === 0) return DEFAULT_BOOKING_DURATION_MINUTES;
+  const [row] = await tx
+    .select({ total: sql<string>`coalesce(sum(${packagesTable.durationMinutes}), 0)` })
+    .from(packagesTable)
+    .where(and(eq(packagesTable.organizationId, organizationId), inArray(packagesTable.id, packageIds)));
+  const total = Number(row?.total ?? 0);
+  return total > 0 ? total : DEFAULT_BOOKING_DURATION_MINUTES;
+}
+
+type OverlapCandidate = {
+  id: number;
+  startTime: string;
+  startMins: number;
+  durationMinutes: number;
+  endMins: number;
+  googlePlaceId: string | null;
+  employeeIds: number[];
+};
+
+/**
+ * BUG-3 (`BUGS_Mobull_2026-09-10.md`) — the server-side half of "two appointments can
+ * be booked for the same technician at overlapping times." Called by
+ * `createBooking`/`updateBooking` before their write, for the (new or patched)
+ * booking's effective date/time/duration/employees/address:
+ *
+ * 1. Literal overlap: `[newStart, newStart+newDuration)` vs. `[c.startMins,
+ *    c.endMins)` for any of the booking's assigned employees' OTHER active (not
+ *    `cancelled`/`no-show`) bookings that same `date` — checked unconditionally,
+ *    coordinates or not.
+ * 2. Drive-time gap: for the immediately-adjacent booking before/after the new
+ *    window on each assigned employee's schedule that day, if BOTH bookings have a
+ *    real `googlePlaceId`, the gap between them must be >= the real one-way drive
+ *    minutes the injected `computeRoute` returns for that pair. Neither booking
+ *    having coordinates is a legitimate "can't compute a real drive time" case
+ *    (never fabricated) — that pair is skipped, not rejected and not passed. A
+ *    `computeRoute` failure (upstream/config/no-route error) is NOT swallowed here —
+ *    it propagates to the caller (mapped to `500` by the route handlers' existing
+ *    catch-all) rather than silently skipping the safety check on a transient Google
+ *    failure.
+ *
+ * Scoped by `employeeId` + `date` (not a full-organization scan) via a single query
+ * joining `employee_splits`, matching this file's other `listBookings`-style query
+ * shape.
+ */
+async function assertNoBookingOverlap(
+  tx: Tx,
+  organizationId: string,
+  opts: {
+    /** Excluded from the conflict search — the booking being updated, never checked
+     *  against itself. Omitted for a create. */
+    excludeBookingId?: number;
+    date: string;
+    startTime: string;
+    durationMinutes: number;
+    employeeIds: number[];
+    googlePlaceId: string | null;
+  },
+  computeRoute?: ComputeRouteFn,
+): Promise<void> {
+  if (opts.employeeIds.length === 0) return;
+
+  const newStart = timeToMinutes(opts.startTime);
+  const newEnd = newStart + opts.durationMinutes;
+
+  const rows = await tx
+    .select({
+      id: bookingsTable.id,
+      startTime: bookingsTable.startTime,
+      googlePlaceId: bookingsTable.googlePlaceId,
+      employeeId: employeeSplitsTable.employeeId,
+    })
+    .from(bookingsTable)
+    .innerJoin(employeeSplitsTable, eq(employeeSplitsTable.bookingId, bookingsTable.id))
+    .where(
+      and(
+        eq(bookingsTable.organizationId, organizationId),
+        eq(bookingsTable.date, opts.date),
+        notInArray(bookingsTable.status, INACTIVE_BOOKING_STATUSES),
+        inArray(employeeSplitsTable.employeeId, opts.employeeIds),
+        ...(opts.excludeBookingId !== undefined ? [ne(bookingsTable.id, opts.excludeBookingId)] : []),
+      ),
+    );
+  if (rows.length === 0) return;
+
+  const candidateIds = Array.from(new Set(rows.map((r) => r.id)));
+  const durationRows = await tx
+    .select({
+      bookingId: bookingPackagesTable.bookingId,
+      totalDurationMinutes: sql<string>`coalesce(sum(${packagesTable.durationMinutes}), 0)`,
+    })
+    .from(bookingPackagesTable)
+    .innerJoin(packagesTable, eq(bookingPackagesTable.packageId, packagesTable.id))
+    .where(and(eq(bookingPackagesTable.organizationId, organizationId), inArray(bookingPackagesTable.bookingId, candidateIds)))
+    .groupBy(bookingPackagesTable.bookingId);
+  const durationByBooking = new Map<number, number>();
+  for (const row of durationRows) {
+    const total = Number(row.totalDurationMinutes);
+    durationByBooking.set(row.bookingId, total > 0 ? total : DEFAULT_BOOKING_DURATION_MINUTES);
+  }
+
+  const byId = new Map<number, OverlapCandidate>();
+  for (const row of rows) {
+    let candidate = byId.get(row.id);
+    if (!candidate) {
+      const startMins = timeToMinutes(row.startTime);
+      const durationMinutes = durationByBooking.get(row.id) ?? DEFAULT_BOOKING_DURATION_MINUTES;
+      candidate = {
+        id: row.id,
+        startTime: row.startTime,
+        startMins,
+        durationMinutes,
+        endMins: startMins + durationMinutes,
+        googlePlaceId: row.googlePlaceId,
+        employeeIds: [],
+      };
+      byId.set(row.id, candidate);
+    }
+    candidate.employeeIds.push(row.employeeId);
+  }
+  const candidates = Array.from(byId.values());
+
+  // 1. Literal overlap — checked against every same-day, same-employee candidate,
+  //    coordinates or not.
+  for (const candidate of candidates) {
+    if (newStart < candidate.endMins && candidate.startMins < newEnd) {
+      const sharedEmployeeId = candidate.employeeIds.find((employeeId) => opts.employeeIds.includes(employeeId));
+      throw new BookingOverlapError(
+        `This booking (${opts.startTime}-${minutesToTime(newEnd)} on ${opts.date}) overlaps booking #${candidate.id} ` +
+          `for employee #${sharedEmployeeId} (${candidate.startTime}-${minutesToTime(candidate.endMins)}).`,
+      );
+    }
+  }
+
+  // 2. Drive-time gap to the immediately-adjacent booking before/after, per employee
+  //    — only checked when both sides have real coordinates.
+  if (!computeRoute || !opts.googlePlaceId) return;
+
+  const checkedNeighborIds = new Set<number>();
+  for (const employeeId of opts.employeeIds) {
+    const sameEmployee = candidates
+      .filter((c) => c.employeeIds.includes(employeeId))
+      .sort((a, b) => a.startMins - b.startMins);
+
+    const prev = [...sameEmployee].reverse().find((c) => c.endMins <= newStart) ?? null;
+    const next = sameEmployee.find((c) => c.startMins >= newEnd) ?? null;
+
+    const pairs: Array<{ neighbor: OverlapCandidate | null; gapMinutes: number | null }> = [
+      { neighbor: prev, gapMinutes: prev ? newStart - prev.endMins : null },
+      { neighbor: next, gapMinutes: next ? next.startMins - newEnd : null },
+    ];
+
+    for (const { neighbor, gapMinutes } of pairs) {
+      if (!neighbor || gapMinutes === null || !neighbor.googlePlaceId || checkedNeighborIds.has(neighbor.id)) continue;
+      checkedNeighborIds.add(neighbor.id);
+
+      const route = await computeRoute({
+        originPlaceId: opts.googlePlaceId,
+        destinationPlaceId: neighbor.googlePlaceId,
+        departureTime: new Date(Date.now() + 60_000).toISOString(),
+      });
+
+      if (gapMinutes < route.minutes) {
+        throw new BookingOverlapError(
+          `This booking doesn't leave enough drive time to/from booking #${neighbor.id} for employee #${employeeId} ` +
+            `(${neighbor.startTime}-${minutesToTime(neighbor.endMins)} on ${opts.date}) — needs ~${Math.round(route.minutes)} min ` +
+            `drive, only ${Math.round(gapMinutes)} min between them.`,
+        );
+      }
+    }
+  }
+}
+
 export async function getBookingById(organizationId: string, id: number): Promise<BookingWithRelations | null> {
   return withOrganization(organizationId, async (tx) => {
     const [booking] = await tx
@@ -307,11 +548,37 @@ export async function createBooking(
   organizationId: string,
   createdBy: string,
   input: CreateBookingInput,
+  /** BUG-3 — injected from `artifacts/api-server/src/integrations/google-maps.ts`'s
+   *  `computeRoute` by the route handler; see `ComputeRouteFn`'s doc comment above
+   *  for why `lib/db` can't import it directly. Omit only in a context (e.g. a
+   *  script/test) that doesn't need the drive-time half of the overlap check — the
+   *  literal time-overlap check still always runs regardless. */
+  computeRoute?: ComputeRouteFn,
 ): Promise<BookingWithRelations> {
   const { packageIds, employeeSplit, ...bookingFields } = input;
   validateEmployeeSplit(employeeSplit);
 
   return withOrganization(organizationId, async (tx) => {
+    // BUG-3 (`BUGS_Mobull_2026-09-10.md`) — reject a booking that double-books one of
+    // its assigned employees before ever writing it. Skipped only when the booking
+    // itself is being created already cancelled/no-show (e.g. historical data entry)
+    // — nothing to double-book against for a job that was never going to happen.
+    if (!isInactiveBookingStatus(bookingFields.status)) {
+      const durationMinutes = await sumPackageDurationMinutes(tx, organizationId, packageIds);
+      await assertNoBookingOverlap(
+        tx,
+        organizationId,
+        {
+          date: bookingFields.date,
+          startTime: bookingFields.startTime,
+          durationMinutes,
+          employeeIds: employeeSplit.map((s) => s.employeeId),
+          googlePlaceId: bookingFields.googlePlaceId ?? null,
+        },
+        computeRoute,
+      );
+    }
+
     const [booking] = await tx
       .insert(bookingsTable)
       .values({ ...bookingFields, organizationId, createdBy })
@@ -341,25 +608,76 @@ export async function updateBooking(
   organizationId: string,
   id: number,
   patch: UpdateBookingInput,
+  /** BUG-3 — see `createBooking`'s same-named param doc comment above. */
+  computeRoute?: ComputeRouteFn,
 ): Promise<BookingWithRelations | null> {
   const { packageIds, employeeSplit, ...bookingFields } = patch;
   if (employeeSplit !== undefined) validateEmployeeSplit(employeeSplit);
 
   return withOrganization(organizationId, async (tx) => {
-    let booking: Booking | undefined;
+    // Read the current row unconditionally (not only when `bookingFields` is empty,
+    // as before this pass) — BUG-3's overlap check needs the *effective*
+    // date/time/status/employees/packages/address this booking will have after the
+    // patch, and any field not itself being patched still needs its existing value
+    // to compute that.
+    const [current] = await tx
+      .select()
+      .from(bookingsTable)
+      .where(and(eq(bookingsTable.organizationId, organizationId), eq(bookingsTable.id, id)));
+    if (!current) return null;
+
+    const effectiveStatus = bookingFields.status ?? current.status;
+    if (!isInactiveBookingStatus(effectiveStatus)) {
+      const effectiveDate = bookingFields.date ?? current.date;
+      const effectiveStartTime = bookingFields.startTime ?? current.startTime;
+      const effectiveGooglePlaceId =
+        bookingFields.googlePlaceId !== undefined ? bookingFields.googlePlaceId : current.googlePlaceId;
+
+      const effectiveEmployeeIds =
+        employeeSplit !== undefined
+          ? employeeSplit.map((s) => s.employeeId)
+          : (
+              await tx
+                .select({ employeeId: employeeSplitsTable.employeeId })
+                .from(employeeSplitsTable)
+                .where(and(eq(employeeSplitsTable.organizationId, organizationId), eq(employeeSplitsTable.bookingId, id)))
+            ).map((r) => r.employeeId);
+
+      const effectivePackageIds =
+        packageIds !== undefined
+          ? packageIds
+          : (
+              await tx
+                .select({ packageId: bookingPackagesTable.packageId })
+                .from(bookingPackagesTable)
+                .where(and(eq(bookingPackagesTable.organizationId, organizationId), eq(bookingPackagesTable.bookingId, id)))
+            ).map((r) => r.packageId);
+
+      const durationMinutes = await sumPackageDurationMinutes(tx, organizationId, effectivePackageIds);
+      await assertNoBookingOverlap(
+        tx,
+        organizationId,
+        {
+          excludeBookingId: id,
+          date: effectiveDate,
+          startTime: effectiveStartTime,
+          durationMinutes,
+          employeeIds: effectiveEmployeeIds,
+          googlePlaceId: effectiveGooglePlaceId,
+        },
+        computeRoute,
+      );
+    }
+
+    let booking: Booking = current;
     if (Object.keys(bookingFields).length > 0) {
-      [booking] = await tx
+      const [updated] = await tx
         .update(bookingsTable)
         .set({ ...bookingFields, updatedAt: new Date() })
         .where(and(eq(bookingsTable.organizationId, organizationId), eq(bookingsTable.id, id)))
         .returning();
-    } else {
-      [booking] = await tx
-        .select()
-        .from(bookingsTable)
-        .where(and(eq(bookingsTable.organizationId, organizationId), eq(bookingsTable.id, id)));
+      booking = updated!;
     }
-    if (!booking) return null;
 
     if (packageIds !== undefined) {
       await tx
