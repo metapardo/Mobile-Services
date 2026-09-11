@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { format, addDays, addWeeks, subWeeks, startOfWeek, startOfDay, isToday, isSameDay, isBefore } from 'date-fns';
+import {
+  format, addDays, addWeeks, subWeeks, addMonths, subMonths,
+  startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfDay,
+  isToday, isSameDay, isSameMonth, isBefore,
+} from 'date-fns';
 import { adaptBooking } from '@/lib/api-adapters';
 import { useListBookings, useListClients, useListEmployees, useListPackages, getListBookingsQueryKey } from '@workspace/api-client-react';
 import { Link } from 'wouter';
-import { Plus, ChevronLeft, ChevronRight, CalendarPlus, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, ChevronDown, Check, CalendarPlus, Loader2, AlertTriangle } from 'lucide-react';
 import { StatusBadge } from '@/components/status-badge';
 import type { FuelGaugeResult } from '@/lib/fuel-gauge';
 import { FuelGaugeIcon } from '@/components/fuel-gauge-icon';
@@ -28,6 +32,23 @@ const HOUR_HEIGHT = 64; // px per hour
 const GRID_START_HOUR = 7; // 7 AM
 const GRID_END_HOUR = 21;  // 9 PM
 const GRID_HOURS = GRID_END_HOUR - GRID_START_HOUR;
+
+// Material Design's calendar surfaces (Google Calendar chief among them) are
+// the layout baseline for the new view switcher and week/month grids added
+// here: a labeled dropdown trigger showing the active view, week view as
+// day-columns sharing one hour axis, month view as a dense day-cell grid
+// with overflow-truncated event chips. The visual language stays this app's
+// own (Blue Glass, Signal Blue accent, existing `DropdownMenu` primitive) —
+// only the structural/interaction conventions come from Material.
+type CalendarViewMode = 'day' | 'week' | 'month';
+const VIEW_LABELS: Record<CalendarViewMode, string> = { day: 'Day', week: 'Week', month: 'Month' };
+const VIEW_MODES: CalendarViewMode[] = ['day', 'week', 'month'];
+
+// Material's month grid shows a couple of event chips per day cell before
+// collapsing into a "+N more" affordance — never the full list, which
+// would blow out cell height. 2 keeps a same-day double-booking fully
+// visible without crowding a narrow mobile cell.
+const MONTH_CELL_MAX_EVENTS = 2;
 
 /**
  * PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md — minimal Phase 1 compatibility
@@ -57,34 +78,61 @@ const CALENDAR_UNSCORED_GAUGE: FuelGaugeResult = {
 };
 
 export default function Calendar() {
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekAnchor, setWeekAnchor] = useState(new Date());
+  const [monthAnchor, setMonthAnchor] = useState(new Date());
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to current time on mount
+  // Auto-scroll to current time on mount — day/week views only, month view
+  // has no vertical time axis to scroll.
   useEffect(() => {
-    if (scrollRef.current) {
+    if (viewMode !== 'month' && scrollRef.current) {
       const now = new Date();
       const minutesFromStart = (now.getHours() - GRID_START_HOUR) * 60 + now.getMinutes();
       const scrollTo = (minutesFromStart / 60) * HOUR_HEIGHT - 120;
       scrollRef.current.scrollTop = Math.max(0, scrollTo);
     }
-  }, []);
+  }, [viewMode]);
 
   const weekStart = startOfWeek(weekAnchor, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const weekEnd = addDays(weekStart, 6);
+
+  const monthGridStart = startOfWeek(startOfMonth(monthAnchor), { weekStartsOn: 0 });
+  const monthGridEnd = endOfWeek(endOfMonth(monthAnchor), { weekStartsOn: 0 });
+  const monthGridDays = (() => {
+    const out: Date[] = [];
+    let d = monthGridStart;
+    while (d <= monthGridEnd) {
+      out.push(d);
+      d = addDays(d, 1);
+    }
+    return out;
+  })();
+  const monthGridWeeks = Array.from({ length: monthGridDays.length / 7 }, (_, i) => monthGridDays.slice(i * 7, i * 7 + 7));
 
   const selectedStr = format(selectedDate, 'yyyy-MM-dd');
 
   // ── Real data ──────────────────────────────────────────────────────────────
   // Scoped to the visible week — FR-10's whole reason for a `start`/`end` list
   // query is so the calendar doesn't fetch every booking an organization has
-  // ever made just to render one week.
+  // ever made just to render one week. Kept unconditional (not gated to
+  // `viewMode === 'day' || 'week'`) so switching modes never triggers a fresh
+  // loading state for data already in hand.
   const weekBookingsQuery = useListBookings({
     start: format(weekStart, 'yyyy-MM-dd'),
     end: format(weekEnd, 'yyyy-MM-dd'),
   });
+  // Month view's own range query — the grid shows the leading/trailing days
+  // of adjacent months too, so it's scoped to the full 6-row grid, not just
+  // the calendar month. Only enabled in month mode: no reason to pay for a
+  // much wider query on every load when day/week are what most sessions use.
+  const monthRangeParams = { start: format(monthGridStart, 'yyyy-MM-dd'), end: format(monthGridEnd, 'yyyy-MM-dd') };
+  const monthBookingsQuery = useListBookings(
+    monthRangeParams,
+    { query: { queryKey: getListBookingsQueryKey(monthRangeParams), enabled: viewMode === 'month' } },
+  );
   // `includeArchived`/`includeInactive` so a booking that references a client/
   // package/employee retired *after* the booking was made still resolves to a real
   // name here instead of `undefined` — soft-delete exists specifically so historical
@@ -125,6 +173,7 @@ export default function Calendar() {
   const packages = packagesQuery.data ?? [];
   const employees = employeesQuery.data ?? [];
   const weekBookings = weekBookingsLoaded.map(adaptBooking);
+  const monthBookings = (monthBookingsQuery.data ?? []).map(adaptBooking);
 
   const dayBookings = weekBookings
     .filter(b => b.date === selectedStr)
@@ -138,72 +187,128 @@ export default function Calendar() {
   const startMinutes = GRID_START_HOUR * 60;
   const nowTopPx = ((nowMinutes - startMinutes) / 60) * HOUR_HEIGHT;
 
-  // BUG-9: the viewed day itself is before today — every empty-slot cell on
-  // it is inert, regardless of time of day. Computed once per render rather
-  // than per-cell since it doesn't depend on the cell's hour/minute.
-  const selectedDayIsPast = isBefore(startOfDay(selectedDate), startOfDay(now));
+  // BUG-9: a day before today has every empty-slot cell inert regardless of
+  // time of day. Computed per-date (not just for `selectedDate`) since week
+  // view needs this per column now, not just for the single viewed day.
+  function isPastDay(day: Date): boolean {
+    return isBefore(startOfDay(day), startOfDay(now));
+  }
+  const selectedDayIsPast = isPastDay(selectedDate);
 
-  function prevWeek() {
-    const prev = subWeeks(weekAnchor, 1);
-    setWeekAnchor(prev);
-  }
-  function nextWeek() {
-    const next = addWeeks(weekAnchor, 1);
-    setWeekAnchor(next);
-  }
+  function prevWeek() { setWeekAnchor(subWeeks(weekAnchor, 1)); }
+  function nextWeek() { setWeekAnchor(addWeeks(weekAnchor, 1)); }
+  function prevMonth() { setMonthAnchor(subMonths(monthAnchor, 1)); }
+  function nextMonth() { setMonthAnchor(addMonths(monthAnchor, 1)); }
+
+  // Header prev/next paging depends on the active view: day/week both page
+  // by week (day mode's own arrows have always paged the visible week strip
+  // without moving the selected day inside it — unchanged), month pages by
+  // calendar month.
+  function handlePrev() { if (viewMode === 'month') prevMonth(); else prevWeek(); }
+  function handleNext() { if (viewMode === 'month') nextMonth(); else nextWeek(); }
+
   function goToday() {
     const today = new Date();
     setSelectedDate(today);
     setWeekAnchor(today);
+    setMonthAnchor(today);
   }
 
-  const loadFailed = weekBookingsQuery.isError || clientsQuery.isError || packagesQuery.isError || employeesQuery.isError;
+  // Jump into Day view for a specific date — used by week view's column
+  // headers and month view's day cells (Material's own drill-down
+  // convention: picking a day in a wider view opens that day).
+  function goToDay(day: Date) {
+    setSelectedDate(day);
+    setWeekAnchor(day);
+    setMonthAnchor(day);
+    setViewMode('day');
+  }
+
+  const headerLabel = viewMode === 'month'
+    ? format(monthAnchor, 'MMMM yyyy')
+    : viewMode === 'week' && !isSameMonth(weekStart, weekEnd)
+      ? `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`
+      : format(viewMode === 'week' ? weekStart : selectedDate, 'MMMM yyyy');
+
+  const loadFailed = weekBookingsQuery.isError || clientsQuery.isError || packagesQuery.isError || employeesQuery.isError
+    || (viewMode === 'month' && monthBookingsQuery.isError);
 
   return (
     <div className="min-h-[100dvh] pb-20 md:pb-6 flex flex-col overflow-hidden">
       {/* ── Header ── */}
-      <div className="px-4 pt-5 pb-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="px-4 pt-5 pb-3 flex items-center justify-between shrink-0 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <button
-            onClick={prevWeek}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+            onClick={handlePrev}
+            className="w-8 h-8 shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button onClick={goToday} className="text-[17px] font-semibold tracking-tight hover:text-primary transition-colors">
-            {format(selectedDate, 'MMMM yyyy')}
+          <button onClick={goToday} className="text-[17px] font-semibold tracking-tight hover:text-primary transition-colors truncate">
+            {headerLabel}
           </button>
           <button
-            onClick={nextWeek}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+            onClick={handleNext}
+            className="w-8 h-8 shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        {/* New booking button — BUG-1 (`BUGS_Mobull_2026-09-10.md`): the
-            design-system `DropdownMenu` primitive replaces the old hand-rolled
-            `fixed inset-0` overlay + positioned panel, which inherited none of
-            the system's tokens, dismissal, or focus handling. "Create class"
-            is removed entirely (Mobull has no class concept), not hidden. */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className="w-9 h-9 flex items-center justify-center rounded-full gradient-btn text-white shadow-lg"
-              data-testid="button-new-booking"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[200px]">
-            <DropdownMenuItem asChild data-testid="menu-item-create-appointment">
-              <Link href="/booking/new">Create appointment</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled className="cursor-default">
-              Create personal event
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* View switcher — Material's own convention for Day/Week/Month
+              (Google Calendar's top-right view dropdown), built on this
+              app's existing `DropdownMenu` primitive rather than a new
+              visual system. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="h-9 px-3 flex items-center gap-1 rounded-full border border-white/10 text-[13px] font-semibold text-foreground hover:bg-white/10 transition-colors"
+                data-testid="button-view-switcher"
+              >
+                {VIEW_LABELS[viewMode]}
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[140px]">
+              {VIEW_MODES.map(mode => (
+                <DropdownMenuItem
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className="flex items-center justify-between gap-2"
+                  data-testid={`menu-item-view-${mode}`}
+                >
+                  <span>{VIEW_LABELS[mode]}</span>
+                  {viewMode === mode && <Check className="w-4 h-4 text-primary" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* New booking button — BUG-1 (`BUGS_Mobull_2026-09-10.md`): the
+              design-system `DropdownMenu` primitive replaces the old hand-rolled
+              `fixed inset-0` overlay + positioned panel, which inherited none of
+              the system's tokens, dismissal, or focus handling. "Create class"
+              is removed entirely (Mobull has no class concept), not hidden. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="w-9 h-9 flex items-center justify-center rounded-full gradient-btn text-white shadow-lg"
+                data-testid="button-new-booking"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[200px]">
+              <DropdownMenuItem asChild data-testid="menu-item-create-appointment">
+                <Link href="/booking/new">Create appointment</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled className="cursor-default">
+                Create personal event
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {loadFailed ? (
@@ -238,6 +343,219 @@ export default function Calendar() {
             </EmptyContent>
           </Empty>
         </div>
+      ) : viewMode === 'month' ? (
+        <>
+          {/* ── Month grid (Material's month-view layout: a dense day-cell
+              grid, no time axis) ── */}
+          <div className="flex-1 overflow-y-auto px-3 pb-3">
+            <div className="grid grid-cols-7 pb-1 shrink-0">
+              {weekDays.map(day => (
+                <div key={day.toISOString()} className="text-center text-[11px] font-medium text-muted-foreground uppercase tracking-wide py-1">
+                  {format(day, 'EEEEE')}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-px bg-white/8 rounded-lg overflow-hidden border border-white/8">
+              {monthGridWeeks.map(weekRow => weekRow.map(day => {
+                const dayStr = format(day, 'yyyy-MM-dd');
+                const inCurrentMonth = isSameMonth(day, monthAnchor);
+                const dayIsToday = isToday(day);
+                const dayIsSelected = isSameDay(day, selectedDate);
+                const bookingsForDay = monthBookings
+                  .filter(b => b.date === dayStr)
+                  .sort((a, b) => a.startTime.localeCompare(b.startTime));
+                const overflow = bookingsForDay.length - MONTH_CELL_MAX_EVENTS;
+
+                return (
+                  <button
+                    key={dayStr}
+                    onClick={() => goToDay(day)}
+                    className={`min-h-[84px] p-1.5 flex flex-col items-start gap-0.5 text-left bg-background transition-colors hover:bg-white/[0.05] ${
+                      inCurrentMonth ? '' : 'opacity-40'
+                    }`}
+                    data-testid={`calendar-month-cell-${dayStr}`}
+                  >
+                    <span className={`w-6 h-6 flex items-center justify-center rounded-full text-[12px] font-semibold shrink-0
+                      ${dayIsSelected ? 'bg-primary text-white' : dayIsToday ? 'text-primary' : 'text-foreground'}`}>
+                      {format(day, 'd')}
+                    </span>
+                    <div className="w-full flex flex-col gap-0.5 min-w-0">
+                      {bookingsForDay.slice(0, MONTH_CELL_MAX_EVENTS).map(b => {
+                        const employee = employees.find(e => e.id === b.employeeIds[0]);
+                        const client = clients.find(c => c.id === b.clientId);
+                        return (
+                          <div
+                            key={b.id}
+                            className="w-full text-[10px] leading-tight px-1 py-0.5 rounded truncate"
+                            style={{ background: `${employee?.color ?? '#3654FF'}22`, color: employee?.color ?? undefined }}
+                          >
+                            {client?.name ?? 'Booking'}
+                          </div>
+                        );
+                      })}
+                      {overflow > 0 && (
+                        <div className="text-[10px] text-muted-foreground px-1">+{overflow} more</div>
+                      )}
+                    </div>
+                  </button>
+                );
+              }))}
+            </div>
+          </div>
+        </>
+      ) : viewMode === 'week' ? (
+        <>
+          {/* ── Week column headers ── replaces the day-strip in week mode:
+              each header doubles as the column's date label and a
+              drill-down into Day view for that date (Material's own
+              week-view convention). */}
+          <div className="px-3 pb-2 shrink-0">
+            <div className="flex" style={{ paddingLeft: '60px' }}>
+              {weekDays.map(day => {
+                const selected = isSameDay(day, selectedDate);
+                const today = isToday(day);
+                return (
+                  <button
+                    key={day.toISOString()}
+                    onClick={() => goToDay(day)}
+                    className="flex-1 min-w-[64px] flex flex-col items-center gap-0.5 py-1"
+                    data-testid={`calendar-week-header-${format(day, 'yyyy-MM-dd')}`}
+                  >
+                    <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                      {format(day, 'EEEEE')}
+                    </span>
+                    <span className={`w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-semibold transition-colors
+                      ${selected ? 'bg-primary text-white' : today ? 'text-primary' : 'text-foreground'}`}>
+                      {format(day, 'd')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mx-4 h-px bg-white/10 shrink-0" />
+
+          {/* ── Scrollable week grid — one shared hour axis, 7 day columns.
+              A single `overflow-auto` container handles both axes: the
+              hour gutter is `sticky left-0` inside it, so vertical scroll
+              moves gutter + columns together while horizontal scroll (only
+              needed on narrow viewports, where 7 columns don't fit) slides
+              columns under the pinned gutter. ── */}
+          <div ref={scrollRef} className="flex-1 overflow-auto">
+            <div className="relative flex" style={{ height: `${GRID_HOURS * HOUR_HEIGHT}px`, minWidth: `${60 + 7 * 72}px` }}>
+              <div className="sticky left-0 z-20 bg-background w-[60px] shrink-0">
+                {hours.map(hour => (
+                  <div
+                    key={hour}
+                    className="absolute right-3 text-[11px] font-medium text-muted-foreground select-none"
+                    style={{ top: `${(hour - GRID_START_HOUR) * HOUR_HEIGHT - 7}px` }}
+                  >
+                    {format(new Date(2000, 0, 1, hour, 0), 'h a')}
+                  </div>
+                ))}
+              </div>
+
+              {weekDays.map(day => {
+                const dayStr = format(day, 'yyyy-MM-dd');
+                const dayIsPast = isPastDay(day);
+                const dayIsToday = isToday(day);
+                const bookingsForDay = weekBookings
+                  .filter(b => b.date === dayStr)
+                  .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+                return (
+                  <div key={dayStr} className="relative flex-1 min-w-[72px] border-l border-white/8">
+                    {hours.map(hour => (
+                      <div
+                        key={hour}
+                        className="absolute w-full border-t border-white/8 pointer-events-none"
+                        style={{ top: `${(hour - GRID_START_HOUR) * HOUR_HEIGHT}px` }}
+                      />
+                    ))}
+                    {hours.map(hour => (
+                      <div
+                        key={`half-${hour}`}
+                        className="absolute w-full border-t border-white/[0.04] pointer-events-none"
+                        style={{ top: `${(hour - GRID_START_HOUR) * HOUR_HEIGHT + HOUR_HEIGHT / 2}px` }}
+                      />
+                    ))}
+
+                    {/* Tappable 30-min cells — same past-inert rule as day
+                        view (BUG-9), evaluated per column. */}
+                    {Array.from({ length: GRID_HOURS * 2 }, (_, i) => i).map(i => {
+                      const minsFromGridStart = i * 30;
+                      const hour = GRID_START_HOUR + Math.floor(minsFromGridStart / 60);
+                      const minute = minsFromGridStart % 60;
+                      const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                      const label = format(new Date(2000, 0, 1, hour, minute), 'h:mm a');
+                      const cellMinutesOfDay = hour * 60 + minute;
+                      const isPastCell = dayIsPast || (dayIsToday && cellMinutesOfDay < nowMinutes);
+
+                      if (isPastCell) {
+                        return (
+                          <div
+                            key={`cell-${i}`}
+                            aria-hidden="true"
+                            className="absolute z-0 block rounded-sm opacity-40 cursor-default inset-x-1"
+                            style={{ top: `${i * (HOUR_HEIGHT / 2)}px`, height: `${HOUR_HEIGHT / 2}px` }}
+                            data-testid={`calendar-cell-past-${dayStr}-${timeStr}`}
+                          />
+                        );
+                      }
+                      return (
+                        <Link
+                          key={`cell-${i}`}
+                          href={`/booking/new?date=${dayStr}&time=${timeStr}`}
+                          aria-label={`Create appointment at ${label}`}
+                          className="absolute z-0 block rounded-sm transition-colors hover:bg-white/[0.05] active:bg-white/[0.08] focus-visible:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary inset-x-1"
+                          style={{ top: `${i * (HOUR_HEIGHT / 2)}px`, height: `${HOUR_HEIGHT / 2}px` }}
+                          data-testid={`calendar-cell-${dayStr}-${timeStr}`}
+                        />
+                      );
+                    })}
+
+                    {dayIsToday && nowTopPx >= 0 && nowTopPx <= GRID_HOURS * HOUR_HEIGHT && (
+                      <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${nowTopPx}px` }}>
+                        <div className="h-[1.5px] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+                      </div>
+                    )}
+
+                    {bookingsForDay.map(booking => {
+                      const [h, m] = booking.startTime.split(':').map(Number);
+                      const topPx = ((h * 60 + m - startMinutes) / 60) * HOUR_HEIGHT;
+                      const employee = employees.find(e => e.id === booking.employeeIds[0]);
+                      const client = clients.find(c => c.id === booking.clientId);
+                      const pkgs = booking.packageIds.map(id => packages.find(p => p.id === id)!).filter(Boolean);
+                      const totalDuration = pkgs.reduce((sum, p) => sum + p.durationMinutes, 0) || 90;
+                      const heightPx = Math.max((totalDuration / 60) * HOUR_HEIGHT, 32);
+
+                      return (
+                        <Link key={booking.id} href={`/booking/${booking.id}`}>
+                          <div
+                            className="absolute z-10 rounded-lg overflow-hidden cursor-pointer hover:brightness-110 transition-all px-1 pt-1 inset-x-1"
+                            style={{
+                              top: `${topPx + 2}px`,
+                              height: `${heightPx - 4}px`,
+                              background: `${employee?.color ?? '#3654FF'}22`,
+                              borderLeft: `2px solid ${employee?.color ?? '#3654FF'}`,
+                              backdropFilter: 'blur(8px)',
+                            }}
+                            data-testid={`booking-${booking.id}`}
+                          >
+                            <p className="text-[10px] font-semibold leading-tight truncate" style={{ color: employee?.color }}>
+                              {client?.name}
+                            </p>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
       ) : (
         <>
       {/* ── Week strip ── */}
