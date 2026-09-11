@@ -27,7 +27,7 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-nav z-50">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-nav border-t border-sidebar-border z-50">
       <div className="grid grid-cols-5 h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -37,7 +37,13 @@ export function BottomNav() {
               key={tab.path}
               href={tab.path}
               className={`flex flex-col items-center justify-center gap-0.5 transition-colors ${
-                active ? 'text-primary' : 'text-muted-foreground'
+                // Same active/inactive treatment as sidebar-nav.tsx's desktop
+                // equivalent: Signal Blue for the active route (the Single-
+                // Accent Rule), `--sidebar-foreground` — not the app-wide
+                // `--muted-foreground` — for inactive, since this token is
+                // the one already tuned for legibility against this exact
+                // `--sidebar` surface.
+                active ? 'text-primary' : 'text-sidebar-foreground'
               }`}
               data-testid={`nav-${tab.name.toLowerCase()}`}
             >

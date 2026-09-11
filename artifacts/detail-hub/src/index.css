@@ -17,7 +17,6 @@
   --glass-border: rgba(255, 255, 255, 0.90);
   --glass-shine: rgba(255, 255, 255, 0.80);
   --glass-blur: blur(24px) saturate(1.6);
-  --glass-nav-bg: rgba(255, 255, 255, 0.82);
 }
 
 .dark {
@@ -26,7 +25,6 @@
   --status-amber: #fbbf24;
   --status-red: #f87171;
   --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-nav-bg: rgba(7, 7, 30, 0.68);
 }
 
 @layer utilities {
@@ -43,11 +41,26 @@
   }
 
   /* ── Glass navigation bar ── */
+  /* Mobile's equivalent of the sidebar (DESIGN.md's Navigation section: "the
+     sidebar is replaced entirely by a fixed bottom tab bar"), so it draws
+     from the same `--sidebar`/`--sidebar-border` tokens sidebar-nav.tsx
+     already uses — not a parallel set of hand-picked rgba values. Previously
+     hardcoded a light-mode-only white glass fill unconditionally (a
+     `--glass-nav-bg` dark override existed but the class never consumed it),
+     which read as low-contrast in the shipped dark-only app: light text
+     tokens tuned for a near-black background, rendered on a near-white bar.
+     `hsl(var(--sidebar) / <alpha>)` inherits the correct value from whichever
+     theme is active instead of hardcoding one. The lift shadow + inset top
+     highlight follow DESIGN.md's Elevation & Depth guidance (blur + a fine
+     inset highlight along the top edge, not a drop-shadow light source) —
+     cast upward since this surface sits at the bottom of the viewport. */
   .glass-nav {
-    background: rgba(255, 255, 255, 0.82);
+    background: hsl(var(--sidebar) / 0.92);
     backdrop-filter: blur(32px) saturate(1.8);
     -webkit-backdrop-filter: blur(32px) saturate(1.8);
-    border-color: rgba(200, 205, 225, 0.70);
+    box-shadow:
+      0 -4px 24px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 hsl(var(--sidebar-border) / 0.8);
   }
 
   /* Hide scrollbar while keeping scroll behaviour */

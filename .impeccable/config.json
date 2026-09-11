@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "artifacts/detail-hub/src/pages/calendar.tsx"
+        ],
+        "createdAt": "2026-09-10T15:02:48.760Z",
+        "reason": "functional technician color-coding on a shared multi-tech calendar, not decorative — pre-existing code, confirmed read before this session's edits"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "artifacts/detail-hub/src/index.css"
+        ],
+        "createdAt": "2026-09-11T14:11:48.023Z",
+        "reason": "Pre-existing .wordmark-gradient-text: documented, intentional approximation of the retired wordmark's raster gradient for a scalable headline — out of scope for this bottom-nav contrast/token pass"
+      }
+    ]
+  }
+}
