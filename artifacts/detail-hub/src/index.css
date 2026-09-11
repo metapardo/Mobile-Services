@@ -95,4 +95,65 @@
     -webkit-text-fill-color: transparent;
     color: transparent;
   }
+
+  /* ── Booking-card arrival emphasis ──
+     Plays once when the calendar lands on a booking `booking-new.tsx` just
+     redirected here for (see `calendar.tsx`'s `highlightBookingId`) — the
+     "top design interaction" that draws the eye to it. Deliberately reuses
+     this app's own signature glow/shimmer vocabulary (DESIGN.md's Elevation
+     & Depth: "a blue-tinted border... a diagonal shimmer sweep, and a small
+     upward translate all appear together as one coordinated response",
+     already how `.glass-control`/`.glass-interactive` answer hover/focus)
+     rather than inventing an unrelated effect — same signature, fired once
+     on arrival instead of on hover. Settles back to the card's untouched
+     resting style; no permanent visual change. */
+  .booking-card-arrive {
+    animation: booking-card-glow 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .booking-card-arrive::after {
+    content: "";
+    position: absolute;
+    inset: -20% auto -20% 0;
+    width: 46%;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 8%, var(--glass-shimmer, rgba(255, 255, 255, 0.4)) 48%, transparent 88%);
+    filter: blur(7px);
+    animation: booking-card-shimmer-sweep 900ms cubic-bezier(0.2, 0.65, 0.35, 1) both;
+  }
+
+  @keyframes booking-card-glow {
+    0% {
+      box-shadow: 0 0 0 2px hsl(var(--primary) / 0.95), 0 0 0 9px hsl(var(--primary) / 0.3), 0 0 42px hsl(var(--primary) / 0.6);
+      transform: translateY(-3px) scale(1.035);
+    }
+    55% {
+      box-shadow: 0 0 0 2px hsl(var(--primary) / 0.6), 0 0 0 7px hsl(var(--primary) / 0.16), 0 0 26px hsl(var(--primary) / 0.32);
+    }
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0), 0 0 0 0 hsl(var(--primary) / 0), 0 0 0 0 hsl(var(--primary) / 0);
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes booking-card-shimmer-sweep {
+    from { transform: translateX(-140%) skewX(-16deg); opacity: 0; }
+    18% { opacity: 0.85; }
+    to { transform: translateX(280%) skewX(-16deg); opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .booking-card-arrive {
+      animation: none;
+      /* Feedback that confirms the action stays legible even with motion
+         reduced (animate.md: "fewer and gentler animations, not disabling
+         all motion") — a static ring instead of the glow/scale/shimmer
+         sequence, cleared by the same timeout as the animated version. */
+      box-shadow: 0 0 0 2px hsl(var(--primary) / 0.75), 0 0 24px hsl(var(--primary) / 0.32);
+    }
+    .booking-card-arrive::after {
+      animation: none;
+      display: none;
+    }
+  }
 }

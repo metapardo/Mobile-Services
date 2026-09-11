@@ -6,7 +6,7 @@ import {
 } from 'date-fns';
 import { adaptBooking } from '@/lib/api-adapters';
 import { useListBookings, useListClients, useListEmployees, useListPackages, getListBookingsQueryKey } from '@workspace/api-client-react';
-import { Link } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { Plus, ChevronLeft, ChevronRight, ChevronDown, Check, CalendarPlus, Loader2, AlertTriangle } from 'lucide-react';
 import { StatusBadge } from '@/components/status-badge';
 import type { FuelGaugeResult } from '@/lib/fuel-gauge';
@@ -50,6 +50,27 @@ const VIEW_MODES: CalendarViewMode[] = ['day', 'week', 'month'];
 // visible without crowding a narrow mobile cell.
 const MONTH_CELL_MAX_EVENTS = 2;
 
+// booking-new.tsx redirects here as `/calendar?date=YYYY-MM-DD&highlight=<id>`
+// after a save — this is where that lands. `date` seeds the initial
+// selected/week/month anchor (read once, at mount, the same lazy-init-from-
+// URL pattern booking-new.tsx's own date/time state already uses) so the
+// calendar opens already showing the right day instead of flashing "today"
+// first.
+function parseDateParam(search: string): Date | null {
+  const dateParam = new URLSearchParams(search).get('date');
+  if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+    const parsed = new Date(`${dateParam}T00:00:00`);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
+function parseHighlightParam(search: string): number | null {
+  const raw = new URLSearchParams(search).get('highlight');
+  const parsed = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
  * PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md — minimal Phase 1 compatibility
  * fix (FR-23 itself, the calendar drive-time display rework, is explicitly
@@ -78,11 +99,30 @@ const CALENDAR_UNSCORED_GAUGE: FuelGaugeResult = {
 };
 
 export default function Calendar() {
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const [viewMode, setViewMode] = useState<CalendarViewMode>('day');
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [weekAnchor, setWeekAnchor] = useState(new Date());
-  const [monthAnchor, setMonthAnchor] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => parseDateParam(search) ?? new Date());
+  const [weekAnchor, setWeekAnchor] = useState(() => parseDateParam(search) ?? new Date());
+  const [monthAnchor, setMonthAnchor] = useState(() => parseDateParam(search) ?? new Date());
+  // The one-time arrival emphasis for a just-saved booking — see
+  // `parseHighlightParam`'s call site below for the full lifecycle.
+  const [highlightBookingId, setHighlightBookingId] = useState(() => parseHighlightParam(search));
+  const highlightHandledRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Strip `?date=`/`?highlight=` from the URL immediately (not waiting on
+  // data) so a refresh or a later `/calendar` visit never replays the
+  // arrival sequence or re-pins the view to a stale date. Scoped to just
+  // these two params (not "any query string") so a future, unrelated
+  // `?foo=bar` on this route isn't silently swallowed by this effect.
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    if (params.has('date') || params.has('highlight')) {
+      setLocation('/calendar', { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll to current time on mount — day/week views only, month view
   // has no vertical time axis to scroll.
@@ -178,6 +218,37 @@ export default function Calendar() {
   const dayBookings = weekBookings
     .filter(b => b.date === selectedStr)
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  // Once the just-created booking actually shows up in `dayBookings` (the
+  // fetch that finds it may still be in flight on first render), scroll
+  // straight to its own time instead of "now" and start the countdown that
+  // ends the one-shot arrival emphasis — see `booking-card-arrive` below.
+  // Guarded by a ref, not a dependency array, so it fires exactly once even
+  // though `dayBookings` gets a new array identity on every render.
+  useEffect(() => {
+    if (highlightHandledRef.current || highlightBookingId === null) return;
+    if (viewMode !== 'day' || weekBookingsQuery.isLoading) return;
+    const target = dayBookings.find(b => b.id === highlightBookingId);
+    if (!target) {
+      // Data loaded and the booking still isn't here — e.g. it was deleted
+      // seconds after creation. Give up gracefully rather than waiting
+      // forever for a card that will never render.
+      highlightHandledRef.current = true;
+      setHighlightBookingId(null);
+      return;
+    }
+    highlightHandledRef.current = true;
+    if (scrollRef.current) {
+      const [h, m] = target.startTime.split(':').map(Number);
+      const minutesFromStart = (h - GRID_START_HOUR) * 60 + m;
+      const scrollTo = (minutesFromStart / 60) * HOUR_HEIGHT - 160;
+      scrollRef.current.scrollTop = Math.max(0, scrollTo);
+    }
+    // Matches the animation's own duration (see index.css) plus a buffer,
+    // so the highlight class never gets pulled mid-animation.
+    const timer = setTimeout(() => setHighlightBookingId(null), 1200);
+    return () => clearTimeout(timer);
+  });
 
   const hours = Array.from({ length: GRID_HOURS }, (_, i) => GRID_START_HOUR + i);
 
@@ -710,10 +781,16 @@ export default function Calendar() {
             // Unknown on the calendar for Phase 1, deliberately.
             const gauge = CALENDAR_UNSCORED_GAUGE;
 
+            // The one-shot arrival emphasis for the booking booking-new.tsx
+            // just redirected here to show off — see `booking-card-arrive`
+            // in index.css and the scroll/timeout effect above that owns
+            // its lifecycle.
+            const justCreated = booking.id === highlightBookingId;
+
             return (
               <Link key={booking.id} href={`/booking/${booking.id}`}>
                 <div
-                  className="absolute z-10 rounded-xl overflow-hidden cursor-pointer hover:brightness-110 transition-all"
+                  className={`absolute z-10 rounded-xl overflow-hidden cursor-pointer hover:brightness-110 transition-all ${justCreated ? 'booking-card-arrive' : ''}`}
                   style={{
                     top: `${topPx + 2}px`,
                     height: `${heightPx - 4}px`,

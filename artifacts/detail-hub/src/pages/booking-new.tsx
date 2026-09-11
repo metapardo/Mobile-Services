@@ -8,7 +8,7 @@ import {
   getListBookingsQueryKey, getListClientsQueryKey, getListPackagesQueryKey, getListBookingAnchorsQueryKey,
   type CreateBookingRequestStatus, type CreatePackageRequestCategory, type BookingResult,
 } from '@workspace/api-client-react';
-import { evenSplit } from '@/lib/api-adapters';
+import { evenSplit, isoDateOnly } from '@/lib/api-adapters';
 import { getSetupProfile } from '@/lib/setup-store';
 import {
   suggestSlots,
@@ -975,7 +975,12 @@ export default function BookingNew() {
       onSuccess: async (created) => {
         await queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() });
         toast({ title: 'Appointment booked' });
-        setLocation(`/booking/${created.id}`);
+        // Land back on the calendar at the new booking's own date/time
+        // (Day view, so the card renders full-size, not the smaller week/
+        // month representations) rather than the booking's own detail page
+        // — `?highlight=` is calendar.tsx's cue to auto-scroll to it and
+        // play the one-time arrival emphasis, then strip itself from the URL.
+        setLocation(`/calendar?date=${isoDateOnly(created.date)}&highlight=${created.id}`);
       },
       onError: (err) => {
         const message = err?.data?.message ?? 'Something went wrong booking this appointment. Please try again.';
