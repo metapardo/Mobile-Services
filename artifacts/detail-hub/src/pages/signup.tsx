@@ -14,10 +14,9 @@ import {
 import {
   ArrowUpRight,
   BarChart3,
+  CalendarClock,
   CalendarDays,
   Check,
-  ChevronDown,
-  CircleDollarSign,
   CloudLightning,
   CreditCard,
   Eye,
@@ -30,7 +29,6 @@ import {
   Sparkles,
   UserRound,
   X,
-  Zap,
 } from 'lucide-react';
 import { useSignup, getGetAuthSessionQueryKey } from '@workspace/api-client-react';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
@@ -39,6 +37,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import mobullMark from '@/assets/mobull-mark.png';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
+// MARKETING_SITE_REVAMP_BRIEF.md — real product screenshots (a demo org, no
+// real customer data) for Section 2's "Book the right Jobs" (the Fuel
+// Gauge tap-to-reveal breakdown) and "Right Job, Right Time" (the
+// Appointment Optimizer's recommendation card) callouts, plus the Section 3
+// product-experience video reel.
+import bookSmartScreenshot from '@/assets/marketing/book-smart.png';
+import appointmentRecommendationsScreenshot from '@/assets/marketing/appointment-recommendations.png';
+import appointmentBookingVideo from '@/assets/marketing/appointment-booking-v2.mov';
 import './signup.css';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -228,12 +234,12 @@ function lenisScrollToHash(hash: string) {
   if (!target) return;
   if (activeLenis) {
     // Lenis caches document height at mount and via its own ResizeObserver,
-    // but this page's tall pinned `FeatureBento` runway (~260vh) can settle
-    // into its final layout after that initial measurement, leaving Lenis's
-    // cached scroll limit shorter than the page actually is — any target
-    // below that stale limit (e.g. #faq, the footer) then silently fails to
-    // scroll at all. Forcing a resize immediately before every programmatic
-    // scroll keeps this correct regardless of timing.
+    // but late-loading media (the showcase video, the grow-section
+    // screenshots) can still shift final page height after that initial
+    // measurement, leaving Lenis's cached scroll limit shorter than the
+    // page actually is — any target below that stale limit then silently
+    // fails to scroll at all. Forcing a resize immediately before every
+    // programmatic scroll keeps this correct regardless of timing.
     activeLenis.resize();
     activeLenis.scrollTo(target, { offset: 0 });
   } else {
@@ -243,80 +249,70 @@ function lenisScrollToHash(hash: string) {
   }
 }
 
+// MARKETING_SITE_REVAMP_BRIEF.md — Section 6 (Compare) and 7 (FAQ) are
+// removed entirely, so the FAQ nav item goes with them (no page destination
+// left for it to scroll to).
 const navItems = [
   { label: 'Why Mobull', href: '#why' },
   { label: 'How it works', href: '#workflow' },
   { label: 'For your business', href: '#features' },
-  { label: 'FAQ', href: '#faq' },
 ];
 
-const faqs = [
-  {
-    q: 'What kind of businesses is Mobull built for?',
-    a: 'Mobull is for owners who take the work to the customer: detailers, pressure washing crews, mobile groomers, repair teams, and any operator who wins the day from behind a wheel.',
-  },
-  {
-    q: 'Is Mobull a calendar or a payment tool?',
-    a: 'It connects both — then adds the missing layer. You can see the route, the time between stops, your expected take-home, and the follow-up that turns a one-off job into a repeatable book.',
-  },
-  {
-    q: 'How does the business assessment work?',
-    a: 'Give us a few details about your average ticket, drive time, and weekly capacity. Mobull turns those inputs into a plain-language view of where your margin is hiding — and where it is leaking.',
-  },
-  {
-    q: 'When can I start using it?',
-    a: 'Right now — sign up above and you are in. Every new account starts with a free 14-day trial and no card required, so you can try Mobull with real appointments before you decide.',
-  },
+// The one feature list shown throughout Section 8 (Get Started for Free) —
+// every item applies the whole time, Day 0 through ongoing, so unlike the
+// old two-tier list this is never split or dimmed by plan.
+const pricingFeatures: string[] = [
+  'Appointments & scheduling recommendations',
+  'Fuel Gauge cost check on every appointment',
+  'Email support',
+  'Priority support & onboarding',
 ];
 
-// Same feature set is listed on every pricing card (see `Pricing` below) —
-// tiers differ only in which of these are lit up vs. dimmed, never in which
-// rows exist, so someone can compare tiers at a glance rather than parsing
-// two different lists.
-const pricingFeatures: { label: string; starter: boolean }[] = [
-  { label: 'Appointments & scheduling recommendations', starter: true },
-  { label: 'Fuel Gauge cost check on every appointment', starter: false },
-  { label: 'Email support', starter: true },
-  { label: 'Priority support & onboarding', starter: false },
-];
-
-interface PricingTier {
-  key: 'starter' | 'premium';
-  name: string;
-  badge: string;
-  price: string;
-  priceSuffix?: string;
-  priceNote?: string;
-  description: string;
-  featured: boolean;
+interface JourneyStop {
+  key: string;
+  when: string;
+  title: string;
+  copy: string;
+  icon: IconType;
 }
 
-const pricingTiers: PricingTier[] = [
+// MARKETING_SITE_REVAMP_BRIEF.md §8 — a Day 0 → Day 14 → ongoing journey,
+// not a free-vs-premium comparison: the same full feature set (`pricingFeatures`
+// above) carries through every stop, so the timeline's job is to show when
+// the price changes, never what you lose or gain along the way.
+const journeyStops: JourneyStop[] = [
   {
-    key: 'starter',
-    name: 'Starter',
-    badge: 'FREE TRIAL',
-    price: 'Free',
-    priceNote: 'for your first 14 days',
-    description: 'Try Mobull with real appointments — no card required.',
-    featured: false,
+    key: 'day-0',
+    when: 'Day 0',
+    title: 'Free trial starts',
+    copy: 'Create your account and start booking real appointments today. No card required.',
+    icon: Sparkles,
   },
   {
-    key: 'premium',
-    name: 'Premium',
-    badge: 'MOST POPULAR',
-    price: '$40',
-    priceSuffix: '/month',
-    description: 'Everything you need to run your route like a business.',
-    featured: true,
+    key: 'day-14',
+    when: 'Day 14',
+    title: 'Converts to $25/month',
+    copy: 'One plan, full functionality. The price simply picks up where the trial left off.',
+    icon: CreditCard,
+  },
+  {
+    key: 'ongoing',
+    when: 'Ongoing',
+    title: 'Everything, the whole time',
+    copy: 'No feature gating, no upsell tiers. What you had on day one is what you keep.',
+    icon: ShieldCheck,
   },
 ];
 
+// MARKETING_SITE_REVAMP_BRIEF.md §4 — cards 3 & 4 swapped from the previous
+// order (Book an Appointment, Fuel Gauge) to this one (Fuel Gauge, Book an
+// Appointment); "Book an Appointment"'s copy replaces its stale "Aer"
+// reference with the given line.
 const flowSteps: { label: string; copy: string; icon: IconType }[] = [
   { label: 'Sign up', copy: 'Tell us what you do and where you roll.', icon: UserRound },
   { label: 'Create account', copy: 'Set your hours, radius, and real costs.', icon: ShieldCheck },
-  { label: 'Book an Appointment', copy: 'Aer will recommend a time that makes sense for your business.', icon: CalendarDays },
   { label: 'Fuel Gauge', copy: 'See if the appointment is worth the trip.', icon: BarChart3 },
+  { label: 'Book an Appointment', copy: 'Mobull’s smart recommendations suggest times where you might already be in that area.', icon: CalendarDays },
   { label: 'Take payment', copy: 'Close the loop and tee up the next one.', icon: CreditCard },
 ];
 
@@ -478,118 +474,97 @@ function Hero() {
   );
 }
 
-function ChaosSection() {
+interface GrowCallout {
+  key: string;
+  icon: IconType;
+  headline: string;
+  body: string;
+  screenshot?: string;
+  screenshotAlt?: string;
+}
+
+// MARKETING_SITE_REVAMP_BRIEF.md §2 — replaces `ChaosSection` entirely
+// (was: a two-column [feature list | fabricated dashboard mock] layout).
+// Two of the three callouts now carry a real product screenshot (a demo
+// org, no real customer data) instead of any invented numbers; "Weather
+// Wise" stays icon-only — no screenshot was scoped for it.
+const growCallouts: GrowCallout[] = [
+  {
+    key: 'book-smart',
+    icon: Gauge,
+    headline: 'Book the right Jobs',
+    body: "Use Mobull's Trip Calculator to check distance, drive time, and fuel cost, so you know if a new job is worth the drive before you book it.",
+    screenshot: bookSmartScreenshot,
+    screenshotAlt: 'Fuel Gauge breakdown showing you keep $96 of $99 on this job',
+  },
+  {
+    key: 'right-time',
+    icon: CalendarClock,
+    headline: 'Right Job, Right Time',
+    body: 'Our smart calendar recommends times that connect a new job with ones you already have booked in that area, keeping you in the same area each day.',
+    screenshot: appointmentRecommendationsScreenshot,
+    screenshotAlt: 'A recommended appointment time that fits right after an existing nearby job',
+  },
+  {
+    key: 'weather-wise',
+    icon: CloudLightning,
+    headline: 'Weather Wise',
+    body: 'Weather indicators let you avoid or seek out sun, snow, and rain, so you can book on the days that work best for your service.',
+  },
+];
+
+function GrowSection() {
   return (
     <section className="section" id="why">
-      <div className="container-wide chaos-layout">
-        <div>
-          <Reveal>
-            <div className="eyebrow">01 / Get your day back</div>
-            <h2 className="section-title">
-              Less juggling.
-              <br />
-              <span style={{ color: 'hsl(var(--primary))' }}>More knowing.</span>
-            </h2>
-            <p className="section-intro">
-              Texts in one hand. A calendar in the other. A payment notification you hope is right. Mobull gives
-              all of it one clear point of view.
-            </p>
-          </Reveal>
-          <RevealGroup className="feature-list">
-            <RevealItem className="feature-line">
-              <CalendarDays className="feature-icon" size={21} />
-              <div>
-                <h3>One live route</h3>
-                <p>Your appointments, travel gaps, and capacity in the same picture.</p>
-              </div>
-            </RevealItem>
-            <RevealItem className="feature-line">
-              <Gauge className="feature-icon" size={21} />
-              <div>
-                <h3>A yes/no on every job</h3>
-                <p>Know what a booking is worth after fuel, time, and the trip home.</p>
-              </div>
-            </RevealItem>
-            <RevealItem className="feature-line">
-              <CircleDollarSign className="feature-icon" size={21} />
-              <div>
-                <h3>Every dollar accounted for</h3>
-                <p>Track deposits, balances, and next-job opportunities without spreadsheet archaeology.</p>
-              </div>
-            </RevealItem>
-          </RevealGroup>
-        </div>
-        <Reveal scale={0.96} delay={0.1}>
-          <div className="dashboard glass grid-lines" data-testid="card-route-dashboard">
-            <div className="dash-top">
-              <span className="dash-title">Tuesday / route forecast</span>
-              <span className="dash-date">OCT 14 · LIVE</span>
-            </div>
-            <div className="dash-main">
-              <div className="dash-card dash-card-wide">
-                <span className="dash-label">Projected take-home</span>
-                <div className="dash-big">$684.20</div>
-                <span className="dash-positive">↑ 12.8% vs. your usual Tuesday</span>
-                <div className="mini-bars" aria-label="Weekly projected revenue bars">
-                  {[45, 65, 52, 79, 100, 71, 58].map((height, index) => (
-                    <span key={index} style={{ height: `${height}%` }} />
-                  ))}
-                </div>
-                <span className="dash-label">
-                  Mon&nbsp;&nbsp;&nbsp; Tue&nbsp;&nbsp;&nbsp; Wed&nbsp;&nbsp;&nbsp; Thu&nbsp;&nbsp;&nbsp;
-                  Fri&nbsp;&nbsp;&nbsp; Sat&nbsp;&nbsp;&nbsp; Sun
-                </span>
-              </div>
-              <div className="dash-card">
-                <span className="dash-label">Route health</span>
-                <div className="dash-big">
-                  92<span style={{ fontSize: '.9rem' }}>/100</span>
-                </div>
-                <span className="dash-positive">Clean route</span>
-              </div>
-              <div className="dash-card">
-                <span className="dash-label">Booked</span>
-                <div className="dash-big">
-                  4<span style={{ fontSize: '.9rem' }}> stops</span>
-                </div>
-                <span className="dash-positive">1 opening left</span>
-              </div>
-            </div>
-            <div className="route-list">
-              {[
-                ['08:30', 'Sarah Chen', 'PAID'],
-                ['11:15', 'Marcus Webb', 'DUE'],
-                ['14:00', 'Priya Patel', 'QUOTE'],
-              ].map(([time, name, tag], index) => (
-                <div key={name}>
-                  <div className="route-row">
-                    <span className="route-time">{time}</span>
-                    <span>{name}</span>
-                    <span className="route-tag">{tag}</span>
-                  </div>
-                  {index < 2 && <div className="route-line" />}
-                </div>
-              ))}
-            </div>
+      <div className="container-wide">
+        <Reveal className="section-heading">
+          <div>
+            <div className="eyebrow">Grow your Business</div>
+            <h2 className="section-title">Grow your Business.</h2>
           </div>
+          <p className="section-intro">
+            Every job Mobull shows you already has the real numbers attached, so growing your book never means
+            guessing.
+          </p>
         </Reveal>
+        <RevealGroup className="grow-grid">
+          {growCallouts.map((callout) => {
+            const Icon = callout.icon;
+            return (
+              <RevealItem className="grow-card" key={callout.key} data-testid={`card-grow-${callout.key}`}>
+                {callout.screenshot ? (
+                  <div className="grow-card-media">
+                    <img src={callout.screenshot} alt={callout.screenshotAlt} loading="lazy" />
+                  </div>
+                ) : (
+                  <div className="grow-card-icon">
+                    <Icon size={22} />
+                  </div>
+                )}
+                <h3>{callout.headline}</h3>
+                <p>{callout.body}</p>
+              </RevealItem>
+            );
+          })}
+        </RevealGroup>
       </div>
     </section>
   );
 }
 
+// MARKETING_SITE_REVAMP_BRIEF.md §4 — moved from position 2 to position 4
+// (after the two new sections). Eyebrow/title swapped; the "Milestone"/
+// "Complete" status pill is gone (it never meant anything a visitor could
+// act on); "RA / OPERATING SYSTEM" — a stale RareAir-era brand reference,
+// see PRODUCT.md's Brand Commitments — is fixed alongside it.
 function Workflow() {
   return (
     <section className="section workflow-section" id="workflow">
       <div className="container-wide">
         <Reveal className="section-heading">
           <div>
-            <div className="eyebrow">02 / From inquiry to income</div>
-            <h2 className="section-title">
-              The whole route,
-              <br />
-              connected.
-            </h2>
+            <div className="eyebrow">5 Simple Steps to Business growth</div>
+            <h2 className="section-title">Getting Started is easy.</h2>
           </div>
           <p className="section-intro">
             No more handoffs between five tabs. Each step adds context to the next, so your business gets smarter
@@ -599,7 +574,7 @@ function Workflow() {
         <div className="workflow-board glass grid-lines" data-testid="workflow-board">
           <div className="workflow-head">
             <span className="mono muted" style={{ fontSize: '.68rem' }}>
-              RA / OPERATING SYSTEM
+              MOBULL / GETTING STARTED
             </span>
             <p>Built for the moment a customer says &ldquo;what about Thursday?&rdquo;</p>
           </div>
@@ -612,7 +587,6 @@ function Workflow() {
                   <div className="flow-node" data-testid={`workflow-step-${index + 1}`}>
                     <div className="flow-node-top">
                       <span className="flow-number">0{index + 1}</span>
-                      <span className="flow-status">{index === 4 ? 'Complete' : 'Milestone'}</span>
                     </div>
                     <Icon className="flow-icon" size={20} />
                     <div>
@@ -679,192 +653,96 @@ function WorkflowConnectors() {
   );
 }
 
-interface BentoCardData {
+interface AppShowcaseCallout {
   key: string;
-  className: string;
-  testId: string;
-  content: ReactNode;
+  headline: string;
+  /**
+   * One-liner drafted for this build (MARKETING_SITE_REVAMP_BRIEF.md §3 gave
+   * headline text only, and left drafting body copy or leaving these
+   * headline-only as a live decision — drafted here per that confirmation).
+   * Grounded in real, already-shipped capabilities described elsewhere in
+   * PRODUCT.md, not invented claims.
+   */
+  body: string;
 }
 
-const bentoCards: BentoCardData[] = [
+const appShowcaseCallouts: AppShowcaseCallout[] = [
   {
-    key: 'forecast',
-    className: 'bento-card bento-tall glass',
-    testId: 'card-feature-forecast',
-    content: (
-      <>
-        <CloudLightning size={22} style={{ color: 'hsl(var(--primary))' }} />
-        <div className="eyebrow" style={{ marginTop: 28 }}>
-          Route intelligence
-        </div>
-        <h3>The best route is the one that pays you twice.</h3>
-        <p>
-          Mobull weighs location, job length, travel, and your actual overhead — then shows the route that makes
-          the day make sense.
-        </p>
-        <div className="metric-display">
-          <strong>+21%</strong>
-          <span>route margin in a typical first month</span>
-        </div>
-      </>
-    ),
+    key: 'book-smart',
+    headline: 'Book Jobs on calendar smartly',
+    body: 'See openings that already work with your day, and fill them without the back-and-forth.',
   },
   {
-    key: 'assessment',
-    className: 'bento-card bento-accent',
-    testId: 'card-feature-assessment',
-    content: (
-      <>
-        <Sparkles size={22} />
-        <div className="eyebrow" style={{ marginTop: 28 }}>
-          Business assessment
-        </div>
-        <h3>Turn your gut feeling into a number.</h3>
-        <p>Answer a few real questions. Get an honest view of the jobs, zones, and hours worth protecting.</p>
-      </>
-    ),
+    key: 'know-good-jobs',
+    headline: 'Know what Jobs are good for your business',
+    body: 'Every booking shows its real cost before you say yes, not after.',
   },
   {
-    key: 'followups',
-    className: 'bento-card bento-small glass',
-    testId: 'card-feature-followups',
-    content: (
-      <>
-        <Zap size={22} style={{ color: 'hsl(var(--accent))' }} />
-        <div className="eyebrow" style={{ marginTop: 28 }}>
-          Repeatable by design
-        </div>
-        <h3>One job should not be the end of the story.</h3>
-        <p>Keep the next visit visible while the current one is still fresh.</p>
-        <div className="inline-stat">
-          <div>
-            <strong>6</strong>
-            <span>follow-ups queued</span>
-          </div>
-          <div>
-            <strong>3</strong>
-            <span>routes ready</span>
-          </div>
-        </div>
-      </>
-    ),
+    key: 'manage-everything',
+    headline: 'Manage customer history, financial reports, and take payments',
+    body: 'Client history, revenue, and payments, all in the same place you already run your day from.',
   },
 ];
 
-/** Default rendering — the original static stacked/grid bento layout, just with a staggered fade-up reveal added. */
-function FeatureBentoStatic() {
-  const prefersReducedMotion = useReducedMotion();
-
-  if (prefersReducedMotion) {
-    return (
-      <div className="feature-bento">
-        {bentoCards.map((card) => (
-          <article key={card.key} className={card.className} data-testid={card.testId}>
-            {card.content}
-          </article>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <motion.div
-      className="feature-bento"
-      initial="hidden"
-      whileInView="visible"
-      viewport={REVEAL_VIEWPORT}
-      variants={staggerContainerVariants}
-    >
-      {bentoCards.map((card) => (
-        <motion.article key={card.key} className={card.className} data-testid={card.testId} variants={staggerItemVariants}>
-          {card.content}
-        </motion.article>
-      ))}
-    </motion.div>
-  );
-}
-
 /**
- * Desktop-only pinned horizontal-scroll variant: a tall scroll runway pins
- * a `position: sticky` viewport while the card track's `x` is driven by
- * vertical scroll progress (`useScroll` scoped to the runway via `ref` +
- * `useTransform`) — real vertical scroll input mapped to horizontal
- * translation, not actual horizontal scrolling. Only ever mounted when
- * `FeatureBento` has confirmed both a desktop-width viewport and no
- * `prefers-reduced-motion` preference (see `FeatureBento` below) — a
- * constantly scroll-linked full-bleed effect is exactly the kind of thing
- * that should never reach a touch/mobile viewport or an accessibility
- * preference asking for less motion.
+ * MARKETING_SITE_REVAMP_BRIEF.md §3 — replaces `FeatureBento`/`bentoCards`/
+ * the pinned horizontal-scroll runway entirely (that whole apparatus depended
+ * on card content this section no longer has). Two columns on desktop
+ * (callouts left, video right); the video leads on mobile so the product is
+ * shown before it's told. Reuses `.glass`/`bento-card`-family styling for
+ * visual continuity rather than a new visual pattern, per the brief.
+ *
+ * The video autoplays on a muted loop like the Hero's ambient cloud video —
+ * the `autoPlay` attribute alone is inconsistently honored once the element
+ * is wrapped in a Framer Motion reveal, so a real `.play()` call backs it up
+ * once the element mounts (rejection swallowed: browsers are free to defer
+ * this, and `controls` still lets a visitor pause/scrub it manually).
  */
-function FeatureBentoPinned() {
-  const runwayRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [translateDistance, setTranslateDistance] = useState(0);
-
-  const { scrollYProgress } = useScroll({
-    target: runwayRef,
-    offset: ['start start', 'end end'],
-  });
+function AppShowcaseSection() {
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    function measure() {
-      if (!trackRef.current || !runwayRef.current) return;
-      const trackWidth = trackRef.current.scrollWidth;
-      const viewportWidth = runwayRef.current.offsetWidth;
-      setTranslateDistance(Math.max(trackWidth - viewportWidth, 0));
-    }
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    videoRef.current?.play().catch(() => {});
   }, []);
-
-  const x = useTransform(scrollYProgress, [0, 1], [0, -translateDistance]);
-
-  return (
-    <div ref={runwayRef} className="feature-bento-runway">
-      <div className="feature-bento-sticky">
-        <motion.div ref={trackRef} className="feature-bento-track" style={{ x }}>
-          {bentoCards.map((card, index) => (
-            <motion.article
-              key={card.key}
-              className={card.className}
-              data-testid={card.testId}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={REVEAL_VIEWPORT}
-              transition={{ duration: 0.6, delay: index * 0.08, ease: REVEAL_EASE }}
-            >
-              {card.content}
-            </motion.article>
-          ))}
-        </motion.div>
-      </div>
-    </div>
-  );
-}
-
-function FeatureBento() {
-  const prefersReducedMotion = useReducedMotion();
-  const isDesktop = useIsDesktopViewport(DESKTOP_BREAKPOINT_PX);
-  const usePinnedLayout = isDesktop === true && !prefersReducedMotion;
 
   return (
     <section className="section" id="features">
       <div className="container-wide">
         <Reveal className="section-heading">
           <div>
-            <div className="eyebrow">03 / Built for the road</div>
-            <h2 className="section-title">
-              A clearer read
-              <br />
-              on your work.
-            </h2>
+            <div className="eyebrow">Everything you need in 1 app</div>
+            <h2 className="section-title">Everything you need in 1 app.</h2>
           </div>
           <p className="section-intro">
-            Not more software to babysit. Just the signal you need to make a good call, then keep moving.
+            One connected place to book the job, know if it's worth it, and get paid. No juggling between tools.
           </p>
         </Reveal>
-        {usePinnedLayout ? <FeatureBentoPinned /> : <FeatureBentoStatic />}
+        <div className="showcase-grid">
+          <RevealGroup className="showcase-callouts">
+            {appShowcaseCallouts.map((callout) => (
+              <RevealItem className="showcase-pill glass" key={callout.key} data-testid={`card-showcase-${callout.key}`}>
+                <h3>{callout.headline}</h3>
+                <p>{callout.body}</p>
+              </RevealItem>
+            ))}
+          </RevealGroup>
+          <Reveal className="showcase-video-wrap" scale={0.97} delay={0.1}>
+            <video
+              ref={videoRef}
+              className="showcase-video"
+              controls
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+              data-testid="video-app-showcase"
+            >
+              <source src={appointmentBookingVideo} type="video/quicktime" />
+              <source src={appointmentBookingVideo} type="video/mp4" />
+            </video>
+          </Reveal>
+        </div>
       </div>
     </section>
   );
@@ -907,153 +785,57 @@ function Story() {
   );
 }
 
-function Compare() {
-  return (
-    <section className="section">
-      <div className="container-wide compare-grid">
-        <div>
-          <div className="eyebrow">05 / The difference</div>
-          <h2 className="section-title">Your business is not a group chat.</h2>
-          <p className="compare-note">
-            You already have tools. Mobull is the connective tissue that helps them tell the same story.
-          </p>
-        </div>
-        <RevealGroup className="compare-table" data-testid="comparison-table">
-          <RevealItem className="compare-row header">
-            <div>What you need to know</div>
-            <div>Today</div>
-            <div>Mobull</div>
-          </RevealItem>
-          {[
-            ['Is this job worth the drive?', 'Maybe', 'Clear'],
-            ['What did I actually make?', 'Somewhere', 'Tracked'],
-            ['When should I follow up?', 'Remember', 'Queued'],
-            ['Can I do one more stop?', 'Guess', 'Forecast'],
-          ].map(([label, oldValue, newValue]) => (
-            <RevealItem className="compare-row" key={label}>
-              <div>{label}</div>
-              <div className="no">{oldValue}</div>
-              <div className="yes">
-                <Check size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                {newValue}
-              </div>
-            </RevealItem>
-          ))}
-        </RevealGroup>
-      </div>
-    </section>
-  );
-}
-
-function FAQ() {
-  const [open, setOpen] = useState<number | null>(0);
-  return (
-    <section className="section" id="faq">
-      <div className="container-wide faq-grid">
-        <Reveal>
-          <div className="eyebrow">06 / Good questions</div>
-          <h2 className="section-title">
-            No fog.
-            <br />
-            No fine print.
-          </h2>
-          <p className="compare-note">Still curious? That is a healthy operating instinct. Here is the short version.</p>
-        </Reveal>
-        <div className="faq-list">
-          {faqs.map((faq, index) => (
-            <div className="faq-item" key={faq.q}>
-              <button
-                className={`faq-question ${open === index ? 'open' : ''}`}
-                onClick={() => setOpen(open === index ? null : index)}
-                aria-expanded={open === index}
-                data-testid={`button-faq-${index + 1}`}
-              >
-                <span>{faq.q}</span>
-                <ChevronDown size={18} />
-              </button>
-              {open === index && (
-                <div className="faq-answer" data-testid={`text-faq-answer-${index + 1}`}>
-                  {faq.a}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /**
- * Card layout borrowed from the infranex.framer.ai pricing pattern: eyebrow +
- * pill badge on one row, a big price, a one-line description, then a full
- * shared feature checklist — every card lists the same rows, but rows that
- * tier doesn't include stay dimmed rather than being omitted, so the two
- * cards stay visually comparable at a glance. Both CTAs are soft
- * top-of-funnel actions (`scrollToAccess`, same as the Hero/header buttons)
- * that scroll down to the real signup form rather than charging anything
- * directly — there is no card-collection UI on this page; Stripe Checkout
- * handles billing after signup, so neither button here implies an in-page
- * purchase.
+ * MARKETING_SITE_REVAMP_BRIEF.md §8 — replaces `Pricing`/`pricingTiers`
+ * entirely. The old section pitted a Starter tier against a Premium tier;
+ * per the user's explicit correction this isn't a tier comparison at all —
+ * there is one plan, and the section's job is to show the free-to-paid
+ * *journey* (Day 0 trial start → Day 14 conversion → ongoing) with the real
+ * feature set attached to it, not fine print underneath a price. Uses
+ * `.price-journey-*` class names (not `.journey-*`) since that prefix is
+ * already owned by `Workflow`'s SVG bezier connectors.
  */
-function Pricing() {
+function GetStartedFree() {
   return (
     <section className="section">
       <div className="container-wide">
         <Reveal className="section-heading">
           <div>
-            <div className="eyebrow">07 / Simple pricing</div>
-            <h2 className="section-title">
-              Priced like a tool,
-              <br />
-              not a toy.
-            </h2>
+            <div className="eyebrow">Get Started for Free</div>
+            <h2 className="section-title">Get Started for Free.</h2>
           </div>
           <p className="section-intro">
-            Start free and see the route pay for itself. Upgrade when you&rsquo;re ready to run every job through it.
+            One plan. Full functionality from day one. The only thing that changes over time is the price.
           </p>
         </Reveal>
-        <RevealGroup className="pricing-grid" data-testid="pricing-cards">
-          {pricingTiers.map((tier) => (
-            <RevealItem
-              key={tier.key}
-              className={`pricing-card glass${tier.featured ? ' pricing-card-featured' : ''}`}
-              data-testid={`card-pricing-${tier.key}`}
-            >
-              <div className="pricing-card-head">
-                <span className="eyebrow">{tier.name}</span>
-                <span className="pricing-badge">{tier.badge}</span>
+        <RevealGroup className="price-journey" data-testid="pricing-journey">
+          {journeyStops.map((stop, index) => (
+            <RevealItem className="price-journey-stop" key={stop.key} data-testid={`card-journey-${stop.key}`}>
+              <div className="price-journey-marker">
+                <stop.icon size={18} />
               </div>
-              <div className="pricing-price">
-                <span className="pricing-price-value">{tier.price}</span>
-                {tier.priceSuffix && <span className="pricing-price-suffix">{tier.priceSuffix}</span>}
-              </div>
-              {tier.priceNote && <p className="pricing-price-note">{tier.priceNote}</p>}
-              <p className="pricing-description">{tier.description}</p>
-              <ul className="pricing-features">
-                {pricingFeatures.map((feature) => {
-                  const included = tier.key === 'starter' ? feature.starter : true;
-                  return (
-                    <li
-                      key={feature.label}
-                      className={included ? 'pricing-feature-included' : 'pricing-feature-excluded'}
-                    >
-                      <Check size={16} />
-                      <span>{feature.label}</span>
+              <div className="price-journey-when">{stop.when}</div>
+              <h3>{stop.title}</h3>
+              <p>{stop.copy}</p>
+              {index === journeyStops.length - 1 && (
+                <ul className="price-journey-features">
+                  {pricingFeatures.map((feature) => (
+                    <li key={feature}>
+                      <Check size={15} />
+                      <span>{feature}</span>
                     </li>
-                  );
-                })}
-              </ul>
-              <button
-                className="button-primary button-full"
-                onClick={scrollToAccess}
-                data-testid={`button-pricing-${tier.key}`}
-              >
-                Get Started <ArrowUpRight size={15} />
-              </button>
+                  ))}
+                </ul>
+              )}
             </RevealItem>
           ))}
         </RevealGroup>
+        <Reveal className="price-journey-cta" delay={0.15}>
+          <button className="button-primary" onClick={scrollToAccess} data-testid="button-pricing-start">
+            Get Started <ArrowUpRight size={15} />
+          </button>
+          <p className="form-fineprint">Free for 14 days. No card required.</p>
+        </Reveal>
       </div>
     </section>
   );
@@ -1103,7 +885,7 @@ function SignupPanel() {
         await queryClient.invalidateQueries({ queryKey: getGetAuthSessionQueryKey() });
         toast({
           title: 'Account created',
-          description: "You're all set — welcome to Mobull.",
+          description: "You're all set. Welcome to Mobull.",
         });
         setLocation('/');
       },
@@ -1170,7 +952,7 @@ function SignupPanel() {
           <span className="field-error">{errors.businessAddress.message}</span>
         ) : (
           <span className="field-error" style={{ color: 'hsl(var(--muted-foreground))' }}>
-            Your home base — used for route and Fuel Gauge calculations. Editable later in Settings.
+            Your home base, used for route and Fuel Gauge calculations. Editable later in Settings.
           </span>
         )}
       </div>
@@ -1267,7 +1049,7 @@ function AccessSection({ children }: { children: ReactNode }) {
             <div className="eyebrow">08 / First flight</div>
             <h2 data-testid="text-access-headline">Make your next mile count.</h2>
             <p data-testid="text-access-subhead">
-              You&rsquo;re one step from your first route — create your account and business below. Free for your
+              You&rsquo;re one step from your first route. Create your account and business below. Free for your
               first 14 days, no card required.
             </p>
           </Reveal>
@@ -1294,16 +1076,6 @@ function Footer() {
             data-testid="link-footer-why"
           >
             Why Mobull
-          </a>
-          <a
-            href="#faq"
-            onClick={(e) => {
-              e.preventDefault();
-              lenisScrollToHash('#faq');
-            }}
-            data-testid="link-footer-faq"
-          >
-            FAQ
           </a>
           <a
             href="#top"
@@ -1353,13 +1125,11 @@ export default function Signup() {
     <div className="site-shell">
       <Header open={menuOpen} setOpen={setMenuOpen} />
       <Hero />
-      <ChaosSection />
+      <GrowSection />
+      <AppShowcaseSection />
       <Workflow />
-      <FeatureBento />
       <Story />
-      <Compare />
-      <FAQ />
-      <Pricing />
+      <GetStartedFree />
       <AccessSection>
         <SignupPanel />
       </AccessSection>

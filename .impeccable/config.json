@@ -20,6 +20,42 @@
         ],
         "createdAt": "2026-09-11T14:11:48.023Z",
         "reason": "Pre-existing .wordmark-gradient-text: documented, intentional approximation of the retired wordmark's raster gradient for a scalable headline — out of scope for this bottom-nav contrast/token pass"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "dm mono",
+        "files": [
+          "artifacts/detail-hub/src/pages/signup.css"
+        ],
+        "createdAt": "2026-09-11T16:06:48.726Z",
+        "reason": "signup.css header comment documents this as an intentional port of the marketing site's own font stack, scoped to .site-shell, deliberately distinct from the app's Inter/Geist Mono — pre-existing, out of scope for the homepage-restructure task"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "eb garamond",
+        "files": [
+          "artifacts/detail-hub/src/pages/signup.css"
+        ],
+        "createdAt": "2026-09-11T16:06:48.745Z",
+        "reason": "signup.css header comment documents this as an intentional port of the marketing site's own font stack, scoped to .site-shell, deliberately distinct from the app's Inter/Geist Mono — pre-existing, out of scope for the homepage-restructure task"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "space grotesk",
+        "files": [
+          "artifacts/detail-hub/src/pages/signup.css"
+        ],
+        "createdAt": "2026-09-11T16:06:48.763Z",
+        "reason": "signup.css header comment documents this as an intentional port of the marketing site's own font stack, scoped to .site-shell, deliberately distinct from the app's Inter/Geist Mono — pre-existing, out of scope for the homepage-restructure task"
+      },
+      {
+        "rule": "overused-font",
+        "value": "space grotesk",
+        "files": [
+          "artifacts/detail-hub/src/pages/signup.css"
+        ],
+        "createdAt": "2026-09-11T17:51:46.875Z",
+        "reason": "signup.css header comment documents this as an intentional port of the marketing site's own established font stack, scoped to .site-shell — pre-existing, out of scope for the homepage-restructure/live-mode work in this session"
       }
     ]
   }

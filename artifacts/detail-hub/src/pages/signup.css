@@ -159,30 +159,18 @@
 .site-shell .section-heading{display:flex;justify-content:space-between;gap:30px;align-items:end;margin-bottom:60px}
 .site-shell .section-heading .section-title{margin-bottom:0}
 .site-shell .section-intro{max-width:330px;color:hsl(var(--muted-foreground));line-height:1.6;font-size:.95rem}
-.site-shell .chaos-layout{display:grid;grid-template-columns:.8fr 1.2fr;gap:74px;align-items:center}
-.site-shell .feature-list{display:grid;gap:20px;margin-top:38px}
-.site-shell .feature-line{display:grid;grid-template-columns:30px 1fr;gap:13px;align-items:start}
-.site-shell .feature-icon{color:hsl(var(--primary));padding-top:3px}
-.site-shell .feature-line h3{margin:0 0 5px;font-size:1rem}
-.site-shell .feature-line p{margin:0;color:hsl(var(--muted-foreground));font-size:.87rem;line-height:1.5}
-.site-shell .dashboard{min-height:430px;padding:22px;border-radius:24px;position:relative;overflow:hidden}
-.site-shell .dashboard::before{content:"";position:absolute;width:290px;height:290px;border-radius:50%;background:rgba(20,145,210,.14);filter:blur(40px);right:-80px;top:-70px}
-.site-shell .dash-top{display:flex;justify-content:space-between;align-items:center;position:relative}
-.site-shell .dash-title{font-size:.84rem;font-weight:600}
-.site-shell .dash-date{font-family:var(--app-font-mono);font-size:.65rem;color:hsl(var(--muted-foreground))}
-.site-shell .dash-main{display:grid;grid-template-columns:1fr .8fr;gap:14px;margin-top:18px;position:relative}
-.site-shell .dash-card{padding:17px;border:1px solid rgba(150,205,232,.17);border-radius:15px;background:rgba(4,18,31,.5)}
-.site-shell .dash-card-wide{grid-row:span 2}
-.site-shell .dash-label{color:hsl(var(--muted-foreground));font-size:.67rem;text-transform:uppercase;letter-spacing:.1em}
-.site-shell .dash-big{font-size:2.25rem;letter-spacing:-.07em;margin:9px 0}
-.site-shell .dash-positive{color:hsl(var(--accent));font-size:.73rem}
-.site-shell .mini-bars{display:flex;align-items:end;gap:5px;height:110px;margin-top:18px}
-.site-shell .mini-bars span{flex:1;background:linear-gradient(to top,#1774b2,#55d5ff);border-radius:4px 4px 2px 2px;opacity:.86}
-.site-shell .route-list{display:grid;gap:10px;margin-top:14px}
-.site-shell .route-row{display:grid;grid-template-columns:25px 1fr auto;gap:9px;align-items:center;font-size:.73rem}
-.site-shell .route-time{font-family:var(--app-font-mono);color:hsl(var(--muted-foreground));font-size:.65rem}
-.site-shell .route-tag{color:hsl(var(--primary));border:1px solid rgba(84,204,255,.3);border-radius:5px;padding:3px 5px;font-size:.6rem}
-.site-shell .route-line{position:relative;width:1px;height:25px;margin:-9px 0 -4px 12px;background:rgba(83,192,235,.45)}
+
+/* "Grow your Business" — replaces the old ChaosSection's `.chaos-layout`
+   two-column dashboard mockup with three real-content callout cards, one
+   per real product screenshot (or an icon where none was scoped). */
+.site-shell .grow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:36px}
+.site-shell .grow-card{display:flex;flex-direction:column}
+.site-shell .grow-card-media{border-radius:20px;overflow:hidden;margin-bottom:24px;height:260px;display:flex;align-items:center;justify-content:center;background:rgba(4,18,31,.55);border:1px solid rgba(141,200,228,.14)}
+.site-shell .grow-card-media img{display:block;width:100%;height:100%;object-fit:contain}
+.site-shell .grow-card-icon{height:260px;margin-bottom:24px;display:grid;place-items:center;border-radius:20px;color:hsl(var(--primary));background:rgba(84,204,255,.08);border:1px solid rgba(141,200,228,.14)}
+.site-shell .grow-card-icon svg{width:48px;height:48px}
+.site-shell .grow-card h3{font-size:1.4rem;letter-spacing:-.03em;margin:0 0 11px}
+.site-shell .grow-card p{color:hsl(var(--muted-foreground));font-size:.92rem;line-height:1.6;margin:0}
 
 .site-shell .workflow-section{background:#071a2a}
 .site-shell .workflow-board{padding:28px;min-height:660px;position:relative;overflow:hidden;border-radius:26px}
@@ -213,7 +201,7 @@
 .site-shell .flow-node-3{left:44%;top:110px}
 .site-shell .flow-node-4{left:65%;top:315px}
 .site-shell .flow-node-5{right:1%;top:48px}
-.site-shell .flow-node{position:relative;width:190px;min-height:164px;padding:18px;border-radius:18px;background:linear-gradient(145deg,rgba(16,55,80,.96),rgba(7,25,40,.96));border:1px solid rgba(117,205,241,.28);box-shadow:0 20px 45px rgba(0,0,0,.28);transition:transform .25s ease,border-color .25s ease}
+.site-shell .flow-node{position:relative;width:210px;min-height:186px;padding:18px;border-radius:18px;background:linear-gradient(145deg,rgba(16,55,80,.96),rgba(7,25,40,.96));border:1px solid rgba(117,205,241,.28);box-shadow:0 20px 45px rgba(0,0,0,.28);transition:transform .25s ease,border-color .25s ease}
 .site-shell .flow-node:hover{transform:translateY(-8px);border-color:hsl(var(--primary))}
 .site-shell .flow-node::before{content:"";position:absolute;width:9px;height:9px;border-radius:50%;background:hsl(var(--primary));border:3px solid #092237;box-shadow:0 0 0 1px rgba(108,211,249,.45),0 0 15px rgba(55,197,255,.65);left:50%;bottom:-26px;transform:translateX(-50%)}
 .site-shell .flow-node-2 .flow-node::before,.site-shell .flow-node-4 .flow-node::before{top:-26px;bottom:auto}
@@ -221,45 +209,23 @@
 .site-shell .flow-number{color:hsl(var(--accent));font-family:var(--app-font-mono);font-size:.65rem}
 .site-shell .flow-status{color:hsl(var(--foreground));font-family:var(--app-font-mono);font-size:.52rem;letter-spacing:.08em;text-transform:uppercase}
 .site-shell .flow-icon{color:hsl(var(--primary));margin:24px 0 14px}
-.site-shell .flow-node h3{font-size:.9rem;margin:0 0 7px}
-.site-shell .flow-node p{font-size:.7rem;line-height:1.5;color:hsl(var(--muted-foreground));margin:0}
+.site-shell .flow-node h3{font-size:1.05rem;letter-spacing:-.02em;margin:0 0 7px}
+.site-shell .flow-node p{font-size:.82rem;line-height:1.5;color:hsl(var(--muted-foreground));margin:0}
 
-.site-shell .feature-bento{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
-.site-shell .bento-card{border-radius:22px;padding:30px;min-height:255px;overflow:hidden;position:relative}
-.site-shell .bento-card h3{font-size:1.65rem;letter-spacing:-.06em;margin:13px 0 9px;max-width:310px}
-.site-shell .bento-card p{color:hsl(var(--muted-foreground));line-height:1.55;font-size:.88rem;max-width:370px}
-.site-shell .bento-accent{color:hsl(var(--background));background:hsl(var(--accent));border:0}
-.site-shell .bento-accent p,.site-shell .bento-accent .eyebrow{color:rgba(7,26,42,.7)}
-.site-shell .bento-accent::after{content:"";position:absolute;width:220px;height:220px;border:1px solid rgba(7,26,42,.25);border-radius:50%;right:-50px;bottom:-100px;box-shadow:0 0 0 25px rgba(7,26,42,.08),0 0 0 50px rgba(7,26,42,.06)}
-.site-shell .bento-tall{grid-row:span 2;min-height:528px;background:linear-gradient(155deg,rgba(17,77,112,.75),rgba(9,30,47,.87))}
-.site-shell .bento-tall::before{content:"";position:absolute;inset:auto -40px -70px auto;width:280px;height:280px;border-radius:50%;background:rgba(70,209,255,.16);filter:blur(20px)}
-.site-shell .metric-display{position:absolute;right:28px;bottom:28px;text-align:right}
-.site-shell .metric-display strong{display:block;color:hsl(var(--accent));font-size:3.2rem;letter-spacing:-.1em}
-.site-shell .metric-display span{color:hsl(var(--foreground));font-size:.7rem}
-.site-shell .bento-small{min-height:255px}
-.site-shell .bento-small .inline-stat{display:flex;gap:18px;margin-top:25px}
-.site-shell .inline-stat strong{display:block;font-size:1.7rem;letter-spacing:-.07em}
-.site-shell .inline-stat span{color:hsl(var(--muted-foreground));font-size:.68rem}
-
-/*
- * Desktop-only pinned horizontal-scroll variant of `.feature-bento`
- * (`FeatureBentoPinned` in signup.tsx) — a tall scroll runway with a
- * `position:sticky` viewport pinned inside it while the card track's `x` is
- * driven by vertical scroll progress. Never mounted below the
- * `min-width:821px` desktop threshold or under `prefers-reduced-motion`
- * (see `FeatureBento`'s `usePinnedLayout` check) — this block only exists to
- * style markup that JS has already decided is desktop-appropriate, the
- * `@media` here is a belt-and-suspenders match for that same threshold.
- */
-@media(min-width:821px){
-  .site-shell .feature-bento-runway{position:relative;height:260vh}
-  .site-shell .feature-bento-sticky{position:sticky;top:0;height:100vh;display:flex;align-items:center;overflow:hidden}
-  .site-shell .feature-bento-track{display:flex;gap:18px;width:max-content}
-  .site-shell .feature-bento-track .bento-card{flex:0 0 auto}
-  .site-shell .feature-bento-track .bento-tall{width:520px}
-  .site-shell .feature-bento-track .bento-accent{width:460px}
-  .site-shell .feature-bento-track .bento-small{width:460px}
-}
+/* "Everything you need in 1 app" — replaces the old `FeatureBento` bento grid
+   and its scroll-linked pinned runway with a simpler two-column layout:
+   stacked callout pills on the left, a real product video on the right.
+   `.showcase-pill` reuses `.glass` for the surface treatment (the brief's
+   "start from `.bento-card`" direction) but with a larger type scale than
+   `.bento-card` shipped with — that undersized scale was the brief's own
+   named defect, not something worth carrying forward. */
+.site-shell .showcase-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:22px;align-items:stretch}
+.site-shell .showcase-callouts{display:grid;gap:18px;align-content:start}
+.site-shell .showcase-pill{border-radius:20px;padding:26px 28px}
+.site-shell .showcase-pill h3{font-size:1.3rem;letter-spacing:-.03em;line-height:1.15;margin:0 0 9px}
+.site-shell .showcase-pill p{color:hsl(var(--muted-foreground));font-size:.88rem;line-height:1.55;margin:0}
+.site-shell .showcase-video-wrap{border-radius:22px;overflow:hidden;position:relative;display:flex;max-width:60%;margin-left:auto;align-self:center}
+.site-shell .showcase-video{width:100%;height:100%;object-fit:cover;border-radius:22px;background:rgba(4,18,31,.5)}
 
 .site-shell .story-section{background:linear-gradient(180deg,#071a2a,hsl(var(--background)))}
 .site-shell .story-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:45px;align-items:center}
@@ -274,49 +240,25 @@
 .site-shell .proof-card strong{font-size:1.55rem;letter-spacing:-.06em;color:hsl(var(--accent))}
 .site-shell .proof-card span{color:hsl(var(--muted-foreground));font-size:.78rem;text-align:right;max-width:160px}
 
-.site-shell .compare-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:80px;align-items:start}
-.site-shell .compare-note{color:hsl(var(--muted-foreground));max-width:330px;font-size:.95rem;line-height:1.6}
-.site-shell .compare-table{border-top:1px solid rgba(132,194,222,.25)}
-.site-shell .compare-row{display:grid;grid-template-columns:1.2fr .7fr .7fr;gap:20px;align-items:center;padding:19px 0;border-bottom:1px solid rgba(132,194,222,.17);font-size:.84rem}
-.site-shell .compare-row.header{color:hsl(var(--muted-foreground));font-family:var(--app-font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.08em}
-.site-shell .compare-row div:not(:first-child){text-align:center}
-.site-shell .yes{color:hsl(var(--primary))}
-.site-shell .no{color:hsl(var(--muted-foreground))}
-
-.site-shell .faq-grid{display:grid;grid-template-columns:.72fr 1.28fr;gap:80px;align-items:start}
-.site-shell .faq-list{border-top:1px solid rgba(132,194,222,.25)}
-.site-shell .faq-item{border-bottom:1px solid rgba(132,194,222,.17)}
-.site-shell .faq-question{width:100%;display:flex;justify-content:space-between;align-items:center;gap:20px;color:hsl(var(--foreground));text-align:left;background:none;border:0;padding:21px 0;font-size:1rem;font-weight:500}
-.site-shell .faq-question svg{color:hsl(var(--primary));transition:transform .2s ease;flex:0 0 auto}
-.site-shell .faq-question.open svg{transform:rotate(180deg)}
-.site-shell .faq-answer{color:hsl(var(--muted-foreground));font-size:.88rem;line-height:1.6;max-width:600px;padding:0 35px 21px 0}
-
 /*
- * Pricing (07 / Simple pricing) — layout borrowed from the infranex.framer.ai
- * pricing pattern: eyebrow + pill badge row, big price, one-line description,
- * then a shared feature checklist where every card lists the same rows and
- * unincluded rows just dim rather than disappear, so the two tiers stay
- * comparable at a glance. Cards reuse `.glass` for background/border and
- * `.button-primary`/`.button-full` for the CTA — no new color tokens.
+ * "Get Started for Free" — replaces the old two-tier `.pricing-grid`
+ * comparison with a Day 0 -> Day 14 -> ongoing timeline (`.price-journey-*`,
+ * kept distinct from `.journey-*` which already belongs to `Workflow`'s SVG
+ * bezier connectors). The full feature list attaches to the final "ongoing"
+ * stop rather than living in a separate comparison column — there's one
+ * plan, so there's nothing to compare it against.
  */
-.site-shell .pricing-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}
-.site-shell .pricing-card{display:flex;flex-direction:column;padding:36px;border-radius:22px}
-.site-shell .pricing-card-featured{border-color:hsl(var(--primary))}
-.site-shell .pricing-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
-.site-shell .pricing-badge{color:hsl(var(--muted-foreground));font-family:var(--app-font-mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid rgba(141,200,228,.3);border-radius:999px;padding:5px 11px;white-space:nowrap}
-.site-shell .pricing-card-featured .pricing-badge{color:hsl(var(--primary));border-color:hsl(var(--primary))}
-.site-shell .pricing-price{display:flex;align-items:baseline;gap:6px;margin-top:24px}
-.site-shell .pricing-price-value{font-size:3rem;letter-spacing:-.06em;line-height:1}
-.site-shell .pricing-price-suffix{color:hsl(var(--muted-foreground));font-size:.9rem}
-.site-shell .pricing-price-note{color:hsl(var(--muted-foreground));font-size:.78rem;margin:6px 0 0}
-.site-shell .pricing-description{color:hsl(var(--muted-foreground));font-size:.88rem;line-height:1.55;margin:14px 0 0}
-.site-shell .pricing-features{display:grid;gap:13px;margin:28px 0 32px;padding:20px 0 0;border-top:1px solid rgba(132,194,222,.17);list-style:none}
-.site-shell .pricing-feature-included,.site-shell .pricing-feature-excluded{display:flex;align-items:flex-start;gap:10px;font-size:.85rem;line-height:1.4}
-.site-shell .pricing-feature-included{color:hsl(var(--foreground))}
-.site-shell .pricing-feature-included svg{color:hsl(var(--primary));flex:0 0 auto;margin-top:1px}
-.site-shell .pricing-feature-excluded{color:hsl(var(--muted-foreground));opacity:.4}
-.site-shell .pricing-feature-excluded svg{color:hsl(var(--muted-foreground));flex:0 0 auto;margin-top:1px}
-.site-shell .pricing-card .button-full{margin-top:auto}
+.site-shell .price-journey{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative}
+.site-shell .price-journey::before{content:"";position:absolute;left:0;right:0;top:19px;height:1px;background:linear-gradient(90deg,rgba(84,204,255,.5),rgba(84,204,255,.15))}
+.site-shell .price-journey-stop{padding:0 4px}
+.site-shell .price-journey-marker{position:relative;z-index:1;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;color:hsl(var(--primary-foreground));background:hsl(var(--primary));box-shadow:0 0 0 6px hsl(var(--background)),0 0 0 7px rgba(84,204,255,.35);margin-bottom:22px}
+.site-shell .price-journey-when{color:hsl(var(--primary));font-family:var(--app-font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+.site-shell .price-journey-stop h3{font-size:1.35rem;letter-spacing:-.04em;margin:0 0 9px}
+.site-shell .price-journey-stop p{color:hsl(var(--muted-foreground));font-size:.88rem;line-height:1.55;margin:0}
+.site-shell .price-journey-features{display:grid;gap:11px;margin:22px 0 0;padding:20px 0 0;border-top:1px solid rgba(132,194,222,.17);list-style:none}
+.site-shell .price-journey-features li{display:flex;align-items:flex-start;gap:9px;color:hsl(var(--foreground));font-size:.85rem;line-height:1.4}
+.site-shell .price-journey-features svg{color:hsl(var(--primary));flex:0 0 auto;margin-top:1px}
+.site-shell .price-journey-cta{display:grid;justify-items:center;gap:12px;margin-top:56px;text-align:center}
 
 .site-shell .access-section{padding-top:55px}
 .site-shell .access-panel{display:grid;grid-template-columns:.8fr 1.2fr;gap:40px;padding:46px;border-radius:28px;position:relative;overflow:hidden}
@@ -374,25 +316,30 @@
   .site-shell .hero{min-height:740px}
   .site-shell .hero-content{padding-top:155px}
   .site-shell .hero-footer{margin-top:80px}
-  .site-shell .section-heading,.site-shell .chaos-layout,.site-shell .story-grid,.site-shell .compare-grid,.site-shell .faq-grid,.site-shell .access-panel,.site-shell .pricing-grid{grid-template-columns:1fr;display:grid;gap:32px}
-  .site-shell .pricing-grid{gap:20px}
-  .site-shell .pricing-card{padding:28px 24px}
+  .site-shell .section-heading,.site-shell .story-grid,.site-shell .access-panel{grid-template-columns:1fr;display:grid;gap:32px}
   .site-shell .section-heading{align-items:start;margin-bottom:34px}
-  .site-shell .chaos-layout{gap:40px}
-  .site-shell .workflow-board{min-height:780px}
-  .site-shell .workflow-track{height:auto;display:grid;gap:18px;margin-top:36px;padding-left:30px}
+  .site-shell .grow-grid{grid-template-columns:1fr;gap:40px}
+  .site-shell .grow-card-media,.site-shell .grow-card-icon{height:220px}
+  .site-shell .showcase-grid{grid-template-columns:1fr;gap:20px}
+  .site-shell .showcase-video-wrap{min-height:220px;max-width:100%;margin-left:0}
+  .site-shell .price-journey{grid-template-columns:1fr;gap:36px}
+  .site-shell .price-journey::before{left:19px;right:auto;top:0;bottom:0;width:1px;height:auto;background:linear-gradient(180deg,rgba(84,204,255,.5),rgba(84,204,255,.15))}
+  .site-shell .workflow-board{min-height:auto}
+  /* `Workflow`'s desktop grid (`.flow-node-1..5` absolute-positioned around
+     an SVG bezier connector) doesn't reflow to a small screen, so mobile
+     gets a horizontal swipeable track instead (MARKETING_SITE_REVAMP_BRIEF.md
+     §4) rather than the old vertical stack — no dependency added, this is
+     plain CSS scroll-snap over the existing card markup. */
+  .site-shell .workflow-track{height:auto;display:flex;gap:16px;margin-top:36px;padding:4px 28px 22px 4px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .site-shell .workflow-track::-webkit-scrollbar{display:none}
   .site-shell .journey-connectors,.site-shell .journey-pill{display:none}
-  .site-shell .flow-node-1,.site-shell .flow-node-2,.site-shell .flow-node-3,.site-shell .flow-node-4,.site-shell .flow-node-5{position:relative;inset:auto;width:100%}
-  .site-shell .flow-node{width:100%;min-height:auto;display:grid;grid-template-columns:48px 1fr;align-items:center;gap:0 12px;padding:16px}
+  .site-shell .flow-node-1,.site-shell .flow-node-2,.site-shell .flow-node-3,.site-shell .flow-node-4,.site-shell .flow-node-5{position:relative;inset:auto;flex:0 0 80%;max-width:300px;scroll-snap-align:start}
+  .site-shell .flow-node{width:100%;min-height:auto;display:grid;grid-template-columns:48px 1fr;align-items:center;gap:0 12px;padding:18px}
   .site-shell .flow-node-top{grid-column:1/-1;margin-bottom:13px}
   .site-shell .flow-icon{grid-column:1;margin:0}
   .site-shell .flow-node>div:last-child{grid-column:2}
   .site-shell .flow-node h3{margin:0 0 3px}
-  .site-shell .flow-node::before,.site-shell .flow-node-2 .flow-node::before,.site-shell .flow-node-4 .flow-node::before{left:-24px;top:50%;bottom:auto;transform:translate(-50%,-50%)}
-  .site-shell .flow-node::after{content:"";position:absolute;left:-25px;top:calc(50% + 5px);width:1px;height:calc(100% + 19px);background:linear-gradient(180deg,rgba(84,204,255,.7),rgba(84,204,255,.15))}
-  .site-shell .flow-node-5 .flow-node::after{display:none}
-  .site-shell .feature-bento{grid-template-columns:1fr}
-  .site-shell .bento-tall{grid-row:auto;min-height:350px}
+  .site-shell .flow-node::before{display:none}
   .site-shell .access-panel{padding:30px 22px}
   .site-shell .proof-grid{grid-template-columns:repeat(2,1fr)}
   .site-shell .proof-item:nth-child(2){border-right:0}
@@ -404,15 +351,9 @@
   .site-shell .hero h1{font-size:clamp(4.1rem,19vw,6rem)}
   .site-shell .hero-footer{align-items:start;flex-direction:column}
   .site-shell .hero-caption{max-width:290px}
-  .site-shell .dash-main{grid-template-columns:1fr}
-  .site-shell .dash-card-wide{grid-row:auto}
-  .site-shell .dashboard{min-height:0}
   .site-shell .workflow-board{padding:20px 15px}
   .site-shell .workflow-head{display:block}
   .site-shell .workflow-head p{margin-top:13px}
-  .site-shell .compare-row{grid-template-columns:1fr .55fr .55fr;font-size:.74rem;gap:8px}
-  .site-shell .compare-row.header{font-size:.56rem}
-  .site-shell .faq-grid,.site-shell .compare-grid{gap:35px}
   .site-shell .access-copy h2{font-size:3.7rem}
   .site-shell .footer-links{order:3;width:100%}
 }
