@@ -78,21 +78,24 @@ const SIZE_CLASSES = {
 type GlyphSize = keyof typeof SIZE_CLASSES;
 
 /**
- * Pure glyph renderer — `loading` (spinner), `error`/`unavailable` (neutral
- * "no reading" glyph — FR-13: never fabricate a condition for a failed call
- * or an out-of-range date), `unknown` (neutral "?" glyph — the upstream
- * condition string itself came back `"unknown"`, still not a guess), `ready`
- * (the real per-condition icon + color). Renders nothing when `state` is
- * `undefined` (not yet fetched / fetch never triggered).
+ * Pure glyph renderer — `loading` (spinner), `error` (neutral "no reading"
+ * glyph — FR-13: never fabricate a condition for a failed call), `unknown`
+ * (neutral "?" glyph — the upstream condition string itself came back
+ * `"unknown"`, still not a guess), `ready` (the real per-condition icon +
+ * color). Renders nothing when `state` is `undefined` (not yet fetched /
+ * fetch never triggered) **or `unavailable`** (the date is beyond Google's
+ * forecast horizon, FR-10) — an expected, common case for anything more than
+ * ~10 days out, not a failure worth a visible "no data" glyph on every later
+ * date in month view.
  */
 export function WeatherGlyph({ state, size = 'sm' }: { state: WeatherDayState | undefined; size?: GlyphSize }) {
-  if (!state) return null;
+  if (!state || state.kind === 'unavailable') return null;
   const cls = SIZE_CLASSES[size];
 
   if (state.kind === 'loading') {
     return <Loader2 className={`${cls} text-muted-foreground animate-spin`} aria-hidden="true" />;
   }
-  if (state.kind === 'error' || state.kind === 'unavailable') {
+  if (state.kind === 'error') {
     return <CloudOff className={`${cls} text-muted-foreground/50`} aria-hidden="true" />;
   }
   if (state.kind === 'unknown') {
@@ -137,10 +140,15 @@ interface WeatherIconButtonProps {
   testId?: string;
 }
 
-/** `WeatherGlyph` wrapped in a tap target + detail `Dialog`. Renders nothing when `state` is `undefined` (FR-12's "hidden entirely, no empty shell"). */
+/**
+ * `WeatherGlyph` wrapped in a tap target + detail `Dialog`. Renders nothing
+ * when `state` is `undefined` (FR-12's "hidden entirely, no empty shell") or
+ * `unavailable` (beyond the forecast horizon, FR-10) — no icon there means no
+ * tap target either, rather than an invisible button with nothing to show.
+ */
 export function WeatherIconButton({ state, dateLabel, size = 'sm', testId }: WeatherIconButtonProps) {
   const [open, setOpen] = useState(false);
-  if (!state) return null;
+  if (!state || state.kind === 'unavailable') return null;
 
   return (
     <>
