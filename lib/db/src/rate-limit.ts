@@ -13,6 +13,16 @@ import { withOrganization } from "./tenant";
 export const RATE_LIMIT_DEFAULTS = {
   routing: { limit: 200, windowMinutes: 60 },
   places: { limit: 500, windowMinutes: 60 },
+  // `PRD_Mobull_Weather_Coverage.md` FR-4/FR-4a. Same "placeholder pending real usage
+  // data" caveat as `routing`/`places` above — not confirmed against Google Weather
+  // API's actual quotas. Set between the two neighbors rather than matching either:
+  // weather calls are coarser-grained than `places`' per-keystroke autocomplete
+  // traffic (one call per page load, not per character typed), but more frequent than
+  // `routing`'s per-booking lookups, since every calendar view load fires one (FR-19).
+  // This bucket is defense-in-depth, not the primary cost control — the
+  // `weather_cache` table (FR-6-FR-8) is what actually keeps upstream Google traffic
+  // bounded; see FR-4a.
+  weather: { limit: 300, windowMinutes: 60 },
 } as const;
 
 /**

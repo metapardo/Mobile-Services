@@ -5,13 +5,18 @@ import {
   isToday, isSameDay, isSameMonth, isBefore,
 } from 'date-fns';
 import { adaptBooking } from '@/lib/api-adapters';
-import { useListBookings, useListClients, useListEmployees, useListPackages, getListBookingsQueryKey } from '@workspace/api-client-react';
+import {
+  useListBookings, useListClients, useListEmployees, useListPackages, useGetSettings, useWeatherForecast,
+  getListBookingsQueryKey,
+} from '@workspace/api-client-react';
 import { Link, useLocation, useSearch } from 'wouter';
 import { Plus, ChevronLeft, ChevronRight, ChevronDown, Check, CalendarPlus, Loader2, AlertTriangle } from 'lucide-react';
 import { StatusBadge } from '@/components/status-badge';
 import type { FuelGaugeResult } from '@/lib/fuel-gauge';
 import { FuelGaugeIcon } from '@/components/fuel-gauge-icon';
 import { PaymentMethodBadge } from '@/components/payment-method-badge';
+import { WeatherGlyph, WeatherIconButton } from '@/components/weather-icon';
+import { resolveWeatherDayState, type WeatherDayState } from '@/lib/weather';
 import { Button } from '@workspace/blue-glass-design-system/components/ui/button';
 import {
   DropdownMenu,
@@ -71,6 +76,14 @@ function parseHighlightParam(search: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// Restores the Day/Week/Month toggle when landing back on `/calendar` from a
+// booking page — see `calendar-return.ts` for the other half of this
+// round-trip (how that page builds `?view=`).
+function parseViewParam(search: string): CalendarViewMode | null {
+  const raw = new URLSearchParams(search).get('view');
+  return raw === 'day' || raw === 'week' || raw === 'month' ? raw : null;
+}
+
 /**
  * PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md — minimal Phase 1 compatibility
  * fix (FR-23 itself, the calendar drive-time display rework, is explicitly
@@ -98,10 +111,66 @@ const CALENDAR_UNSCORED_GAUGE: FuelGaugeResult = {
   anchorType: 'home',
 };
 
+/**
+ * PRD_Mobull_Weather_Coverage.md FR-18 — Week view's column headers and Day
+ * view's own 7-day week strip were already near-duplicate JSX (weekday
+ * letter + date circle + selected/today styling) before weather was added;
+ * a shared component was the clean way to keep both in sync for the new
+ * weather icon rather than hand-syncing two copies. `onSelect` is what
+ * differs between the two call sites — Week view drills into Day view for
+ * that date (`goToDay`), the Day view strip just re-anchors the same view
+ * (`setSelectedDate`/`setWeekAnchor`) — plus the day-strip-only
+ * booking-presence dot (`showBookingDot`).
+ *
+ * The weather icon is a sibling `WeatherIconButton`, not nested inside the
+ * date-select `button` — a button can't contain another interactive
+ * control, so tapping the weather glyph needs its own tap target next to,
+ * not inside, the one that selects/navigates to the day.
+ */
+function CalendarDayHeaderCell({
+  day, selected, today, onSelect, weatherState, showBookingDot, size, testId,
+}: {
+  day: Date;
+  selected: boolean;
+  today: boolean;
+  onSelect: () => void;
+  weatherState: WeatherDayState | undefined;
+  showBookingDot?: boolean;
+  size: 'sm' | 'md';
+  testId?: string;
+}) {
+  const circleSize = size === 'md' ? 'w-8 h-8 text-[15px]' : 'w-7 h-7 text-[13px]';
+  return (
+    <div
+      className={size === 'md' ? 'flex flex-col items-center gap-0.5 py-1' : 'flex-1 min-w-[64px] flex flex-col items-center gap-0.5 py-1'}
+      data-testid={testId}
+    >
+      <button onClick={onSelect} className="flex flex-col items-center gap-0.5">
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+          {format(day, 'EEEEE')}
+        </span>
+        <span className={`${circleSize} flex items-center justify-center rounded-full font-semibold transition-colors
+          ${selected ? 'bg-primary text-white' : today ? 'text-primary' : 'text-foreground'}`}>
+          {format(day, 'd')}
+        </span>
+        {showBookingDot !== undefined && (
+          <span className={`w-1 h-1 rounded-full ${showBookingDot ? 'bg-primary/60' : 'bg-transparent'}`} />
+        )}
+      </button>
+      <WeatherIconButton
+        state={weatherState}
+        dateLabel={format(day, 'EEE, MMM d')}
+        size="xs"
+        testId={testId ? `${testId}-weather` : undefined}
+      />
+    </div>
+  );
+}
+
 export default function Calendar() {
   const [, setLocation] = useLocation();
   const search = useSearch();
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('day');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>(() => parseViewParam(search) ?? 'day');
   const [selectedDate, setSelectedDate] = useState(() => parseDateParam(search) ?? new Date());
   const [weekAnchor, setWeekAnchor] = useState(() => parseDateParam(search) ?? new Date());
   const [monthAnchor, setMonthAnchor] = useState(() => parseDateParam(search) ?? new Date());
@@ -111,14 +180,14 @@ export default function Calendar() {
   const highlightHandledRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Strip `?date=`/`?highlight=` from the URL immediately (not waiting on
-  // data) so a refresh or a later `/calendar` visit never replays the
-  // arrival sequence or re-pins the view to a stale date. Scoped to just
-  // these two params (not "any query string") so a future, unrelated
+  // Strip `?date=`/`?highlight=`/`?view=` from the URL immediately (not
+  // waiting on data) so a refresh or a later `/calendar` visit never replays
+  // the arrival sequence or re-pins the view/date to stale values. Scoped to
+  // just these params (not "any query string") so a future, unrelated
   // `?foo=bar` on this route isn't silently swallowed by this effect.
   useEffect(() => {
     const params = new URLSearchParams(search);
-    if (params.has('date') || params.has('highlight')) {
+    if (params.has('date') || params.has('highlight') || params.has('view')) {
       setLocation('/calendar', { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,6 +223,18 @@ export default function Calendar() {
 
   const selectedStr = format(selectedDate, 'yyyy-MM-dd');
 
+  // Tagged onto every outgoing link to a booking page (create or detail) so
+  // that page's own "back to calendar" navigation (see `calendar-return.ts`)
+  // lands back on this exact view/date instead of always resetting to Day
+  // view on today. The anchor tracks whichever view is active — week/month
+  // views have their own anchor date, distinct from `selectedDate` (which is
+  // only meaningful in Day view).
+  const returnAnchor = format(
+    viewMode === 'week' ? weekAnchor : viewMode === 'month' ? monthAnchor : selectedDate,
+    'yyyy-MM-dd',
+  );
+  const returnParams = `view=${viewMode}&returnDate=${returnAnchor}`;
+
   // ── Real data ──────────────────────────────────────────────────────────────
   // Scoped to the visible week — FR-10's whole reason for a `start`/`end` list
   // query is so the calendar doesn't fetch every booking an organization has
@@ -180,6 +261,61 @@ export default function Calendar() {
   const clientsQuery = useListClients({ includeArchived: true });
   const packagesQuery = useListPackages({ includeArchived: true });
   const employeesQuery = useListEmployees({ includeInactive: true });
+
+  // ── Weather (PRD_Mobull_Weather_Coverage.md §9, FR-15 through FR-20) ────────
+  // HQ-based for all three views (§9's option (a) — simple, consistent, and
+  // thanks to FR-8's server-side caching, one call covers every date the
+  // month grid can show). Settings already stores HQ's resolved coordinates
+  // directly (`hqLatitude`/`hqLongitude`, populated whenever `hqGooglePlaceId`
+  // is set — same fields `booking-new.tsx`'s own `hqHasCoordinates` check
+  // reads), so no separate Place Details round trip is needed here.
+  const settingsQuery = useGetSettings();
+  const hqSettings = settingsQuery.data;
+  const hqHasCoordinates = !!(hqSettings?.hqLatitude != null && hqSettings?.hqLongitude != null && hqSettings?.hqGooglePlaceId);
+
+  const weatherForecastMutation = useWeatherForecast();
+  // FR-19's actual enforcement: a ref (not a query key / dependency array)
+  // that only lets the mutation fire once per distinct HQ location for this
+  // page's lifetime, so toggling Day → Week → Month never re-fires it — the
+  // exact "surge" failure mode FR-4b calls out by name. `useWeatherForecast`
+  // is a mutation (this codebase's convention for POST endpoints, matching
+  // `useComputeRoute`), so there's no built-in query-key caching to lean on
+  // the way `weekBookingsQuery`/`monthBookingsQuery` get it for free.
+  const weatherFetchedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    // No HQ address configured yet (a brand-new org) — skip the fetch
+    // entirely and silently omit weather everywhere, per FR-19/FR-20's own
+    // "legitimate, expected state for a new org" call-out. Not an error.
+    if (!hqHasCoordinates) return;
+    const key = `${hqSettings!.hqGooglePlaceId}|${hqSettings!.hqLatitude}|${hqSettings!.hqLongitude}`;
+    if (weatherFetchedKeyRef.current === key) return;
+    weatherFetchedKeyRef.current = key;
+    weatherForecastMutation.mutate({
+      data: {
+        placeId: hqSettings!.hqGooglePlaceId!,
+        latitude: hqSettings!.hqLatitude!,
+        longitude: hqSettings!.hqLongitude!,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hqHasCoordinates, hqSettings?.hqGooglePlaceId, hqSettings?.hqLatitude, hqSettings?.hqLongitude]);
+
+  // Per-date lookup every Day/Week/Month cell calls — `undefined` (render
+  // nothing) when HQ isn't configured, otherwise loading/error/unavailable/
+  // unknown/ready per `resolveWeatherDayState`'s shared logic (also used by
+  // `booking-new.tsx`'s own weather icon). The forecast array is at most
+  // ~10 entries (FR-10's horizon), so a plain `.find` per cell inside that
+  // helper is cheap — no memoized lookup map needed.
+  function weatherStateFor(dateStr: string): WeatherDayState | undefined {
+    if (!hqHasCoordinates) return undefined;
+    return resolveWeatherDayState({
+      date: dateStr,
+      isPending: weatherForecastMutation.isPending,
+      isError: weatherForecastMutation.isError,
+      hasFetched: weatherForecastMutation.isSuccess,
+      forecast: weatherForecastMutation.data,
+    });
+  }
 
   const weekBookingsLoaded = weekBookingsQuery.data ?? [];
   const hasWeekBookings = weekBookingsLoaded.length > 0;
@@ -372,7 +508,7 @@ export default function Calendar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[200px]">
               <DropdownMenuItem asChild data-testid="menu-item-create-appointment">
-                <Link href="/booking/new">Create appointment</Link>
+                <Link href={`/booking/new?${returnParams}`}>Create appointment</Link>
               </DropdownMenuItem>
               <DropdownMenuItem disabled className="cursor-default">
                 Create personal event
@@ -405,7 +541,7 @@ export default function Calendar() {
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Link href="/booking/new">
+              <Link href={`/booking/new?${returnParams}`}>
                 <Button data-testid="button-add-first-appointment">
                   <CalendarPlus />
                   Add your first appointment
@@ -436,6 +572,13 @@ export default function Calendar() {
                   .filter(b => b.date === dayStr)
                   .sort((a, b) => a.startTime.localeCompare(b.startTime));
                 const overflow = bookingsForDay.length - MONTH_CELL_MAX_EVENTS;
+                // FR-15 — icon only, no temperature (the cell is ~84px tall).
+                // A plain, non-interactive glyph: this cell is already a
+                // full-cell `<button>` (`goToDay`), and a button can't
+                // contain another interactive control (see the Week/Day
+                // views' header cells below, which restructure around this
+                // same constraint since FR-16/FR-17 need theirs tappable).
+                const monthDayWeatherState = weatherStateFor(dayStr);
 
                 return (
                   <button
@@ -446,10 +589,13 @@ export default function Calendar() {
                     }`}
                     data-testid={`calendar-month-cell-${dayStr}`}
                   >
-                    <span className={`w-6 h-6 flex items-center justify-center rounded-full text-[12px] font-semibold shrink-0
-                      ${dayIsSelected ? 'bg-primary text-white' : dayIsToday ? 'text-primary' : 'text-foreground'}`}>
-                      {format(day, 'd')}
-                    </span>
+                    <div className="w-full flex items-center justify-between gap-1">
+                      <span className={`w-6 h-6 flex items-center justify-center rounded-full text-[12px] font-semibold shrink-0
+                        ${dayIsSelected ? 'bg-primary text-white' : dayIsToday ? 'text-primary' : 'text-foreground'}`}>
+                        {format(day, 'd')}
+                      </span>
+                      <WeatherGlyph state={monthDayWeatherState} size="xs" />
+                    </div>
                     <div className="w-full flex flex-col gap-0.5 min-w-0">
                       {bookingsForDay.slice(0, MONTH_CELL_MAX_EVENTS).map(b => {
                         const employee = employees.find(e => e.id === b.employeeIds[0]);
@@ -483,23 +629,18 @@ export default function Calendar() {
           <div className="px-3 pb-2 shrink-0">
             <div className="flex" style={{ paddingLeft: '60px' }}>
               {weekDays.map(day => {
-                const selected = isSameDay(day, selectedDate);
-                const today = isToday(day);
+                const dayStr = format(day, 'yyyy-MM-dd');
                 return (
-                  <button
+                  <CalendarDayHeaderCell
                     key={day.toISOString()}
-                    onClick={() => goToDay(day)}
-                    className="flex-1 min-w-[64px] flex flex-col items-center gap-0.5 py-1"
-                    data-testid={`calendar-week-header-${format(day, 'yyyy-MM-dd')}`}
-                  >
-                    <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                      {format(day, 'EEEEE')}
-                    </span>
-                    <span className={`w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-semibold transition-colors
-                      ${selected ? 'bg-primary text-white' : today ? 'text-primary' : 'text-foreground'}`}>
-                      {format(day, 'd')}
-                    </span>
-                  </button>
+                    day={day}
+                    selected={isSameDay(day, selectedDate)}
+                    today={isToday(day)}
+                    onSelect={() => goToDay(day)}
+                    weatherState={weatherStateFor(dayStr)}
+                    size="sm"
+                    testId={`calendar-week-header-${dayStr}`}
+                  />
                 );
               })}
             </div>
@@ -577,7 +718,7 @@ export default function Calendar() {
                       return (
                         <Link
                           key={`cell-${i}`}
-                          href={`/booking/new?date=${dayStr}&time=${timeStr}`}
+                          href={`/booking/new?date=${dayStr}&time=${timeStr}&${returnParams}`}
                           aria-label={`Create appointment at ${label}`}
                           className="absolute z-0 block rounded-sm transition-colors hover:bg-white/[0.05] active:bg-white/[0.08] focus-visible:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary inset-x-1"
                           style={{ top: `${i * (HOUR_HEIGHT / 2)}px`, height: `${HOUR_HEIGHT / 2}px` }}
@@ -602,7 +743,7 @@ export default function Calendar() {
                       const heightPx = Math.max((totalDuration / 60) * HOUR_HEIGHT, 32);
 
                       return (
-                        <Link key={booking.id} href={`/booking/${booking.id}`}>
+                        <Link key={booking.id} href={`/booking/${booking.id}?${returnParams}`}>
                           <div
                             className="absolute z-10 rounded-lg overflow-hidden cursor-pointer hover:brightness-110 transition-all px-1 pt-1 inset-x-1"
                             style={{
@@ -629,34 +770,25 @@ export default function Calendar() {
         </>
       ) : (
         <>
-      {/* ── Week strip ── */}
+      {/* ── Week strip ── (FR-17: same weather treatment as Week view's
+          column headers, via the shared `CalendarDayHeaderCell` — FR-18) */}
       <div className="px-3 pb-2 shrink-0">
         <div className="grid grid-cols-7">
           {weekDays.map(day => {
-            const selected = isSameDay(day, selectedDate);
-            const today = isToday(day);
-            const hasBkgs = weekBookings.some(b => b.date === format(day, 'yyyy-MM-dd'));
+            const dayStr = format(day, 'yyyy-MM-dd');
+            const hasBkgs = weekBookings.some(b => b.date === dayStr);
             return (
-              <button
+              <CalendarDayHeaderCell
                 key={day.toISOString()}
-                onClick={() => { setSelectedDate(day); setWeekAnchor(day); }}
-                className="flex flex-col items-center gap-0.5 py-1"
-              >
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                  {format(day, 'EEEEE')}
-                </span>
-                <span className={`w-8 h-8 flex items-center justify-center rounded-full text-[15px] font-semibold transition-colors
-                  ${selected
-                    ? 'bg-primary text-white'
-                    : today
-                      ? 'text-primary'
-                      : 'text-foreground'
-                  }`}>
-                  {format(day, 'd')}
-                </span>
-                {/* Dot indicator if day has bookings */}
-                <span className={`w-1 h-1 rounded-full ${hasBkgs ? 'bg-primary/60' : 'bg-transparent'}`} />
-              </button>
+                day={day}
+                selected={isSameDay(day, selectedDate)}
+                today={isToday(day)}
+                onSelect={() => { setSelectedDate(day); setWeekAnchor(day); }}
+                weatherState={weatherStateFor(dayStr)}
+                showBookingDot={hasBkgs}
+                size="md"
+                testId={`calendar-day-strip-${dayStr}`}
+              />
             );
           })}
         </div>
@@ -745,7 +877,7 @@ export default function Calendar() {
             return (
               <Link
                 key={`cell-${i}`}
-                href={`/booking/new?date=${selectedStr}&time=${timeStr}`}
+                href={`/booking/new?date=${selectedStr}&time=${timeStr}&${returnParams}`}
                 aria-label={`Create appointment at ${label}`}
                 className="absolute z-0 block rounded-sm transition-colors hover:bg-white/[0.05] active:bg-white/[0.08] focus-visible:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
                 style={{ top: `${i * (HOUR_HEIGHT / 2)}px`, height: `${HOUR_HEIGHT / 2}px`, left: '60px', right: '12px' }}
@@ -788,7 +920,7 @@ export default function Calendar() {
             const justCreated = booking.id === highlightBookingId;
 
             return (
-              <Link key={booking.id} href={`/booking/${booking.id}`}>
+              <Link key={booking.id} href={`/booking/${booking.id}?${returnParams}`}>
                 <div
                   className={`absolute z-10 rounded-xl overflow-hidden cursor-pointer hover:brightness-110 transition-all ${justCreated ? 'booking-card-arrive' : ''}`}
                   style={{

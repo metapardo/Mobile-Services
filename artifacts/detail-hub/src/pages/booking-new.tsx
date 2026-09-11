@@ -9,6 +9,7 @@ import {
   type CreateBookingRequestStatus, type CreatePackageRequestCategory, type BookingResult,
 } from '@workspace/api-client-react';
 import { evenSplit, isoDateOnly } from '@/lib/api-adapters';
+import { getCalendarReturnPath } from '@/lib/calendar-return';
 import { getSetupProfile } from '@/lib/setup-store';
 import {
   suggestSlots,
@@ -37,6 +38,7 @@ import {
   type FetchRoute,
 } from '@/lib/fuel-gauge';
 import { AddressAutocomplete, type AddressAutocompleteSelection } from '@/components/address-autocomplete';
+import { WeatherIcon } from '@/components/weather-icon';
 // BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — `addDays` for the
 // "tomorrow's first slot" default when the shop's last bookable hour has
 // already passed for today.
@@ -470,6 +472,12 @@ const EMPTY_NEW_PACKAGE: NewPackageState = {
 export default function BookingNew() {
   const [, setLocation] = useLocation();
   const search = useSearch();
+  // Where "back to calendar" (the header X, and after a successful save)
+  // lands — the Day/Week/Month view and date the visitor came from, per
+  // `calendar.tsx`'s `?view=`/`?returnDate=` on the link that opened this
+  // page. Falls back to a bare `/calendar` when opened some other way.
+  const returnTo = getCalendarReturnPath(search);
+  const returnView = new URLSearchParams(search).get('view');
   const setup = getSetupProfile();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -491,18 +499,33 @@ export default function BookingNew() {
   const settingsQuery = useGetSettings();
 
   const clients = clientsQuery.data ?? [];
-  const packages = packagesQuery.data ?? [];
+  // Bug fix (found while browser-verifying `PRD_Mobull_Weather_Coverage.md`'s
+  // Date and time row, unrelated to weather itself) — `?? []` on its own
+  // creates a brand-new array identity every render for as long as the
+  // query is still loading (`.data` stays `undefined`). `packages` and
+  // `bookingsForOptimizer`/`rawBookings` below all feed `useMemo`/`useEffect`
+  // dependency arrays (`daySchedule`, the Fuel Gauge effect), so that
+  // per-render identity churn cascaded into "Maximum update depth exceeded"
+  // during the loading window: memo recomputes -> new (still-empty) array/Map
+  // -> effect re-fires -> `setState` with a fresh-but-equal array -> re-render
+  // -> repeat, tripping React's synchronous re-render safety cap before the
+  // query ever resolves. `useMemo` keyed on the query's own `.data` reference
+  // returns the exact same cached `[]` on every render while it's undefined,
+  // breaking the cycle. `clients`/`employees` above don't need this — they're
+  // only read inside render (`.find`/`.filter`), never placed in a dependency
+  // array.
+  const packages = useMemo(() => packagesQuery.data ?? [], [packagesQuery.data]);
   const employees = employeesQuery.data ?? [];
   // Raw (un-adapted) bookings — `FuelGaugeBookingInput` needs `googlePlaceId`/
   // `formattedAddress`, which `adaptBooking`'s mock-shaped `Booking` doesn't
   // carry. `BookingResult` is already a structural match, so no adapter is
   // needed here.
-  const rawBookings: FuelGaugeBookingInput[] = bookingsQuery.data ?? [];
+  const rawBookings: FuelGaugeBookingInput[] = useMemo(() => bookingsQuery.data ?? [], [bookingsQuery.data]);
   // Same underlying data as `rawBookings`, typed as the full `BookingResult`
   // (not narrowed to `FuelGaugeBookingInput`'s field set) — the Appointment
   // Optimizer's schedule-gap check needs `packageIds` too, to size each
   // peer booking's duration.
-  const bookingsForOptimizer: BookingResult[] = bookingsQuery.data ?? [];
+  const bookingsForOptimizer: BookingResult[] = useMemo(() => bookingsQuery.data ?? [], [bookingsQuery.data]);
   const realSettings = settingsQuery.data;
 
   // Deliberately excludes `settingsQuery` — an org with no settings row yet
@@ -975,12 +998,13 @@ export default function BookingNew() {
       onSuccess: async (created) => {
         await queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() });
         toast({ title: 'Appointment booked' });
-        // Land back on the calendar at the new booking's own date/time
-        // (Day view, so the card renders full-size, not the smaller week/
-        // month representations) rather than the booking's own detail page
-        // — `?highlight=` is calendar.tsx's cue to auto-scroll to it and
-        // play the one-time arrival emphasis, then strip itself from the URL.
-        setLocation(`/calendar?date=${isoDateOnly(created.date)}&highlight=${created.id}`);
+        // Land back on the calendar at the new booking's own date, in
+        // whichever Day/Week/Month view the visitor came from — `?highlight=`
+        // is calendar.tsx's cue to auto-scroll to it and play the one-time
+        // arrival emphasis (Day view only; week/month cards render too small
+        // for it), then strip itself from the URL.
+        const view = returnView === 'day' || returnView === 'week' || returnView === 'month' ? returnView : 'day';
+        setLocation(`/calendar?date=${isoDateOnly(created.date)}&highlight=${created.id}&view=${view}`);
       },
       onError: (err) => {
         const message = err?.data?.message ?? 'Something went wrong booking this appointment. Please try again.';
@@ -1160,7 +1184,7 @@ export default function BookingNew() {
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md border-b border-border/40 px-4 py-3 flex items-center gap-3">
         <button
-          onClick={() => setLocation('/calendar')}
+          onClick={() => setLocation(returnTo)}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-muted hover:bg-muted/70 transition-colors"
         >
           <X className="w-4 h-4" />
@@ -1347,16 +1371,37 @@ export default function BookingNew() {
           never sent to `useCreateBooking`, and Repeats was pure static
           decoration with no `onClick` behind it. Zero behavioral risk. */}
       <Section title="Date and time" icon={Calendar}>
-        <button
-          onClick={() => setShowDatePicker(true)}
-          className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border border-border bg-background hover:bg-muted/40 transition-colors min-h-[52px]"
-        >
-          <div className="text-left">
-            <p className="text-[12px] text-muted-foreground font-medium">Date and time</p>
-            <p className="text-[15px] font-medium mt-0.5">{dateLabel} at {fmtTime(time)}</p>
-          </div>
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-        </button>
+        {/* Plain `div` wrapper (not a `button`) so the weather icon below can
+            be a sibling tap target rather than nested inside a `<button>`
+            (invalid HTML content model — a button can't contain another
+            interactive control). The date/time text + chevron keep the
+            original button semantics for opening the picker; the weather
+            icon, when shown, sits to their left as its own button. */}
+        <div className="w-full flex items-center gap-1 px-4 py-3.5 rounded-2xl border border-border bg-background hover:bg-muted/40 transition-colors min-h-[52px]">
+          <button
+            onClick={() => setShowDatePicker(true)}
+            className="flex-1 min-w-0 flex items-center justify-between gap-2 text-left"
+          >
+            <div className="min-w-0">
+              <p className="text-[12px] text-muted-foreground font-medium">Date and time</p>
+              <p className="text-[15px] font-medium mt-0.5 truncate">{dateLabel} at {fmtTime(time)}</p>
+            </div>
+            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+          </button>
+          {/* PRD_Mobull_Weather_Coverage.md FR-11/FR-12 — hidden entirely
+              until a service address is selected (same "no empty shell"
+              precedent as the Recommended section above), since this uses
+              the booking's own address, not HQ. */}
+          {addressSelection && (
+            <WeatherIcon
+              placeId={addressSelection.placeId}
+              latitude={addressSelection.latitude}
+              longitude={addressSelection.longitude}
+              date={date}
+              dateLabel={dateLabel}
+            />
+          )}
+        </div>
       </Section>
 
       {/* ── Notes ── */}

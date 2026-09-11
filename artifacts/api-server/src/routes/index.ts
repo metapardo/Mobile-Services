@@ -13,6 +13,7 @@ import payrollRouter from "./payroll";
 import reportsRouter from "./reports";
 import placesRouter from "./places";
 import routingRouter from "./routing";
+import weatherRouter from "./weather";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(payrollRouter);
 router.use(reportsRouter);
 router.use(placesRouter);
 router.use(routingRouter);
+router.use(weatherRouter);
 
 export default router;

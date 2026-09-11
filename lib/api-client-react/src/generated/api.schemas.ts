@@ -1057,6 +1057,55 @@ export interface RouteMatrixElementResult {
   error: string | null;
 }
 
+/**
+ * `placeId` is accepted but not required for the Google call itself — the actual upstream/cache lookup uses `latitude`/`longitude` only. It's carried here for potential future cache-key/logging use.
+ */
+export interface WeatherForecastRequest {
+  /** @minLength 1 */
+  placeId: string;
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Normalized from Google's raw condition taxonomy — see `../integrations/google-weather.ts`'s `WeatherCondition`/ `normalizeCondition`. `unknown` is a real, expected value (an unrecognized/unspecified upstream condition), not an error.
+ */
+export type DailyForecastResultCondition = typeof DailyForecastResultCondition[keyof typeof DailyForecastResultCondition];
+
+
+export const DailyForecastResultCondition = {
+  clear: 'clear',
+  cloudy: 'cloudy',
+  windy: 'windy',
+  rain: 'rain',
+  sleet: 'sleet',
+  snow: 'snow',
+  hail: 'hail',
+  storm: 'storm',
+  unknown: 'unknown',
+} as const;
+
+/**
+ * One calendar date's forecast, mirroring `DailyForecast` in `../integrations/google-weather.ts` exactly. A date within the requested horizon that Google doesn't return (FR-10) simply has no entry in the response array this schema is used as items of — see `POST /weather/forecast`'s own description for why that's the FR-13 `unavailable` signal, rather than this schema carrying an explicit per-date status field.
+ */
+export interface DailyForecastResult {
+  /** `YYYY-MM-DD`, no time-of-day component. */
+  date: string;
+  /** Normalized from Google's raw condition taxonomy — see `../integrations/google-weather.ts`'s `WeatherCondition`/ `normalizeCondition`. `unknown` is a real, expected value (an unrecognized/unspecified upstream condition), not an error. */
+  condition: DailyForecastResultCondition;
+  /** Google's raw human-readable condition text, e.g. "Mostly cloudy". */
+  description?: string | null;
+  /** Degrees Fahrenheit. */
+  tempHighF: number;
+  /** Degrees Fahrenheit. */
+  tempLowF: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  precipitationChance: number;
+}
+
 export interface ErrorResponse {
   /** Machine-readable error code. */
   error: string;

@@ -36,6 +36,7 @@ import type {
   CreatePayrollRunRequest,
   CreateTimeLogRequest,
   CreateTimeOffRequestRequest,
+  DailyForecastResult,
   EmployeeResult,
   EmployeeRoleResult,
   ErrorResponse,
@@ -75,7 +76,8 @@ import type {
   UpdateEmployeeRoleRequest,
   UpdatePackageRequest,
   UpdatePayrollRunRequest,
-  UpdateSettingsRequest
+  UpdateSettingsRequest,
+  WeatherForecastRequest
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -3974,5 +3976,80 @@ export const useComputeRouteMatrix = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getComputeRouteMatrixMutationOptions(options));
+    }
+
+export const getWeatherForecastUrl = () => {
+
+
+
+
+  return `/api/weather/forecast`
+}
+
+/**
+ * PRD_Mobull_Weather_Coverage.md Sections 5-7 (FR-3 through FR-10). Server-side proxy to Google's Weather API (New) `forecast.days:lookup` (`../integrations/google-weather.ts`'s `getDailyForecast`) — one call per location returns up to 10 days (Google's own cap, FR-10), no `date` parameter (FR-5): every date in the available horizon comes back in one response.
+ * Cache-aside on `weather_cache` (FR-6-FR-8, a short TTL shared across every organization asking about the same ~1km-rounded coordinates — deliberately NOT organization-scoped, FR-9) and rate-limited per organization (FR-4, bucket `"weather"`).
+ * `placeId` is accepted in the request body but not required for the Google call itself (lat/lng drive both the cache key and the upstream lookup) — it's reserved for potential future cache-key/logging use.
+ * A date within the requested horizon that Google doesn't return (FR-10, e.g. beyond the ~10-day forecast horizon) simply has no entry in the response array — the frontend should treat "no entry for this date" as the FR-13 `unavailable` state, not wait for an explicit per-date status field.
+ * @summary Daily weather forecast for a location (booking creation + calendar views)
+ */
+export const weatherForecast = async (weatherForecastRequest: WeatherForecastRequest, options?: Parameters<typeof customFetch>[1]): Promise<DailyForecastResult[]> => {
+
+  return customFetch<DailyForecastResult[]>(getWeatherForecastUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(weatherForecastRequest)
+  }
+);}
+
+
+
+
+
+export const getWeatherForecastMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof weatherForecast>>, TError,{data: BodyType<WeatherForecastRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof weatherForecast>>, TError,{data: BodyType<WeatherForecastRequest>}, TContext> => {
+
+const mutationKey = ['weatherForecast'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof weatherForecast>>, {data: BodyType<WeatherForecastRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  weatherForecast(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type WeatherForecastMutationResult = NonNullable<Awaited<ReturnType<typeof weatherForecast>>>
+    export type WeatherForecastMutationBody = BodyType<WeatherForecastRequest>
+    export type WeatherForecastMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Daily weather forecast for a location (booking creation + calendar views)
+ */
+export const useWeatherForecast = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof weatherForecast>>, TError,{data: BodyType<WeatherForecastRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof weatherForecast>>,
+        TError,
+        {data: BodyType<WeatherForecastRequest>},
+        TContext
+      > => {
+      return useMutation(getWeatherForecastMutationOptions(options));
     }
 

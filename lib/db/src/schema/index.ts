@@ -59,3 +59,9 @@ export * from "./settings";
 // see that file's doc comment before assuming it's missing organizationId by mistake.
 export * from "./route-cache";
 export * from "./rate-limit-counter";
+
+// PRD_Mobull_Weather_Coverage.md §6 (FR-6 through FR-9). `weather-cache` is the
+// SECOND exception (alongside `route-cache` above) to "every table here is
+// org-scoped with RLS" — see that file's doc comment before assuming it's missing
+// organizationId by mistake.
+export * from "./weather-cache";

@@ -1612,3 +1612,35 @@ export const ComputeRouteMatrixResponseItem = zod.object({
 export const ComputeRouteMatrixResponse = zod.array(ComputeRouteMatrixResponseItem)
 
 
+/**
+ * PRD_Mobull_Weather_Coverage.md Sections 5-7 (FR-3 through FR-10). Server-side proxy to Google's Weather API (New) `forecast.days:lookup` (`../integrations/google-weather.ts`'s `getDailyForecast`) — one call per location returns up to 10 days (Google's own cap, FR-10), no `date` parameter (FR-5): every date in the available horizon comes back in one response.
+ * Cache-aside on `weather_cache` (FR-6-FR-8, a short TTL shared across every organization asking about the same ~1km-rounded coordinates — deliberately NOT organization-scoped, FR-9) and rate-limited per organization (FR-4, bucket `"weather"`).
+ * `placeId` is accepted in the request body but not required for the Google call itself (lat/lng drive both the cache key and the upstream lookup) — it's reserved for potential future cache-key/logging use.
+ * A date within the requested horizon that Google doesn't return (FR-10, e.g. beyond the ~10-day forecast horizon) simply has no entry in the response array — the frontend should treat "no entry for this date" as the FR-13 `unavailable` state, not wait for an explicit per-date status field.
+ * @summary Daily weather forecast for a location (booking creation + calendar views)
+ */
+
+
+
+export const WeatherForecastBody = zod.object({
+  "placeId": zod.string().min(1),
+  "latitude": zod.number(),
+  "longitude": zod.number()
+}).describe('`placeId` is accepted but not required for the Google call itself — the actual upstream\/cache lookup uses `latitude`\/`longitude` only. It\'s carried here for potential future cache-key\/logging use.')
+
+export const weatherForecastResponsePrecipitationChanceMin = 0;
+export const weatherForecastResponsePrecipitationChanceMax = 100;
+
+
+
+export const WeatherForecastResponseItem = zod.object({
+  "date": zod.coerce.date().describe('`YYYY-MM-DD`, no time-of-day component.'),
+  "condition": zod.enum(['clear', 'cloudy', 'windy', 'rain', 'sleet', 'snow', 'hail', 'storm', 'unknown']).describe('Normalized from Google\'s raw condition taxonomy — see `..\/integrations\/google-weather.ts`\'s `WeatherCondition`\/ `normalizeCondition`. `unknown` is a real, expected value (an unrecognized\/unspecified upstream condition), not an error.'),
+  "description": zod.string().nullish().describe('Google\'s raw human-readable condition text, e.g. \"Mostly cloudy\".'),
+  "tempHighF": zod.number().describe('Degrees Fahrenheit.'),
+  "tempLowF": zod.number().describe('Degrees Fahrenheit.'),
+  "precipitationChance": zod.number().int().min(weatherForecastResponsePrecipitationChanceMin).max(weatherForecastResponsePrecipitationChanceMax)
+}).describe('One calendar date\'s forecast, mirroring `DailyForecast` in `..\/integrations\/google-weather.ts` exactly. A date within the requested horizon that Google doesn\'t return (FR-10) simply has no entry in the response array this schema is used as items of — see `POST \/weather\/forecast`\'s own description for why that\'s the FR-13 `unavailable` signal, rather than this schema carrying an explicit per-date status field.')
+export const WeatherForecastResponse = zod.array(WeatherForecastResponseItem)
+
+

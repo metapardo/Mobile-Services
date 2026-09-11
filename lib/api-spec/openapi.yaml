@@ -39,6 +39,12 @@ tags:
       the Fuel Gauge accuracy rework (PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md Section
       9.1). `GOOGLE_MAPS_API_KEY` is read only in `artifacts/api-server` and never
       reaches the browser.
+  - name: weather
+    description: >-
+      Server-side proxy to Google's Weather API (New) for the booking-creation and
+      calendar-view weather indicators (PRD_Mobull_Weather_Coverage.md Sections 5-7).
+      `GOOGLE_WEATHER_API_KEY` is read only in `artifacts/api-server` and never reaches
+      the browser.
 paths:
   /healthz:
     get:
@@ -2200,6 +2206,84 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /weather/forecast:
+    post:
+      operationId: weatherForecast
+      tags: [weather]
+      summary: Daily weather forecast for a location (booking creation + calendar views)
+      description: >-
+        PRD_Mobull_Weather_Coverage.md Sections 5-7 (FR-3 through FR-10). Server-side
+        proxy to Google's Weather API (New) `forecast.days:lookup`
+        (`../integrations/google-weather.ts`'s `getDailyForecast`) — one call per
+        location returns up to 10 days (Google's own cap, FR-10), no `date` parameter
+        (FR-5): every date in the available horizon comes back in one response.
+
+        Cache-aside on `weather_cache` (FR-6-FR-8, a short TTL shared across every
+        organization asking about the same ~1km-rounded coordinates — deliberately NOT
+        organization-scoped, FR-9) and rate-limited per organization (FR-4, bucket
+        `"weather"`).
+
+        `placeId` is accepted in the request body but not required for the Google call
+        itself (lat/lng drive both the cache key and the upstream lookup) — it's
+        reserved for potential future cache-key/logging use.
+
+        A date within the requested horizon that Google doesn't return (FR-10, e.g.
+        beyond the ~10-day forecast horizon) simply has no entry in the response
+        array — the frontend should treat "no entry for this date" as the FR-13
+        `unavailable` state, not wait for an explicit per-date status field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WeatherForecastRequest"
+      responses:
+        "200":
+          description: >-
+            Every forecast day currently available (cached or freshly fetched) for
+            this location, in no particular guaranteed order. A requested date not
+            present in this array is beyond the forecast horizon (FR-10) or otherwise
+            unavailable (FR-13) — not an error.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyForecastResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Signed in, but the session has no active organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: >-
+            FR-4 — this organization is over its `"weather"` rate-limit bucket for the
+            current window. FR-4a: this should be rare in practice, since most
+            requests should be served from `weather_cache` without reaching this
+            check's underlying Google call at all.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Weather API (New) request failed or returned an unexpected shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   parameters:
     IdParam:
@@ -3928,6 +4012,75 @@ components:
         - miles
         - minutes
         - error
+    WeatherForecastRequest:
+      type: object
+      description: >-
+        `placeId` is accepted but not required for the Google call itself — the
+        actual upstream/cache lookup uses `latitude`/`longitude` only. It's carried
+        here for potential future cache-key/logging use.
+      properties:
+        placeId:
+          type: string
+          minLength: 1
+        latitude:
+          type: number
+        longitude:
+          type: number
+      required:
+        - placeId
+        - latitude
+        - longitude
+    DailyForecastResult:
+      type: object
+      description: >-
+        One calendar date's forecast, mirroring `DailyForecast` in
+        `../integrations/google-weather.ts` exactly. A date within the requested
+        horizon that Google doesn't return (FR-10) simply has no entry in the
+        response array this schema is used as items of — see `POST
+        /weather/forecast`'s own description for why that's the FR-13 `unavailable`
+        signal, rather than this schema carrying an explicit per-date status field.
+      properties:
+        date:
+          type: string
+          format: date
+          description: "`YYYY-MM-DD`, no time-of-day component."
+        condition:
+          type: string
+          enum:
+            - clear
+            - cloudy
+            - windy
+            - rain
+            - sleet
+            - snow
+            - hail
+            - storm
+            - unknown
+          description: >-
+            Normalized from Google's raw condition taxonomy — see
+            `../integrations/google-weather.ts`'s `WeatherCondition`/
+            `normalizeCondition`. `unknown` is a real, expected value (an
+            unrecognized/unspecified upstream condition), not an error.
+        description:
+          type: string
+          nullable: true
+          description: Google's raw human-readable condition text, e.g. "Mostly cloudy".
+        tempHighF:
+          type: number
+          description: Degrees Fahrenheit.
+        tempLowF:
+          type: number
+          description: Degrees Fahrenheit.
+        precipitationChance:
+          type: integer
+          minimum: 0
+          maximum: 100
+      required:
+        - date
+        - condition
+        - tempHighF
+        - tempLowF
+        - precipitationChance
     ErrorResponse:
       type: object
       properties:

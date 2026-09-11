@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useLocation } from 'wouter';
+import { useParams, Link, useLocation, useSearch } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetBooking, useUpdateBooking, useDeleteBooking,
@@ -9,6 +9,7 @@ import {
   type UpdateBookingRequestStatus,
 } from '@workspace/api-client-react';
 import { evenSplit, normalizeSplitTo100, isoDateOnly } from '@/lib/api-adapters';
+import { getCalendarReturnPath } from '@/lib/calendar-return';
 import { type BookingStatus } from '@/lib/mock-data';
 import { ArrowLeft, Trash2, Plus, X, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { PaymentMethodBadge } from '@/components/payment-method-badge';
@@ -26,6 +27,12 @@ import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 export default function BookingDetail() {
   const params = useParams();
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  // Where every exit from this page (save, delete, the back link) lands —
+  // the Day/Week/Month view and date the visitor came from, per
+  // `calendar.tsx`'s `?view=`/`?returnDate=` on the link that opened this
+  // page. Falls back to a bare `/calendar` when opened some other way.
+  const returnTo = getCalendarReturnPath(search);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const bookingId = parseInt(params.id || '0');
@@ -87,6 +94,7 @@ export default function BookingDetail() {
           queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() }),
         ]);
         toast({ title: 'Booking updated' });
+        setLocation(returnTo);
       },
       onError: (err) => {
         const message = err?.data?.message ?? 'Something went wrong saving this booking. Please try again.';
@@ -99,7 +107,7 @@ export default function BookingDetail() {
     mutation: {
       onSuccess: async () => {
         await queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() });
-        setLocation('/calendar');
+        setLocation(returnTo);
       },
       onError: (err) => {
         const message = err?.data?.message ?? 'Something went wrong deleting this booking. Please try again.';
@@ -140,7 +148,7 @@ export default function BookingDetail() {
         <div className="max-w-2xl mx-auto px-4 pt-6 flex flex-col items-center gap-3 text-center">
           <AlertTriangle className="w-8 h-8 text-destructive" />
           <p>Booking not found</p>
-          <Link href="/calendar" className="text-primary text-[14px]">Back to Calendar</Link>
+          <Link href={returnTo} className="text-primary text-[14px]">Back to Calendar</Link>
         </div>
       </div>
     );
@@ -202,7 +210,7 @@ export default function BookingDetail() {
   return (
     <div className="min-h-[100dvh] bg-background pb-48 md:pb-24">
       <div className="max-w-2xl mx-auto px-4 pt-6">
-        <Link href="/calendar" className="inline-flex items-center gap-2 text-muted-foreground mb-6 hover:text-foreground transition-colors" data-testid="link-back">
+        <Link href={returnTo} className="inline-flex items-center gap-2 text-muted-foreground mb-6 hover:text-foreground transition-colors" data-testid="link-back">
           <ArrowLeft className="w-4 h-4" />
           <span className="text-[15px]">Back to Calendar</span>
         </Link>
