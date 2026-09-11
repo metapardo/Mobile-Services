@@ -11,7 +11,21 @@
  * single call — never one call per date. A date that isn't present in that
  * array is the `unavailable` signal (beyond the horizon), not a separate
  * status field (see the generated `weatherForecast`'s own doc comment).
+ *
+ * BUG (found via `bug weather.png`, every visible date rendering `unavailable`
+ * even within the 10-day horizon): `DailyForecastResult.date` types as `string`
+ * and the doc comment on it says `YYYY-MM-DD`, but the actual wire *value* is a
+ * full UTC-midnight ISO *datetime* (e.g. `"2026-09-13T00:00:00.000Z"`) — the
+ * exact same `zod.coerce.date()` + `JSON.stringify` round-trip already
+ * documented for `BookingResult.date` in `api-adapters.ts` (this repo's
+ * orval config coerces every `format: date` response field to a real `Date`
+ * before `res.json()`, and `Date.toJSON()` always emits the full datetime).
+ * Comparing that raw value against a bare `yyyy-MM-dd` string (what every
+ * caller here passes as `date`) never matches, so every date silently
+ * resolved to `unavailable` — see `isoDateOnly` below, reusing the exact same
+ * fix already established for bookings rather than inventing a second one.
  */
+import { isoDateOnly } from '@/lib/api-adapters';
 import type { DailyForecastResult, DailyForecastResultCondition } from '@workspace/api-client-react';
 
 export type WeatherDayState =
@@ -41,7 +55,11 @@ export function resolveWeatherDayState(params: {
   if (isPending) return { kind: 'loading' };
   if (isError) return { kind: 'error' };
   if (!hasFetched) return undefined;
-  const entry = (forecast ?? []).find(d => d.date === date);
+  // `isoDateOnly` — see this file's header comment. `d.date` round-trips as a
+  // full ISO datetime string, not the bare `YYYY-MM-DD` its own type/doc
+  // comment claims; normalizing here (not by reaching into `date` itself) is
+  // what actually made this comparison possible to get right.
+  const entry = (forecast ?? []).find(d => isoDateOnly(d.date) === date);
   if (!entry) return { kind: 'unavailable' };
   if (entry.condition === 'unknown') return { kind: 'unknown', entry };
   return { kind: 'ready', entry };
