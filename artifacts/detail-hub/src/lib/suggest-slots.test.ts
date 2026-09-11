@@ -160,12 +160,14 @@ test('regression — an anchor with an assigned technician still recommends and 
 });
 
 test('recommended start times snap to the 15-minute grid, never an arbitrary minute', async () => {
-  // driveMins=9 (not a multiple of 15) reproduces the live case that
-  // prompted this: a tight-placement time of "10:09 AM" instead of a clean
-  // quarter-hour. Anchor at 09:00-10:00, employeeIds: [] (unassigned path,
-  // simplest to isolate) — after-slot's raw earliest start is 10:00+9=10:09,
-  // which must snap up to 10:15, never appear as :09.
-  const anchors = [anchor({ id: 7, employeeIds: [], startTime: '09:00', durationMinutes: 60, googlePlaceId: 'place-anchor-7' })];
+  // The anchor-side buffer is now `max(realDriveMins, 45)`, and a real drive
+  // to an anchor is always <=45 (anything farther is excluded before
+  // placement even runs), so that buffer is always exactly 45 — itself
+  // already grid-aligned. So the non-grid-aligned input has to come from
+  // the anchor's own start time instead: 09:07-10:07 (not on a 15-minute
+  // mark) means the raw earliest start is 10:07+45=10:52, which must still
+  // snap up to 11:00, never appear as :52 (or :07).
+  const anchors = [anchor({ id: 7, employeeIds: [], startTime: '09:07', durationMinutes: 60, googlePlaceId: 'place-anchor-7' })];
   const outcome = await suggestSlots(
     NEW_ADDRESS, 60, anchors, [], NO_PACKAGES, SETTINGS,
     makeFetchRouteMatrix({ 'place-anchor-7': { miles: 5, minutes: 9 } }),
@@ -178,7 +180,58 @@ test('recommended start times snap to the 15-minute grid, never an arbitrary min
     assert.ok(minutes % 15 === 0, `expected ${slot.startTime} to land on a 15-minute mark`);
   }
   const afterSlot = outcome.slots.find((s) => s.position === 'after');
-  assert.equal(afterSlot?.startTime, '10:15', 'the after-anchor slot should snap 10:09 up to 10:15, never down or left unaligned');
+  assert.equal(afterSlot?.startTime, '11:00', 'the after-anchor slot should snap 10:52 up to 11:00, never down or left unaligned');
+});
+
+test('a recommendation never lands within 45 minutes of the anchor, even when the real drive is much shorter', async () => {
+  // driveMins=9 is well under 45 — without the floor this would place the
+  // after-slot at 10:00+9=10:09 (snapped to 10:15). With the floor, the
+  // anchor-side buffer is max(9, 45)=45, so the slot must start no earlier
+  // than 10:45, not 10:15.
+  const anchors = [anchor({ id: 9, employeeIds: [], startTime: '09:00', durationMinutes: 60, googlePlaceId: 'place-anchor-9' })];
+  const outcome = await suggestSlots(
+    NEW_ADDRESS, 60, anchors, [], NO_PACKAGES, SETTINGS,
+    makeFetchRouteMatrix({ 'place-anchor-9': { miles: 3, minutes: 9 } }),
+    fetchRoute,
+  );
+
+  const afterSlot = outcome.slots.find((s) => s.position === 'after');
+  assert.ok(afterSlot, 'expected an after-anchor slot');
+  assert.equal(afterSlot!.startTime, '10:45', 'a 9-minute real drive must still be floored to the 45-minute minimum buffer');
+});
+
+test('a recommendation never overlaps a booking the naive prev/next search would miss', async () => {
+  // The anchor (unassigned, 13:00-14:00) has no bookings before or after it
+  // in `allBookings` — so a naive "nearest booking that ends before/starts
+  // after the anchor" search finds prev=null, next=null, and would treat
+  // the whole rest of the day as open. But a *different* technician has a
+  // booking from 13:30-15:30 that starts before the anchor ends and ends
+  // after it — invisible to that search (its start, 13:30, is before the
+  // anchor's end, 14:00), yet a naive after-anchor recommendation (tight
+  // against the anchor at ~14:09, well within 13:30-15:30) would collide
+  // with it. The overlap safety net must drop that candidate.
+  const anchors = [anchor({ id: 10, employeeIds: [], startTime: '13:00', durationMinutes: 60, googlePlaceId: 'place-anchor-10' })];
+  const allPackages: SuggestSlotsPackageInput[] = [{ id: 1, durationMinutes: 120 }];
+  const allBookings = [
+    booking({ id: 999, employeeIds: [42], packageIds: [1], startTime: '13:30', googlePlaceId: 'place-other' }),
+  ];
+
+  const outcome = await suggestSlots(
+    NEW_ADDRESS, 60, anchors, allBookings, allPackages, SETTINGS,
+    makeFetchRouteMatrix({ 'place-anchor-10': { miles: 3, minutes: 9 } }),
+    fetchRoute,
+  );
+
+  // The other booking occupies 13:30 (810) - 15:30 (930). No returned slot
+  // may overlap that window.
+  for (const slot of outcome.slots) {
+    const [sh, sm] = slot.startTime.split(':').map(Number);
+    const [eh, em] = slot.endTime.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+    const endMins = eh * 60 + em;
+    const overlapsOther = startMins < 930 && endMins > 810;
+    assert.ok(!overlapsOther, `slot ${slot.startTime}-${slot.endTime} must not overlap the other technician's 13:30-15:30 booking`);
+  }
 });
 
 test('the true empty state still appears when nothing survives the 45-minute filter', async () => {

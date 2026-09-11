@@ -41,6 +41,16 @@
  *   anchor's own leg) — see the buffer filter after the peer/home legs are
  *   fetched, below.
  *
+ *   No recommendation ever lands within `MIN_ADJACENT_BUFFER_MINS` (45 min)
+ *   of an adjacent appointment — the anchor or the neighboring booking on
+ *   the new job's own side — even when the real drive time between them is
+ *   much shorter; that buffer is a floor, not a substitute, for the real
+ *   drive time (a longer drive still wins). A final overlap check
+ *   (`overlapsAny`) also guards against a slot landing on an appointment
+ *   the naive neighbor search wouldn't have noticed — a different
+ *   technician's booking that starts before and ends after the anchor,
+ *   for instance.
+ *
  * Step 3 — Place the slot tight against the anchor, per the PRD's exact
  *   formulas.
  *
@@ -221,6 +231,22 @@ export const WORK_START_MINS = 8 * 60; // 08:00
 export const WORK_END_MINS = 18 * 60; // 18:00
 const MAX_DRIVE_MINS = 45;
 const MATRIX_CHUNK_SIZE = 25; // ComputeRouteMatrixRequest.destinationPlaceIds.maxItems
+
+/**
+ * Minimum gap a recommended slot must leave before/after ANY adjacent
+ * appointment — the anchor itself, or the neighboring booking on the new
+ * job's own side — regardless of the real drive time between them. Previously
+ * the only buffer enforced was the real routed drive time, which could be a
+ * couple of minutes for a nearby address; recommendations were landing
+ * uncomfortably tight against existing jobs. Deliberately a SEPARATE constant
+ * from `MAX_DRIVE_MINS` despite the same value today — that one bounds how
+ * far an anchor may be for a recommendation to consider it at all (a
+ * feasibility filter), this one is a minimum padding requirement around
+ * whatever bookings end up adjacent to the slot. Applied as a floor via
+ * `Math.max(realMinutes, MIN_ADJACENT_BUFFER_MINS)` everywhere a buffer is
+ * computed, so a longer real drive time still wins out.
+ */
+const MIN_ADJACENT_BUFFER_MINS = 45;
 
 const ACTIVE_STATUSES_EXCLUDED = new Set(['cancelled', 'no-show']);
 
@@ -439,6 +465,24 @@ function ceilToGrid(mins: number): number {
 }
 
 /**
+ * True if `[slotStart, slotEnd)` genuinely overlaps any entry in `entries`.
+ * A final safety net after placement + buffering: `prev`/`next` (however
+ * they were selected) only bound the *immediate* neighbors relative to the
+ * anchor's own start/end, which is not the same as "no other booking that
+ * day occupies this window" — a booking on a *different* technician's
+ * schedule that starts before the anchor and ends after it (still in
+ * progress across the anchor's boundary) would never be picked up as `prev`
+ * or `next` by either path's neighbor search, yet could still genuinely
+ * collide with the proposed slot. Checked against every other booking that
+ * day (the assigned-technician path's own `empDay`, or every technician's
+ * bookings for the unassigned path) rather than trusting `prev`/`next` alone,
+ * so a recommendation can never land on a time that's already taken.
+ */
+function overlapsAny(slotStart: number, slotEnd: number, entries: ScheduleEntry[]): boolean {
+  return entries.some((e) => slotStart < e.endMins && slotEnd > e.startMins);
+}
+
+/**
  * Shared before/after tight-placement logic (PRD Step 3), used by both the
  * assigned-technician path (one call per `employeeId`) and the
  * unassigned-anchor path (one call, `employeeId: null`) — factored out so
@@ -450,12 +494,16 @@ function ceilToGrid(mins: number): number {
  * AM") — requested after live testing surfaced arbitrary-minute
  * recommendations. The tight-placement formula still determines the
  * *feasible window* a slot must fall in (business hours, the neighboring
- * booking's gap, the real drive-time buffer to/from the anchor); only the
- * chosen start time within that window is snapped to the grid, and always
- * snapped *toward* the anchor — floor (earlier) for a before-slot, ceil
- * (later) for an after-slot — so the snap can only add buffer, never remove
- * it. If no grid-aligned start time fits the window, the candidate is
- * dropped rather than shown at an unsafe or unaligned time.
+ * booking's gap, the drive-time buffer to/from the anchor — now floored at
+ * `MIN_ADJACENT_BUFFER_MINS` rather than the raw drive time, so a slot never
+ * lands inside 45 minutes of the anchor even when it's a two-minute drive
+ * away); only the chosen start time within that window is snapped to the
+ * grid, and always snapped *toward* the anchor — floor (earlier) for a
+ * before-slot, ceil (later) for an after-slot — so the snap can only add
+ * buffer, never remove it. If no grid-aligned start time fits the window, or
+ * the result still genuinely overlaps another booking that day (see
+ * `overlapsAny`), the candidate is dropped rather than shown at an unsafe,
+ * unaligned, or already-taken time.
  */
 function pushBeforeAfterCandidates(
   anchor: SuggestSlotsAnchorInput,
@@ -467,18 +515,24 @@ function pushBeforeAfterCandidates(
   next: ScheduleEntry | null,
   duration: number,
   driveToAnchor: RouteLeg,
+  otherEntriesThatDay: ScheduleEntry[],
   raw: RawCandidate[],
 ): void {
+  const anchorBufferMins = Math.max(driveMins, MIN_ADJACENT_BUFFER_MINS);
+
   // Before anchor. Feasible window for slotStart is [gapStart, latestStart],
-  // where latestStart keeps slotEnd at or before the anchor's drive-time
-  // buffer. Snap to the latest grid-aligned start in that window (tightest
-  // against the anchor).
+  // where latestStart keeps slotEnd at or before the anchor's buffer. Snap
+  // to the latest grid-aligned start in that window (tightest against the
+  // anchor).
   {
     const gapStart = prev ? prev.endMins : WORK_START_MINS;
-    const latestStart = anchorStart - driveMins - duration;
+    const latestStart = anchorStart - anchorBufferMins - duration;
     const slotStart = floorToGrid(latestStart);
     const slotEnd = slotStart + duration;
-    if (slotStart >= gapStart && slotStart >= WORK_START_MINS && slotEnd <= WORK_END_MINS) {
+    if (
+      slotStart >= gapStart && slotStart >= WORK_START_MINS && slotEnd <= WORK_END_MINS &&
+      !overlapsAny(slotStart, slotEnd, otherEntriesThatDay)
+    ) {
       raw.push({
         anchor, employeeId, position: 'before',
         slotStart, slotEnd, unusedGapMinutes: slotStart - gapStart,
@@ -488,15 +542,18 @@ function pushBeforeAfterCandidates(
   }
 
   // After anchor. Feasible window for slotStart is [earliestStart, gapEnd -
-  // duration], where earliestStart is the anchor's drive-time buffer. Snap
-  // to the earliest grid-aligned start in that window (tightest against the
+  // duration], where earliestStart is the anchor's buffer. Snap to the
+  // earliest grid-aligned start in that window (tightest against the
   // anchor).
   {
-    const earliestStart = anchorEnd + driveMins;
+    const earliestStart = anchorEnd + anchorBufferMins;
     const slotStart = ceilToGrid(earliestStart);
     const slotEnd = slotStart + duration;
     const gapEnd = next ? next.startMins : WORK_END_MINS;
-    if (slotEnd <= gapEnd && slotEnd <= WORK_END_MINS) {
+    if (
+      slotEnd <= gapEnd && slotEnd <= WORK_END_MINS &&
+      !overlapsAny(slotStart, slotEnd, otherEntriesThatDay)
+    ) {
       raw.push({
         anchor, employeeId, position: 'after',
         slotStart, slotEnd, unusedGapMinutes: gapEnd - slotEnd,
@@ -608,8 +665,10 @@ export async function suggestSlots(
       // Exactly one before-candidate + one after-candidate per anchor here
       // (never per-employee, since there's no employee to iterate) —
       // naturally satisfies the ticket's "cap recommendations per anchor at
-      // 2" rule for this path without any extra bookkeeping.
-      pushBeforeAfterCandidates(anchor, null, anchorStart, anchorEnd, driveMins, prev, next, duration, driveToAnchor, raw);
+      // 2" rule for this path without any extra bookkeeping. `others` (every
+      // technician's bookings that day, not just `prev`/`next`) is also the
+      // final overlap safety net — see `overlapsAny`.
+      pushBeforeAfterCandidates(anchor, null, anchorStart, anchorEnd, driveMins, prev, next, duration, driveToAnchor, others, raw);
       continue;
     }
 
@@ -623,8 +682,9 @@ export async function suggestSlots(
 
       const prev = empDay[anchorIdx - 1] ?? null;
       const next = empDay[anchorIdx + 1] ?? null;
+      const otherEntriesThatDay = empDay.filter((e) => e.id !== anchor.id);
 
-      pushBeforeAfterCandidates(anchor, empId, anchorStart, anchorEnd, driveMins, prev, next, duration, driveToAnchor, raw);
+      pushBeforeAfterCandidates(anchor, empId, anchorStart, anchorEnd, driveMins, prev, next, duration, driveToAnchor, otherEntriesThatDay, raw);
     }
   }
 
@@ -662,11 +722,16 @@ export async function suggestSlots(
   //    (§10, same discipline as everywhere else here). Not a countable
   //    "skip" — same as any other candidate dropped for not fitting a gap,
   //    this is a legitimate scheduling outcome, not a data gap.
+  //
+  //    Floored at `MIN_ADJACENT_BUFFER_MINS` (not just the real drive time)
+  //    for the same reason as the anchor-side buffer above — a neighboring
+  //    job two minutes away shouldn't get a recommendation stacked
+  //    immediately against it either.
   const bufferedRaw = raw.filter((c) => {
     if (!c.peer?.googlePlaceId) return true;
     const peerLeg = newOriginLegs.get(c.peer.googlePlaceId);
     if (!peerLeg) return true;
-    const bufferMins = Math.round(peerLeg.minutes);
+    const bufferMins = Math.max(Math.round(peerLeg.minutes), MIN_ADJACENT_BUFFER_MINS);
     return c.position === 'before'
       ? c.slotStart >= c.peer.endMins + bufferMins
       : c.slotEnd + bufferMins <= c.peer.startMins;
