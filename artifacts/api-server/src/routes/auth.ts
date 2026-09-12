@@ -22,6 +22,7 @@ import { auth } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { captureAndFlush } from "../lib/sentry";
 import { toFetchHeaders, forwardSetCookies } from "../lib/http-bridge";
+import { geocodeAddress, GoogleMapsConfigError, GoogleMapsUpstreamError } from "../integrations/google-maps";
 
 const router: IRouter = Router();
 
@@ -70,7 +71,18 @@ const router: IRouter = Router();
  *   3. Create the organization's `settings` row (`createDefaultSettings`, `@workspace/db`)
  *      from the required `businessAddress` field, seeding everything else with
  *      mock-data.ts-matching defaults (FR-11/FR-12/FR-13 — see that function's own
- *      comment for why these particular defaults).
+ *      comment for why these particular defaults). Before this, `businessAddress` is
+ *      geocoded via `geocodeAddress` (`../integrations/google-maps.ts` — the same Text
+ *      Search call `backfill-booking-coordinates.ts` already uses to resolve a known
+ *      address string with no user interaction) so `hqLatitude`/`hqLongitude`/
+ *      `hqGooglePlaceId` are populated immediately, not left `null` until the owner
+ *      separately re-enters their address through Settings' autocomplete field. Found
+ *      as a real bug: every org signing up before this point got weather (and,
+ *      unnoticed until then, Fuel Gauge's HQ-anchored scoring) silently non-functional
+ *      by default, since both features correctly-but-invisibly no-op on a null HQ. A
+ *      failed/unresolved geocode here (bad address, Google outage, missing API key)
+ *      must NOT block signup — logged and swallowed, leaving HQ coordinates null exactly
+ *      as before this existed; the owner can always resolve it later via Settings.
  *   4. Sign the new user in for real (`auth.api.signInEmail`, WITH this request's real
  *      headers this time, unlike step 1's headless call — see `POST /auth/login`'s doc
  *      comment for why `returnHeaders`/`forwardSetCookies` matter here), then set the
@@ -125,7 +137,28 @@ router.post("/auth/signup", async (req, res) => {
     }
     createdOrganizationId = organization.id;
 
-    await createDefaultSettings(organization.id, businessAddress);
+    // See this route's doc comment (step 3) — a failed/unresolved geocode must never
+    // block signup, so this is deliberately its own try/catch, not folded into the
+    // outer one whose catch treats any failure as "compensate and fail the signup".
+    let hqGeocode: { latitude: number; longitude: number; placeId: string } | null = null;
+    try {
+      const geocoded = await geocodeAddress(businessAddress);
+      if (geocoded) {
+        hqGeocode = { latitude: geocoded.latitude, longitude: geocoded.longitude, placeId: geocoded.placeId };
+      } else {
+        logger.info({ businessAddress }, "POST /auth/signup: geocodeAddress found no match; HQ coordinates left unset");
+      }
+    } catch (err) {
+      const reason =
+        err instanceof GoogleMapsConfigError
+          ? "google_maps_not_configured"
+          : err instanceof GoogleMapsUpstreamError
+            ? `google_upstream_error: ${err.message}`
+            : `unexpected_error: ${err instanceof Error ? err.message : String(err)}`;
+      logger.warn({ reason }, "POST /auth/signup: could not geocode businessAddress; HQ coordinates left unset");
+    }
+
+    await createDefaultSettings(organization.id, businessAddress, hqGeocode);
 
     const { headers, response: signInResponse } = await auth.api.signInEmail({
       body: { email, password },

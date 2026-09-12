@@ -43,19 +43,33 @@ const SETTINGS_DEFAULTS = {
  * column is seeded from `SETTINGS_DEFAULTS` above, editable later via
  * `updateSettings`/`GET|PATCH /settings`.
  *
- * Must be called with the organization's own id already in hand (i.e. after
- * `auth.api.createOrganization` succeeds) — `withOrganization` sets the RLS session
- * variable to this same id for the duration of the insert, so the newly-created row
- * satisfies its own `tenant_isolation` policy's `WITH CHECK` immediately.
+ * `hq` (optional): the resolved `hqLatitude`/`hqLongitude`/`hqGooglePlaceId` for
+ * `homeAddress`, if the caller already geocoded it (`POST /auth/signup` does this via
+ * `geocodeAddress` before calling here — see that route's own comment for why a failed/
+ * unresolved geocode must never block signup). Omitted or `undefined` leaves all three
+ * columns `null`, exactly as before this parameter existed — every code path that reads
+ * them (Fuel Gauge, `PRD_Mobull_Weather_Coverage.md`'s calendar/booking weather icons)
+ * already treats "HQ has no coordinates yet" as a real, expected state, not an error, so
+ * there is no unsafe default to worry about here.
  */
 export async function createDefaultSettings(
   organizationId: string,
   homeAddress: string,
+  hq?: { latitude: number; longitude: number; placeId: string } | null,
 ): Promise<Settings> {
   return withOrganization(organizationId, async (tx) => {
     const [created] = await tx
       .insert(settingsTable)
-      .values({ organizationId, homeAddress, ...SETTINGS_DEFAULTS })
+      .values({
+        organizationId,
+        homeAddress,
+        ...(hq && {
+          hqLatitude: String(hq.latitude),
+          hqLongitude: String(hq.longitude),
+          hqGooglePlaceId: hq.placeId,
+        }),
+        ...SETTINGS_DEFAULTS,
+      })
       .returning();
     return created!;
   });
