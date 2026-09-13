@@ -134,7 +134,8 @@ export const GetSettingsResponse = zod.object({
   "fuelGaugeFullMin": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/minute.'),
   "techHourlyCost": zod.number().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §6.1\/§6.2 (Phase 1). What an hour of a technician\'s time costs the business — priced into the Fuel Gauge\'s drive-time cost line. NOT NULL at the DB level with a $22.00 default, so this is always present (unlike the nullable HQ coordinate fields above).'),
   "paymentProcessorConnected": zod.boolean(),
-  "cardReaderPaired": zod.boolean()
+  "cardReaderPaired": zod.boolean(),
+  "onboardingComplete": zod.boolean().describe('PRD_Mobull_Onboarding_Flow.md FR-4\/FR-6. `true` once this organization has completed the first-run onboarding flow; `false` (the default for new signups) means `AuthGate` (frontend) should render onboarding instead of the app shell. Every settings row that existed before this field was introduced was backfilled to `true` at ship time (FR-5) — this flow is for new signups only.')
 }).describe('Per-organization settings — one row per organization, created automatically at signup. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Settings` interface (see `PRD_MobileDetailingApp.md` Section 3.2\'s Gas Meter feature for what most of these beyond `homeAddress` are used for).')
 
 
@@ -163,7 +164,8 @@ export const UpdateSettingsBody = zod.object({
   "fuelGaugeFullMin": zod.number().optional(),
   "techHourlyCost": zod.number().min(updateSettingsBodyTechHourlyCostMin).optional(),
   "paymentProcessorConnected": zod.boolean().optional(),
-  "cardReaderPaired": zod.boolean().optional()
+  "cardReaderPaired": zod.boolean().optional(),
+  "onboardingComplete": zod.boolean().optional().describe('PRD_Mobull_Onboarding_Flow.md FR-19. Screen 6\'s \"Get Started\" CTA sets this to `true` on completion, so `AuthGate` renders `<AppShell>` instead of onboarding from then on.')
 }).describe('Partial update to the current organization\'s settings. All fields optional — omitted fields are left unchanged. Same field set as `SettingsResult`.')
 
 export const UpdateSettingsResponse = zod.object({
@@ -182,7 +184,8 @@ export const UpdateSettingsResponse = zod.object({
   "fuelGaugeFullMin": zod.number().describe('Fuel Gauge \"full\" band lower bound, $\/minute.'),
   "techHourlyCost": zod.number().describe('PRD_Mobull_Fuel_Gauge_Accuracy_Rework.md §6.1\/§6.2 (Phase 1). What an hour of a technician\'s time costs the business — priced into the Fuel Gauge\'s drive-time cost line. NOT NULL at the DB level with a $22.00 default, so this is always present (unlike the nullable HQ coordinate fields above).'),
   "paymentProcessorConnected": zod.boolean(),
-  "cardReaderPaired": zod.boolean()
+  "cardReaderPaired": zod.boolean(),
+  "onboardingComplete": zod.boolean().describe('PRD_Mobull_Onboarding_Flow.md FR-4\/FR-6. `true` once this organization has completed the first-run onboarding flow; `false` (the default for new signups) means `AuthGate` (frontend) should render onboarding instead of the app shell. Every settings row that existed before this field was introduced was backfilled to `true` at ship time (FR-5) — this flow is for new signups only.')
 }).describe('Per-organization settings — one row per organization, created automatically at signup. Field names\/shape match `artifacts\/detail-hub\/src\/lib\/mock-data.ts`\'s `Settings` interface (see `PRD_MobileDetailingApp.md` Section 3.2\'s Gas Meter feature for what most of these beyond `homeAddress` are used for).')
 
 

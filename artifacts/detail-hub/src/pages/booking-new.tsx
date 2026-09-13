@@ -1404,6 +1404,43 @@ export default function BookingNew() {
         </div>
       </Section>
 
+      {/* ── Team ── */}
+      {/* PRD_Mobull_Onboarding_Flow.md FR-20/FR-21 — re-adds a lightweight
+          assignment control on top of the `selectedEmployees` state that was
+          deliberately kept (see comments above) when the old "Team" section
+          was removed. Gated on the real, live employee count (not a frozen
+          onboarding-time answer) — a solo org (0 or 1 employees) never sees
+          this; auto-assignment and Smart Suggestions keep working unchanged
+          either way. */}
+      {employees.length > 1 && (
+        <Section title="Team" icon={Users}>
+          <div className="flex flex-wrap gap-2">
+            {employees.map(emp => {
+              const isSelected = selectedEmployees.includes(emp.id);
+              return (
+                <button
+                  key={emp.id}
+                  type="button"
+                  onClick={() => setSelectedEmployees(prev =>
+                    isSelected ? prev.filter(id => id !== emp.id) : [...prev, emp.id],
+                  )}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full border text-[13px] font-medium transition-colors ${
+                    isSelected ? 'border-primary bg-primary/10 text-primary' : 'border-border text-foreground hover:border-foreground/40'
+                  }`}
+                  data-testid={`button-booking-employee-${emp.id}`}
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: emp.color }} />
+                  {emp.name}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[12px] text-muted-foreground mt-2">
+            Optional — leave blank to let Smart Suggestions assign automatically.
+          </p>
+        </Section>
+      )}
+
       {/* ── Notes ── */}
       <Section title="Appointment note" icon={FileText}>
         <textarea

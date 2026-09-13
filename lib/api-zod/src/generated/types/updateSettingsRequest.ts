@@ -28,4 +28,6 @@ export interface UpdateSettingsRequest {
   techHourlyCost?: number;
   paymentProcessorConnected?: boolean;
   cardReaderPaired?: boolean;
+  /** PRD_Mobull_Onboarding_Flow.md FR-19. Screen 6's "Get Started" CTA sets this to `true` on completion, so `AuthGate` renders `<AppShell>` instead of onboarding from then on. */
+  onboardingComplete?: boolean;
 }

@@ -38,4 +38,6 @@ export interface SettingsResult {
   techHourlyCost: number;
   paymentProcessorConnected: boolean;
   cardReaderPaired: boolean;
+  /** PRD_Mobull_Onboarding_Flow.md FR-4/FR-6. `true` once this organization has completed the first-run onboarding flow; `false` (the default for new signups) means `AuthGate` (frontend) should render onboarding instead of the app shell. Every settings row that existed before this field was introduced was backfilled to `true` at ship time (FR-5) — this flow is for new signups only. */
+  onboardingComplete: boolean;
 }

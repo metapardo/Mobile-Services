@@ -2550,6 +2550,15 @@ components:
           type: boolean
         cardReaderPaired:
           type: boolean
+        onboardingComplete:
+          type: boolean
+          description: >-
+            PRD_Mobull_Onboarding_Flow.md FR-4/FR-6. `true` once this organization has
+            completed the first-run onboarding flow; `false` (the default for new
+            signups) means `AuthGate` (frontend) should render onboarding instead of the
+            app shell. Every settings row that existed before this field was introduced
+            was backfilled to `true` at ship time (FR-5) — this flow is for new signups
+            only.
       required:
         - homeAddress
         - gasPrice
@@ -2564,6 +2573,7 @@ components:
         - techHourlyCost
         - paymentProcessorConnected
         - cardReaderPaired
+        - onboardingComplete
     UpdateSettingsRequest:
       type: object
       description: >-
@@ -2604,6 +2614,12 @@ components:
           type: boolean
         cardReaderPaired:
           type: boolean
+        onboardingComplete:
+          type: boolean
+          description: >-
+            PRD_Mobull_Onboarding_Flow.md FR-19. Screen 6's "Get Started" CTA sets this
+            to `true` on completion, so `AuthGate` renders `<AppShell>` instead of
+            onboarding from then on.
     ClientResult:
       type: object
       description: >-

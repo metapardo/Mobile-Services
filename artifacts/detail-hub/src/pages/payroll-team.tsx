@@ -41,7 +41,10 @@ import {
 } from '@workspace/blue-glass-design-system/components/ui/empty';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 
-const EMPLOYEE_COLORS = ['#3654FF', '#1E9E62', '#D9A404', '#DC2626', '#9333EA', '#0891B2', '#EA580C', '#DB2777'];
+// Exported so `onboarding-flow.tsx` (Screen 2/6, PRD_Mobull_Onboarding_Flow.md
+// FR-10) can round-robin the exact same palette when auto-creating employees
+// at signup, instead of inventing a second one.
+export const EMPLOYEE_COLORS = ['#3654FF', '#1E9E62', '#D9A404', '#DC2626', '#9333EA', '#0891B2', '#EA580C', '#DB2777'];
 
 type PayType = 'hourly' | 'commission';
 

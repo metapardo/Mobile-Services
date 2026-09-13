@@ -156,4 +156,208 @@
       display: none;
     }
   }
+
+  /* ── Onboarding flow — recreated from `Onboarding design and copy/` ──
+     A starfield/nebula backdrop and persistent (not just hover) glass-glow
+     borders, built from the same conic-gradient-edge + diagonal-shimmer
+     vocabulary as `.glass-interactive`/`.booking-card-arrive` above, just
+     looped continuously instead of firing once on hover/arrival — the
+     reference shows selected cards and hero CTAs glowing at rest. */
+  .onboarding-starfield {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 18% 12%, rgba(45, 168, 255, 0.12), transparent 60%),
+      radial-gradient(ellipse 55% 45% at 85% 70%, rgba(109, 92, 231, 0.10), transparent 60%),
+      #03111f;
+  }
+  .onboarding-starfield-layer {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    animation: onboarding-star-drift 80s linear infinite;
+  }
+  .onboarding-starfield-layer:first-child {
+    top: 0;
+  }
+  .onboarding-starfield-layer:last-child {
+    top: 100%;
+  }
+  .onboarding-star {
+    position: absolute;
+    border-radius: 50%;
+    background: #eaf4ff;
+    opacity: 0.5;
+    animation: onboarding-star-twinkle 4.5s ease-in-out infinite;
+  }
+  .onboarding-star--bright {
+    background: radial-gradient(circle, #d6f0ff 0%, #2da8ff 55%, transparent 75%);
+    box-shadow: 0 0 14px 3px rgba(45, 168, 255, 0.55);
+  }
+
+  @keyframes onboarding-star-drift {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-100%);
+    }
+  }
+  @keyframes onboarding-star-twinkle {
+    0%,
+    100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 0.95;
+    }
+  }
+
+  /* Staggered fade + rise-in for hero copy — direct children animate in
+     sequence via nth-child delays, replayed each time the screen mounts. */
+  .onboarding-reveal > * {
+    opacity: 0;
+    transform: translateY(18px);
+    animation: onboarding-text-reveal 1600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .onboarding-reveal > *:nth-child(1) {
+    animation-delay: 300ms;
+  }
+  .onboarding-reveal > *:nth-child(2) {
+    animation-delay: 1100ms;
+  }
+  @keyframes onboarding-text-reveal {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Persistent glass-edge glow ring — the always-on sibling of
+     `.glass-interactive`'s hover-only border wrap + shimmer sweep. */
+  .onboarding-glow-ring {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .onboarding-glow-ring::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.5px;
+    pointer-events: none;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      transparent 60deg,
+      hsl(var(--primary) / 0.9) 100deg,
+      transparent 150deg,
+      transparent 270deg,
+      hsl(var(--primary) / 0.5) 320deg,
+      transparent 360deg
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation: glass-edge-wrap 3.4s linear infinite;
+  }
+  .onboarding-glow-ring::after {
+    content: "";
+    position: absolute;
+    inset: -30% auto -30% 0;
+    width: 46%;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(105deg, transparent 8%, var(--glass-shimmer, rgba(255, 255, 255, 0.4)) 48%, transparent 88%);
+    filter: blur(7px);
+    animation: onboarding-shine-sweep 2800ms cubic-bezier(0.2, 0.65, 0.35, 1) infinite;
+  }
+  @keyframes onboarding-shine-sweep {
+    0% {
+      transform: translateX(-140%) skewX(-16deg);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.85;
+    }
+    60% {
+      opacity: 0.85;
+    }
+    100% {
+      transform: translateX(280%) skewX(-16deg);
+      opacity: 0;
+    }
+  }
+
+  /* Destination-pin glow/pulse (Screens 3 and 5) — the reference photo
+     already has a glowing pin baked in; this layers an animated halo behind
+     it (positioned to match the real art) so the glow visibly pulses,
+     blended additively so it never shows as a flat shape of its own. */
+  .onboarding-pin-halo {
+    position: absolute;
+    width: 22%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(191, 230, 255, 0.9) 0%, rgba(45, 168, 255, 0.5) 45%, transparent 72%);
+    mix-blend-mode: screen;
+    pointer-events: none;
+    animation: onboarding-pin-halo-pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes onboarding-pin-halo-pulse {
+    0%,
+    100% {
+      opacity: 0.4;
+      transform: translate(-50%, -50%) scale(0.88);
+    }
+    50% {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1.25);
+    }
+  }
+
+  /* Hero CTA pill — the one deliberate departure from DESIGN.md's
+     Single-Accent Rule, scoped to onboarding only: the reference art in
+     `Onboarding design and copy/` uses a blue-to-violet gradient button on
+     every screen, and the user asked for an exact recreation of that asset
+     specifically, not a Signal-Blue substitution. */
+  .onboarding-cta {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background: linear-gradient(135deg, #2da8ff 0%, #6c5ce7 100%);
+    box-shadow: 0 0 0 1px rgba(45, 168, 255, 0.5), 0 10px 30px rgba(45, 168, 255, 0.35), 0 0 40px rgba(108, 92, 231, 0.25);
+  }
+  .onboarding-cta::after {
+    content: "";
+    position: absolute;
+    inset: -30% auto -30% 0;
+    width: 46%;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 8%, rgba(255, 255, 255, 0.55) 48%, transparent 88%);
+    filter: blur(7px);
+    animation: onboarding-shine-sweep 3200ms cubic-bezier(0.2, 0.65, 0.35, 1) infinite;
+    animation-delay: 900ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .onboarding-starfield-layer,
+    .onboarding-star,
+    .onboarding-reveal > *,
+    .onboarding-glow-ring::before,
+    .onboarding-glow-ring::after,
+    .onboarding-pin-halo,
+    .onboarding-cta::after {
+      animation: none;
+    }
+    .onboarding-reveal > * {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }

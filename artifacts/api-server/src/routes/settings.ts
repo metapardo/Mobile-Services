@@ -35,6 +35,13 @@ function toWire(row: Settings) {
     techHourlyCost: Number(row.techHourlyCost),
     paymentProcessorConnected: row.paymentProcessorConnected,
     cardReaderPaired: row.cardReaderPaired,
+    // PRD_Mobull_Onboarding_Flow.md FR-4/FR-6 — omitting this field made every
+    // GET/PATCH /settings response fail GetSettingsResponse/UpdateSettingsResponse's
+    // Zod parse (onboardingComplete is required, non-nullable) as soon as that schema
+    // added it, breaking settings.tsx, booking-new.tsx's Fuel Gauge, and onboarding
+    // itself — same shape as every other row field above, no conversion needed since
+    // it's already a plain boolean column, not `numeric`.
+    onboardingComplete: row.onboardingComplete,
   };
 }
 

@@ -9,7 +9,7 @@ import {
 } from 'date-fns';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import {
-  useListBookings, useListPackages, useGetFinancialReport, getGetFinancialReportQueryKey,
+  useListBookings, useListPackages, useListEmployees, useGetFinancialReport, getGetFinancialReportQueryKey,
   type FinancialReportResult,
 } from '@workspace/api-client-react';
 import { adaptBooking, isoDateOnly } from '@/lib/api-adapters';
@@ -215,6 +215,13 @@ function OperationalView({ period }: { period: 'daily' | 'weekly' }) {
 
 // ─── Full financial view (monthly / quarterly / annual) ───────────────────────
 function FinancialView({ report, periodLabel }: { report: FinancialReportResult; periodLabel: string }) {
+  // PRD_Mobull_Onboarding_Flow.md FR-20/FR-21, §6 — "Revenue by employee"
+  // is a redundant one-row breakdown of a number already shown elsewhere on
+  // this page for a solo org. Gated on the real, live employee count (not a
+  // frozen onboarding-time answer), same as `booking-new.tsx`'s team picker.
+  const employeesQuery = useListEmployees();
+  const employees = employeesQuery.data ?? [];
+
   const monthsLabel = monthsRangeLabel(report.months);
   const maxPkgRev = report.packageMix.length > 0
     ? Math.max(...report.packageMix.map(p => p.revenue))
@@ -459,7 +466,7 @@ function FinancialView({ report, periodLabel }: { report: FinancialReportResult;
       </Card>
 
       {/* ── Revenue by employee (bottom) ── */}
-      {empRevenue.length > 0 && (
+      {employees.length > 1 && empRevenue.length > 0 && (
         <Card className="p-4">
           <p className="text-[15px] font-semibold mb-3">Revenue by employee</p>
           <p className="text-[12px] text-muted-foreground mb-3">From completed bookings in app</p>

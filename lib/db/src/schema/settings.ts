@@ -47,6 +47,14 @@ export const settingsTable = pgTable(
     techHourlyCost: numeric("tech_hourly_cost", { precision: 10, scale: 2 }).notNull().default("22.00"),
     paymentProcessorConnected: boolean("payment_processor_connected").notNull().default(false),
     cardReaderPaired: boolean("card_reader_paired").notNull().default(false),
+    // PRD_Mobull_Onboarding_Flow.md FR-4/FR-6. Means "this organization has completed
+    // the first-run onboarding flow" — `false` (the default) means a brand-new org
+    // should see the onboarding flow instead of the app shell; `AuthGate` (frontend)
+    // reads this right after its existing `organizationId` check. FR-5: every
+    // pre-existing settings row was backfilled to `true` at ship time in a one-time
+    // manual migration (this flow is for new signups only) — the `false` default only
+    // applies going forward, to rows created after this column existed.
+    onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   },
   (table) => [tenantIsolationPolicy("settings", table)],
 ).enableRLS();
