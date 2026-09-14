@@ -325,24 +325,9 @@ const signupSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   organizationName: z.string().min(1, 'Business name is required'),
-  organizationSlug: z
-    .string()
-    .min(1, 'Business URL is required')
-    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Lowercase letters, numbers, and hyphens only (e.g. "acme-detailing")'),
-  // Populates `AdminSettings.home_base_address` (Gas Meter's home base) —
-  // stored verbatim, no geocoding at signup time (FR-11/FR-12).
-  businessAddress: z.string().min(1, 'Business address is required'),
 });
 
 type SignupFormValues = z.infer<typeof signupSchema>;
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
 
 function Logo() {
   return (
@@ -831,9 +816,6 @@ function GetStartedFree() {
           ))}
         </RevealGroup>
         <Reveal className="price-journey-cta" delay={0.15}>
-          <button className="button-primary" onClick={scrollToAccess} data-testid="button-pricing-start">
-            Get Started <ArrowUpRight size={15} />
-          </button>
           <p className="form-fineprint">Free for 14 days. No card required.</p>
         </Reveal>
       </div>
@@ -855,12 +837,10 @@ function SignupPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showPassword, setShowPassword] = useState(false);
-  const [slugTouched, setSlugTouched] = useState(false);
 
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -869,8 +849,6 @@ function SignupPanel() {
       email: '',
       password: '',
       organizationName: '',
-      organizationSlug: '',
-      businessAddress: '',
     },
   });
 
@@ -909,52 +887,8 @@ function SignupPanel() {
           placeholder="Northline Mobile Detail"
           data-testid="input-organization-name"
           {...register('organizationName')}
-          onChange={(e) => {
-            setValue('organizationName', e.target.value, { shouldValidate: true });
-            if (!slugTouched) {
-              setValue('organizationSlug', slugify(e.target.value), { shouldValidate: true });
-            }
-          }}
         />
         {errors.organizationName && <span className="field-error">{errors.organizationName.message}</span>}
-      </div>
-
-      <div className="field-group">
-        <label htmlFor="organization-slug">Business URL</label>
-        <input
-          id="organization-slug"
-          placeholder="northline-mobile-detail"
-          data-testid="input-organization-slug"
-          {...register('organizationSlug')}
-          onChange={(e) => {
-            setSlugTouched(true);
-            setValue('organizationSlug', slugify(e.target.value), { shouldValidate: true });
-          }}
-        />
-        {errors.organizationSlug ? (
-          <span className="field-error">{errors.organizationSlug.message}</span>
-        ) : (
-          <span className="field-error" style={{ color: 'hsl(var(--muted-foreground))' }}>
-            Lowercase letters, numbers, and hyphens only.
-          </span>
-        )}
-      </div>
-
-      <div className="field-group">
-        <label htmlFor="business-address">Business address</label>
-        <input
-          id="business-address"
-          placeholder="123 Main St, Phoenix, AZ 85001"
-          data-testid="input-business-address"
-          {...register('businessAddress')}
-        />
-        {errors.businessAddress ? (
-          <span className="field-error">{errors.businessAddress.message}</span>
-        ) : (
-          <span className="field-error" style={{ color: 'hsl(var(--muted-foreground))' }}>
-            Your home base, used for route and Fuel Gauge calculations. Editable later in Settings.
-          </span>
-        )}
       </div>
 
       <div className="field-group">

@@ -268,7 +268,7 @@
 .site-shell .access-copy p{color:hsl(var(--muted-foreground));line-height:1.6;max-width:330px;font-size:.9rem}
 .site-shell .access-form{display:grid;gap:13px;position:relative;z-index:1}
 .site-shell .field-group{display:grid;gap:7px}
-.site-shell .field-group label{font-family:var(--app-font-mono);color:hsl(var(--muted-foreground));font-size:.67rem;letter-spacing:.06em;text-transform:uppercase}
+.site-shell .field-group label{font-family:var(--app-font-mono);color:hsl(var(--muted-foreground));font-size:.78rem;letter-spacing:.06em;text-transform:uppercase}
 .site-shell .field-group input,.site-shell .field-group select,.site-shell .field-group textarea{width:100%;color:hsl(var(--foreground));background:rgba(3,16,27,.56);border:1px solid rgba(141,200,228,.23);border-radius:10px;padding:13px 14px;outline:none;font-size:.88rem;transition:border-color .2s ease,background-color .2s ease}
 .site-shell .field-group textarea{resize:vertical;min-height:84px}
 .site-shell .field-group input::placeholder,.site-shell .field-group textarea::placeholder{color:rgba(190,214,228,.38)}

@@ -27,14 +27,4 @@ export interface SignupRequest {
      * @minLength 1
      */
   organizationName: string;
-  /**
-     * URL-safe unique slug for the new organization (lowercase, hyphen-separated).
-     * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
-     */
-  organizationSlug: string;
-  /**
-     * The business's home base address, required at signup (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-3/FR-11). Stored verbatim as `settings.homeAddress` for the new organization — not geocoded at signup time (FR-12); a future geocoding job is out of scope here.
-     * @minLength 1
-     */
-  businessAddress: string;
 }

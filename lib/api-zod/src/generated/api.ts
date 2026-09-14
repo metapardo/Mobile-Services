@@ -25,17 +25,13 @@ export const HealthCheckResponse = zod.object({
 export const signupBodyPasswordMin = 8;
 
 
-export const signupBodyOrganizationSlugRegExp = new RegExp('^[a-z0-9]+(-[a-z0-9]+)*$');
-
 
 
 export const SignupBody = zod.object({
   "name": zod.string().min(1).describe('The admin\/owner user\'s display name.'),
   "email": zod.string().email().describe('The admin\/owner user\'s login email.'),
   "password": zod.string().min(signupBodyPasswordMin).describe('The admin\/owner user\'s password (min length matches Better Auth\'s default).'),
-  "organizationName": zod.string().min(1).describe('Display name of the new organization.'),
-  "organizationSlug": zod.string().regex(signupBodyOrganizationSlugRegExp).describe('URL-safe unique slug for the new organization (lowercase, hyphen-separated).'),
-  "businessAddress": zod.string().min(1).describe('The business\'s home base address, required at signup (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-3\/FR-11). Stored verbatim as `settings.homeAddress` for the new organization — not geocoded at signup time (FR-12); a future geocoding job is out of scope here.')
+  "organizationName": zod.string().min(1).describe('Display name of the new organization.')
 }).describe('Body for the fully self-serve admin\/owner signup endpoint. Creates one user and one brand-new organization together — no invite token.')
 
 export const SignupResponse = zod.object({

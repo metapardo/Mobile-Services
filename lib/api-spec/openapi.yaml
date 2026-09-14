@@ -2334,25 +2334,11 @@ components:
           type: string
           minLength: 1
           description: Display name of the new organization.
-        organizationSlug:
-          type: string
-          pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
-          description: URL-safe unique slug for the new organization (lowercase, hyphen-separated).
-        businessAddress:
-          type: string
-          minLength: 1
-          description: >-
-            The business's home base address, required at signup
-            (`PRD_DetailHub_SelfServe_Signup_Trial.md` FR-3/FR-11). Stored verbatim as
-            `settings.homeAddress` for the new organization — not geocoded at signup
-            time (FR-12); a future geocoding job is out of scope here.
       required:
         - name
         - email
         - password
         - organizationName
-        - organizationSlug
-        - businessAddress
     AuthUser:
       type: object
       description: >-

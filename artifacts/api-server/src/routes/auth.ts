@@ -22,9 +22,24 @@ import { auth } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { captureAndFlush } from "../lib/sentry";
 import { toFetchHeaders, forwardSetCookies } from "../lib/http-bridge";
-import { geocodeAddress, GoogleMapsConfigError, GoogleMapsUpstreamError } from "../integrations/google-maps";
 
 const router: IRouter = Router();
+
+/**
+ * Lowercase-hyphenated slug generator for Better Auth's `createOrganization`, matching
+ * the client-side `slugify()` this app used to expose as an editable "Business URL"
+ * field (`artifacts/detail-hub/src/pages/signup.tsx`, removed per
+ * `PRD_Mobull_Marketing_Site_Signup_Simplification.md` FR-1/FR-2). Kept in sync with
+ * that implementation intentionally — same collapse-to-hyphens/trim behavior — since
+ * this is now the only place a slug gets generated.
+ */
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 /**
  * POST /auth/signup — fully self-serve admin/owner signup. No invite token, no gate of
@@ -67,22 +82,21 @@ const router: IRouter = Router();
  *   2. Create the organization (+ owner membership) via `auth.api.createOrganization`,
  *      passing `userId` explicitly with no session/headers so Better Auth treats this as
  *      a trusted server-side ("system") action, per `crud-org.mjs`'s own
- *      `isSystemAction` check.
+ *      `isSystemAction` check. The `slug` Better Auth requires is generated here from
+ *      `organizationName` via `slugify()` above — there's no client-supplied slug field
+ *      anymore (`PRD_Mobull_Marketing_Site_Signup_Simplification.md` FR-2/FR-3). If
+ *      Better Auth rejects the slug as already taken, this retries exactly once with a
+ *      short random suffix appended (e.g. `northline-mobile-detail-4f2a`) before giving
+ *      up — with the slug field gone from the signup form, there's no one left for a raw
+ *      collision error to ask to pick a different value.
  *   3. Create the organization's `settings` row (`createDefaultSettings`, `@workspace/db`)
- *      from the required `businessAddress` field, seeding everything else with
- *      mock-data.ts-matching defaults (FR-11/FR-12/FR-13 — see that function's own
- *      comment for why these particular defaults). Before this, `businessAddress` is
- *      geocoded via `geocodeAddress` (`../integrations/google-maps.ts` — the same Text
- *      Search call `backfill-booking-coordinates.ts` already uses to resolve a known
- *      address string with no user interaction) so `hqLatitude`/`hqLongitude`/
- *      `hqGooglePlaceId` are populated immediately, not left `null` until the owner
- *      separately re-enters their address through Settings' autocomplete field. Found
- *      as a real bug: every org signing up before this point got weather (and,
- *      unnoticed until then, Fuel Gauge's HQ-anchored scoring) silently non-functional
- *      by default, since both features correctly-but-invisibly no-op on a null HQ. A
- *      failed/unresolved geocode here (bad address, Google outage, missing API key)
- *      must NOT block signup — logged and swallowed, leaving HQ coordinates null exactly
- *      as before this existed; the owner can always resolve it later via Settings.
+ *      with an empty `homeAddress` — HQ collection now happens exclusively through
+ *      Onboarding Screen 3's `PATCH /settings` (real `AddressAutocomplete`, gated behind
+ *      `AuthGate` so no org reaches an HQ-dependent screen first — see
+ *      `PRD_Mobull_Marketing_Site_Signup_Simplification.md` FR-6/FR-8 and
+ *      `PRD_Mobull_Onboarding_Flow.md`). `settings.homeAddress` is `NOT NULL` with no DB
+ *      default, so signup still has to write *something* — an empty string, left for
+ *      onboarding to fill in for real, rather than a geocoded value computed here.
  *   4. Sign the new user in for real (`auth.api.signInEmail`, WITH this request's real
  *      headers this time, unlike step 1's headless call — see `POST /auth/login`'s doc
  *      comment for why `returnHeaders`/`forwardSetCookies` matter here), then set the
@@ -115,7 +129,7 @@ router.post("/auth/signup", async (req, res) => {
     res.status(400).json({ error: "invalid_request", message: parsed.error.message });
     return;
   }
-  const { name, email, password, organizationName, organizationSlug, businessAddress } = parsed.data;
+  const { name, email, password, organizationName } = parsed.data;
 
   let createdUserId: string | undefined;
   let createdOrganizationId: string | undefined;
@@ -125,40 +139,45 @@ router.post("/auth/signup", async (req, res) => {
     });
     createdUserId = signUpResult.user.id;
 
-    const organization = await auth.api.createOrganization({
-      body: {
-        name: organizationName,
-        slug: organizationSlug,
-        userId: signUpResult.user.id,
-      },
-    });
+    // `slug` is generated here, not supplied by the client (FR-2/FR-3 — see this
+    // route's doc comment). A collision on the first attempt is retried exactly once
+    // with a short random suffix appended before this bubbles up as a real failure —
+    // with no slug field left in the signup form, there's no user-facing way to pick a
+    // different value, so this route has to resolve it itself.
+    const baseSlug = slugify(organizationName);
+    let organization: Awaited<ReturnType<typeof auth.api.createOrganization>>;
+    try {
+      organization = await auth.api.createOrganization({
+        body: {
+          name: organizationName,
+          slug: baseSlug,
+          userId: signUpResult.user.id,
+        },
+      });
+    } catch (err) {
+      if (err instanceof APIError && err.body?.code === "ORGANIZATION_SLUG_ALREADY_TAKEN") {
+        const retrySlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
+        logger.info(
+          { baseSlug, retrySlug },
+          "POST /auth/signup: generated slug collided; retrying once with a random suffix",
+        );
+        organization = await auth.api.createOrganization({
+          body: {
+            name: organizationName,
+            slug: retrySlug,
+            userId: signUpResult.user.id,
+          },
+        });
+      } else {
+        throw err;
+      }
+    }
     if (!organization) {
       throw new Error("createOrganization returned no result");
     }
     createdOrganizationId = organization.id;
 
-    // See this route's doc comment (step 3) — a failed/unresolved geocode must never
-    // block signup, so this is deliberately its own try/catch, not folded into the
-    // outer one whose catch treats any failure as "compensate and fail the signup".
-    let hqGeocode: { latitude: number; longitude: number; placeId: string } | null = null;
-    try {
-      const geocoded = await geocodeAddress(businessAddress);
-      if (geocoded) {
-        hqGeocode = { latitude: geocoded.latitude, longitude: geocoded.longitude, placeId: geocoded.placeId };
-      } else {
-        logger.info({ businessAddress }, "POST /auth/signup: geocodeAddress found no match; HQ coordinates left unset");
-      }
-    } catch (err) {
-      const reason =
-        err instanceof GoogleMapsConfigError
-          ? "google_maps_not_configured"
-          : err instanceof GoogleMapsUpstreamError
-            ? `google_upstream_error: ${err.message}`
-            : `unexpected_error: ${err instanceof Error ? err.message : String(err)}`;
-      logger.warn({ reason }, "POST /auth/signup: could not geocode businessAddress; HQ coordinates left unset");
-    }
-
-    await createDefaultSettings(organization.id, businessAddress, hqGeocode);
+    await createDefaultSettings(organization.id, "");
 
     const { headers, response: signInResponse } = await auth.api.signInEmail({
       body: { email, password },
