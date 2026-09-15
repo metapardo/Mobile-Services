@@ -44,6 +44,7 @@ import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
 // product-experience video reel.
 import bookSmartScreenshot from '@/assets/marketing/book-smart.png';
 import appointmentRecommendationsScreenshot from '@/assets/marketing/appointment-recommendations.png';
+import weatherWiseScreenshot from '@/assets/marketing/weather-wise.png';
 import appointmentBookingVideo from '@/assets/marketing/appointment-booking-v2.mov';
 import './signup.css';
 
@@ -470,9 +471,8 @@ interface GrowCallout {
 
 // MARKETING_SITE_REVAMP_BRIEF.md §2 — replaces `ChaosSection` entirely
 // (was: a two-column [feature list | fabricated dashboard mock] layout).
-// Two of the three callouts now carry a real product screenshot (a demo
-// org, no real customer data) instead of any invented numbers; "Weather
-// Wise" stays icon-only — no screenshot was scoped for it.
+// All three callouts now carry a real product screenshot (a demo org, no
+// real customer data) instead of any invented numbers.
 const growCallouts: GrowCallout[] = [
   {
     key: 'book-smart',
@@ -495,6 +495,8 @@ const growCallouts: GrowCallout[] = [
     icon: CloudLightning,
     headline: 'Weather Wise',
     body: 'Weather indicators let you avoid or seek out sun, snow, and rain, so you can book on the days that work best for your service.',
+    screenshot: weatherWiseScreenshot,
+    screenshotAlt: 'Calendar week view showing daily weather icons for rain, sun, and cloud',
   },
 ];
 
@@ -1059,8 +1061,8 @@ export default function Signup() {
     <div className="site-shell">
       <Header open={menuOpen} setOpen={setMenuOpen} />
       <Hero />
-      <GrowSection />
       <AppShowcaseSection />
+      <GrowSection />
       <Workflow />
       <Story />
       <GetStartedFree />
