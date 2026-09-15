@@ -74,6 +74,12 @@
         "value": "space grotesk",
         "createdAt": "2026-09-15T21:19:54.942Z",
         "reason": "pre-existing, intentional: signup.css header comment documents this as a faithful port of a separate marketing-site design system, scoped only to .site-shell — not part of the in-app DESIGN.md system"
+      },
+      {
+        "rule": "overused-font",
+        "value": "space grotesk",
+        "createdAt": "2026-09-15T21:46:40.036Z",
+        "reason": "pre-existing, intentional marketing-page font choice documented in signup.css's own header comment (faithful port of a separate marketing-site design system, scoped to .site-shell) — predates this session, not part of the copy/layout work done here"
       }
     ]
   }
