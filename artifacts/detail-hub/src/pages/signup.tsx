@@ -434,12 +434,12 @@ function Hero() {
       </video>
       <div className="container-wide hero-content">
         <h1 className="text-foreground">
-          Super Charge
+          Not every job
           <br />
-          <em>your mobile business.</em>
+          <em>is worth the drive.</em>
         </h1>
         <p className="hero-copy reveal reveal-delay-2">
-          Gas, time, drive, know the real cost before you book.
+          Mobull prices gas, drive time, and weather into every appointment — before you book.
         </p>
         <div className="hero-actions reveal reveal-delay-3">
           <button className="button-ghost" onClick={scrollToAccess} data-testid="button-hero-access">

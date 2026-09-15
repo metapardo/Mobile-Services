@@ -142,7 +142,7 @@
 .site-shell .hero-content{display:flex;flex-direction:column;align-items:center;padding:180px 0 76px;text-align:center}
 .site-shell .hero h1{font-family:var(--app-font-sans);max-width:900px;font-size:85px;letter-spacing:-.06em;line-height:.82;margin:26px auto 30px}
 .site-shell .hero h1 em{color:#fff;font-style:normal}
-.site-shell .hero-copy{max-width:600px;color:#fff;font-family:var(--app-font-sans);font-size:clamp(1rem,1.5vw,1.25rem);line-height:1.4;letter-spacing:-.01em;margin:0 auto 30px}
+.site-shell .hero-copy{max-width:600px;color:#fff;font-family:var(--app-font-sans);font-size:clamp(1.1rem,1.65vw,1.375rem);line-height:1.4;letter-spacing:-.01em;margin:0 auto 30px}
 .site-shell .hero-actions{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
 .site-shell .hero-footer{display:flex;justify-content:space-between;align-items:end;align-self:stretch;width:100%;gap:20px;margin-top:130px;text-align:left}
 .site-shell .hero-caption{color:hsl(var(--foreground));font-size:.75rem;max-width:230px;line-height:1.5}
@@ -156,9 +156,9 @@
 .site-shell .proof-value{display:block;color:hsl(var(--foreground));font-size:1.8rem;letter-spacing:-.06em;margin-bottom:3px}
 .site-shell .proof-label{color:hsl(var(--muted-foreground));font-size:.73rem}
 
-.site-shell .section-heading{display:flex;justify-content:space-between;gap:30px;align-items:end;margin-bottom:60px}
+.site-shell .section-heading{display:flex;flex-direction:column;gap:16px;margin-bottom:60px}
 .site-shell .section-heading .section-title{margin-bottom:0}
-.site-shell .section-intro{max-width:330px;color:hsl(var(--muted-foreground));line-height:1.6;font-size:.95rem}
+.site-shell .section-intro{max-width:560px;color:hsl(var(--muted-foreground));line-height:1.6;font-size:.95rem}
 
 /* "Grow your Business" — replaces the old ChaosSection's `.chaos-layout`
    two-column dashboard mockup with three real-content callout cards, one
@@ -316,8 +316,8 @@
   .site-shell .hero{min-height:740px}
   .site-shell .hero-content{padding-top:155px}
   .site-shell .hero-footer{margin-top:80px}
-  .site-shell .section-heading,.site-shell .story-grid,.site-shell .access-panel{grid-template-columns:1fr;display:grid;gap:32px}
-  .site-shell .section-heading{align-items:start;margin-bottom:34px}
+  .site-shell .story-grid,.site-shell .access-panel{grid-template-columns:1fr;display:grid;gap:32px}
+  .site-shell .section-heading{margin-bottom:34px}
   .site-shell .grow-grid{grid-template-columns:1fr;gap:40px}
   .site-shell .grow-card-media,.site-shell .grow-card-icon{height:220px}
   .site-shell .showcase-grid{grid-template-columns:1fr;gap:20px}

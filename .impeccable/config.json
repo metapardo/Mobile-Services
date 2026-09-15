@@ -56,6 +56,24 @@
         ],
         "createdAt": "2026-09-11T17:51:46.875Z",
         "reason": "signup.css header comment documents this as an intentional port of the marketing site's own established font stack, scoped to .site-shell — pre-existing, out of scope for the homepage-restructure/live-mode work in this session"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "dm mono",
+        "createdAt": "2026-09-15T21:19:54.914Z",
+        "reason": "pre-existing, intentional: signup.css header comment documents this as a faithful port of a separate marketing-site design system, scoped only to .site-shell — not part of the in-app DESIGN.md system"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "eb garamond",
+        "createdAt": "2026-09-15T21:19:54.929Z",
+        "reason": "pre-existing, intentional: signup.css header comment documents this as a faithful port of a separate marketing-site design system, scoped only to .site-shell — not part of the in-app DESIGN.md system"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "space grotesk",
+        "createdAt": "2026-09-15T21:19:54.942Z",
+        "reason": "pre-existing, intentional: signup.css header comment documents this as a faithful port of a separate marketing-site design system, scoped only to .site-shell — not part of the in-app DESIGN.md system"
       }
     ]
   }
