@@ -286,7 +286,7 @@ const journeyStops: JourneyStop[] = [
     key: 'day-0',
     when: 'Day 0',
     title: 'Free trial starts',
-    copy: 'Create your account and start booking real appointments today. No card required.',
+    copy: 'Create your account and start booking real jobs today. No card required.',
     icon: Sparkles,
   },
   {
@@ -310,11 +310,11 @@ const journeyStops: JourneyStop[] = [
 // Appointment); "Book an Appointment"'s copy replaces its stale "Aer"
 // reference with the given line.
 const flowSteps: { label: string; copy: string; icon: IconType }[] = [
-  { label: 'Sign up', copy: 'Tell us what you do and where you roll.', icon: UserRound },
-  { label: 'Create account', copy: 'Set your hours, radius, and real costs.', icon: ShieldCheck },
-  { label: 'Fuel Gauge', copy: 'See if the appointment is worth the trip.', icon: BarChart3 },
-  { label: 'Book an Appointment', copy: 'Mobull’s smart recommendations suggest times where you might already be in that area.', icon: CalendarDays },
-  { label: 'Take payment', copy: 'Close the loop and tee up the next one.', icon: CreditCard },
+  { label: 'Sign up', copy: 'Tell us what you do, and where you take jobs.', icon: UserRound },
+  { label: 'Create account', copy: 'Set your hours, your radius, and what a job actually costs you to run.', icon: ShieldCheck },
+  { label: 'Fuel Gauge', copy: 'See what the job pays — gas cost and drive time — before you book it.', icon: BarChart3 },
+  { label: 'Book a Job', copy: 'Mobull suggests times that keep you in the same area as jobs you already have booked.', icon: CalendarDays },
+  { label: 'Take payment', copy: "Record it — Zelle, Venmo, or cash — and get back on the road.", icon: CreditCard },
 ];
 
 function scrollToAccess() {
@@ -477,24 +477,24 @@ const growCallouts: GrowCallout[] = [
   {
     key: 'book-smart',
     icon: Gauge,
-    headline: 'Book the right Jobs',
-    body: "Use Mobull's Trip Calculator to check distance, drive time, and fuel cost, so you know if a new job is worth the drive before you book it.",
+    headline: 'Know what a job pays before you drive',
+    body: 'A $75 interior forty minutes out costs about $9 in gas. Fuel Gauge shows you keep around $66 of it — before you say yes. A $200 job fifteen minutes away keeps more, faster.',
     screenshot: bookSmartScreenshot,
     screenshotAlt: 'Fuel Gauge breakdown showing you keep $96 of $99 on this job',
   },
   {
     key: 'right-time',
     icon: CalendarClock,
-    headline: 'Right Job, Right Time',
-    body: 'Our smart calendar recommends times that connect a new job with ones you already have booked in that area, keeping you in the same area each day.',
+    headline: 'Less dead driving',
+    body: "Mobull's calendar suggests times that put a new job near ones you already have booked that day, so you're working the same area instead of crossing town twice.",
     screenshot: appointmentRecommendationsScreenshot,
-    screenshotAlt: 'A recommended appointment time that fits right after an existing nearby job',
+    screenshotAlt: 'A recommended job time that fits right after an existing nearby job',
   },
   {
     key: 'weather-wise',
     icon: CloudLightning,
-    headline: 'Weather Wise',
-    body: 'Weather indicators let you avoid or seek out sun, snow, and rain, so you can book on the days that work best for your service.',
+    headline: 'See the weather before you book',
+    body: "Every day on your calendar shows what the sky is doing, so a ceramic coating doesn't get booked into a rainstorm you didn't see coming.",
     screenshot: weatherWiseScreenshot,
     screenshotAlt: 'Calendar week view showing daily weather icons for rain, sun, and cloud',
   },
@@ -506,12 +506,12 @@ function GrowSection() {
       <div className="container-wide">
         <Reveal className="section-heading">
           <div>
-            <div className="eyebrow">Grow your Business</div>
-            <h2 className="section-title">Grow your Business.</h2>
+            <div className="eyebrow">Know before you go</div>
+            <h2 className="section-title">Booking is the easy part.</h2>
           </div>
           <p className="section-intro">
-            Every job Mobull shows you already has the real numbers attached, so growing your book never means
-            guessing.
+            Any calendar can tell you a slot is open. Mobull tells you what the job pays before you say yes — so a
+            fuller week is one you actually want.
           </p>
         </Reveal>
         <RevealGroup className="grow-grid">
@@ -550,12 +550,12 @@ function Workflow() {
       <div className="container-wide">
         <Reveal className="section-heading">
           <div>
-            <div className="eyebrow">5 Simple Steps to Business growth</div>
+            <div className="eyebrow">Five steps, on the road</div>
             <h2 className="section-title">Getting Started is easy.</h2>
           </div>
           <p className="section-intro">
-            No more handoffs between five tabs. Each step adds context to the next, so your business gets smarter
-            with every booking.
+            No more switching between five apps. Each step feeds the next, from the first job you book to the
+            moment you get paid.
           </p>
         </Reveal>
         <div className="workflow-board glass grid-lines" data-testid="workflow-board">
@@ -656,18 +656,18 @@ interface AppShowcaseCallout {
 const appShowcaseCallouts: AppShowcaseCallout[] = [
   {
     key: 'book-smart',
-    headline: 'Book Jobs on calendar smartly',
-    body: 'See openings that already work with your day, and fill them without the back-and-forth.',
+    headline: 'Book jobs without the back-and-forth',
+    body: 'See openings that already fit your day, and fill them without ten texts to confirm a time.',
   },
   {
     key: 'know-good-jobs',
-    headline: 'Know what Jobs are good for your business',
-    body: 'Every booking shows its real cost before you say yes, not after.',
+    headline: 'Same price, different payoff',
+    body: "A $120 exterior wax forty minutes out and a $120 interior five minutes away don't pay the same. Now you can see which is which before you book either one.",
   },
   {
     key: 'manage-everything',
-    headline: 'Manage customer history, financial reports, and take payments',
-    body: 'Client history, revenue, and payments, all in the same place you already run your day from.',
+    headline: 'Log payments and keep customer history',
+    body: "Record what you're paid — Zelle, Venmo, cash — and see what came in, all in the same place you already run your day from.",
   },
 ];
 
@@ -701,7 +701,7 @@ function AppShowcaseSection() {
             <h2 className="section-title">Everything you need in 1 app.</h2>
           </div>
           <p className="section-intro">
-            One connected place to book the job, know if it's worth it, and get paid. No juggling between tools.
+            One place to book the job, see what it pays, and get paid. Nothing to juggle between tools.
           </p>
         </Reveal>
         <div className="showcase-grid">
@@ -792,7 +792,7 @@ function GetStartedFree() {
             <h2 className="section-title">Get Started for Free.</h2>
           </div>
           <p className="section-intro">
-            One plan. Full functionality from day one. The only thing that changes over time is the price.
+            One plan. Everything works from day one. The only thing that changes later is the price.
           </p>
         </Reveal>
         <RevealGroup className="price-journey" data-testid="pricing-journey">
