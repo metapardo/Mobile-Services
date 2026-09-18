@@ -1,10 +1,10 @@
 import { createRoot } from 'react-dom/client';
 import * as Sentry from '@sentry/react';
-import posthog from 'posthog-js';
 import { setBaseUrl } from '@workspace/api-client-react';
 
 import App from './App';
 import { ErrorFallback } from '@/components/error-fallback';
+import { initAnalytics } from '@/lib/analytics';
 
 import './index.css';
 
@@ -34,20 +34,10 @@ if (import.meta.env.PROD && sentryDsn) {
   });
 }
 
-// Same reasoning as the Sentry DSN above: `VITE_POSTHOG_KEY` is this app's own
-// `VITE_`-prefixed convention for the PostHog project API key. It's a public,
-// client-side key (safe to ship in JS, not a secret), but PostHog still shouldn't
-// initialize for local dev sessions — same PROD-only gate as Sentry, so local
-// clicking-around doesn't pollute production analytics.
-const posthogKey = import.meta.env.VITE_POSTHOG_KEY;
-const posthogHost = import.meta.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com';
-
-if (import.meta.env.PROD && posthogKey) {
-  posthog.init(posthogKey, {
-    api_host: posthogHost,
-    person_profiles: 'identified_only',
-  });
-}
+// See `src/lib/analytics.ts` for the PostHog init/gating logic (same PROD-only,
+// VITE_POSTHOG_KEY-gated pattern as the Sentry DSN above) and `trackEvent`, the safe
+// wrapper other components (e.g. the marketing page's scroll-depth tracking) call.
+initAnalytics();
 
 // The generated API hooks (`@workspace/api-client-react`) call relative paths like
 // `/api/auth/login`. `api-server` now deploys as a Vercel Serverless Function under
