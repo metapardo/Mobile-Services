@@ -79,6 +79,7 @@ export * from './payrollSummaryResult';
 export * from './placeDetailsResult';
 export * from './placeSuggestion';
 export * from './placeSuggestionMatch';
+export * from './publicComputeRouteRequest';
 export * from './recordBookingPaymentRequest';
 export * from './recordBookingPaymentRequestPaymentMethod';
 export * from './refundBookingRequest';

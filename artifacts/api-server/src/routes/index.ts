@@ -14,6 +14,7 @@ import reportsRouter from "./reports";
 import placesRouter from "./places";
 import routingRouter from "./routing";
 import weatherRouter from "./weather";
+import publicMapsRouter from "./public-maps";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(reportsRouter);
 router.use(placesRouter);
 router.use(routingRouter);
 router.use(weatherRouter);
+router.use(publicMapsRouter);
 
 export default router;

@@ -1,0 +1,643 @@
+/*
+ * Scoped styles for the public `/calculator` page — layered on top of
+ * `signup.css`'s `.site-shell` theme (imported alongside it in
+ * `calculator.tsx`) so the shared `Header`/nav/fonts/color tokens match the
+ * rest of the marketing site exactly. Everything below is scoped under
+ * `.calculator-page` (itself a `.site-shell` child) so none of it can leak
+ * into `/` or `/signup`.
+ *
+ * `PRD_Mobull_Public_Calculator.md` — the reference mockup
+ * (`Calculator page.png`) uses a distinct cyan/teal accent for the gauge and
+ * primary button, NOT `.site-shell`'s own `--primary` (a slightly different,
+ * more electric blue used for the rest of the marketing site's buttons/links).
+ * `--calc-accent` below is sampled directly from the mockup's actual pixels
+ * (~rgb(56,172,210)) rather than reusing `--primary`, per this build's explicit
+ * instruction to match the screenshot over reusing an existing token.
+ */
+
+.calculator-page {
+  --calc-accent: 195 63% 52%;
+  --calc-accent-soft: rgba(56, 172, 210, 0.12);
+}
+
+.calculator-page .calc-hero {
+  padding: 190px 0 40px;
+  text-align: center;
+}
+
+.calculator-page .calc-eyebrow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(141, 200, 228, 0.22);
+  color: hsl(var(--calc-accent));
+  font-family: var(--app-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.calculator-page .calc-title {
+  font-family: var(--app-font-sans);
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 20px auto 18px;
+  color: #fff;
+}
+
+.calculator-page .calc-title-accent {
+  background: linear-gradient(90deg, hsl(var(--calc-accent)), #7fd6ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.calculator-page .calc-subtitle {
+  max-width: 640px;
+  margin: 0 auto;
+  color: hsl(var(--muted-foreground));
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* ── Two-column grid ── */
+
+.calculator-page .calc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  padding: 40px 0 0;
+  align-items: start;
+}
+
+.calculator-page .calc-card {
+  background: linear-gradient(155deg, rgba(21, 45, 65, 0.55), rgba(6, 16, 27, 0.75));
+  border: 1px solid rgba(119, 187, 226, 0.18);
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 60px rgba(0, 0, 0, 0.22);
+}
+
+.calculator-page .calc-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.calculator-page .calc-card-heading-sm {
+  margin-bottom: 16px;
+}
+
+.calculator-page .calc-card-heading h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0;
+}
+
+.calculator-page .calc-card-heading h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #fff;
+  margin: 0;
+}
+
+.calculator-page .calc-card-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--calc-accent-soft);
+  color: hsl(var(--calc-accent));
+}
+
+.calculator-page .calc-card-icon-blue {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.calculator-page .calc-field-group {
+  margin-bottom: 20px;
+}
+
+.calculator-page .calc-field-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.86rem;
+}
+
+.calculator-page .calc-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.calculator-page .calc-field-group input,
+.calculator-page .calc-address-input {
+  width: 100%;
+  color: #fff;
+  background: rgba(3, 16, 27, 0.55);
+  border: 1px solid rgba(141, 200, 228, 0.2);
+  border-radius: 12px;
+  padding: 13px 15px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.calculator-page .calc-address-input {
+  font-family: var(--app-font-mono);
+  font-size: 0.85rem;
+}
+
+.calculator-page .calc-field-group input:focus,
+.calculator-page .calc-address-input:focus {
+  border-color: hsl(var(--calc-accent));
+  background: rgba(10, 40, 61, 0.7);
+}
+
+.calculator-page .calc-input-prefixed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(3, 16, 27, 0.55);
+  border: 1px solid rgba(141, 200, 228, 0.2);
+  border-radius: 12px;
+  padding: 0 15px;
+}
+
+.calculator-page .calc-input-prefixed:focus-within {
+  border-color: hsl(var(--calc-accent));
+  background: rgba(10, 40, 61, 0.7);
+}
+
+.calculator-page .calc-input-prefixed > span {
+  color: hsl(var(--muted-foreground));
+  font-size: 1.1rem;
+}
+
+.calculator-page .calc-input-prefixed input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  padding: 13px 0;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.calculator-page .calc-input-prefixed input::-webkit-outer-spin-button,
+.calculator-page .calc-input-prefixed input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.calculator-page .calc-divider {
+  height: 1px;
+  background: rgba(141, 200, 228, 0.14);
+  margin: 24px 0;
+}
+
+.calculator-page .calc-pay-rate-card {
+  border: 1px solid rgba(141, 200, 228, 0.16);
+  background: rgba(6, 16, 27, 0.4);
+  border-radius: 16px;
+  padding: 18px 18px 22px;
+  margin-bottom: 24px;
+}
+
+.calculator-page .calc-pay-rate-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.calculator-page .calc-pay-rate-head label {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.86rem;
+  margin-bottom: 4px;
+}
+
+.calculator-page .calc-pay-rate-head p {
+  margin: 0;
+  max-width: 220px;
+  color: rgba(206, 224, 236, 0.55);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.calculator-page .calc-pay-rate-readout {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+}
+
+.calculator-page .calc-pay-rate-readout input {
+  width: 56px;
+  font-size: 1rem;
+  padding: 8px 0;
+  text-align: right;
+}
+
+.calculator-page .calc-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--calc-accent)) 0%,
+    hsl(var(--calc-accent)) calc(var(--calc-slider-fill, 32) * 1%),
+    rgba(255, 255, 255, 0.12) calc(var(--calc-slider-fill, 32) * 1%),
+    rgba(255, 255, 255, 0.12) 100%
+  );
+  outline: none;
+}
+
+.calculator-page .calc-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--calc-accent));
+  border: 3px solid #0a1622;
+  box-shadow: 0 0 0 2px hsl(var(--calc-accent) / 0.4);
+  cursor: pointer;
+}
+
+.calculator-page .calc-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--calc-accent));
+  border: 3px solid #0a1622;
+  cursor: pointer;
+}
+
+.calculator-page .calc-submit-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  border-radius: 16px;
+  border: 0;
+  background: hsl(var(--calc-accent));
+  color: #06131f;
+  font-weight: 700;
+  font-size: 0.98rem;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.calculator-page .calc-submit-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.calculator-page .calc-submit-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Results card ── */
+
+.calculator-page .calc-results-card {
+  text-align: center;
+}
+
+.calculator-page .calc-results-label {
+  font-family: var(--app-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  color: hsl(var(--muted-foreground));
+  margin: 0 0 10px;
+}
+
+.calculator-page .calc-results-headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.calculator-page .calc-results-dollar {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.calculator-page .calc-results-amount {
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.calculator-page .calc-results-of {
+  font-size: 1.1rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.calculator-page .calc-net-profit {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.95rem;
+  margin: 0 0 22px;
+}
+
+.calculator-page .calc-error {
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(224, 90, 90, 0.1);
+  border: 1px solid rgba(224, 90, 90, 0.35);
+  color: #ffb4b4;
+  font-size: 0.86rem;
+  text-align: left;
+}
+
+.calculator-page .calc-gauge-wrap {
+  position: relative;
+  max-width: 340px;
+  margin: 0 auto 22px;
+}
+
+.calculator-page .calc-gauge-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.calculator-page .calc-gauge-center {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.calculator-page .calc-gauge-percent {
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.calculator-page .calc-gauge-caption {
+  font-family: var(--app-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+}
+
+.calculator-page .calc-detail-card {
+  background: rgba(6, 16, 27, 0.45);
+  border: 1px solid rgba(141, 200, 228, 0.14);
+  border-radius: 16px;
+  padding: 6px 18px;
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+.calculator-page .calc-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+}
+
+.calculator-page .calc-detail-row + .calc-detail-row {
+  border-top: 1px solid rgba(141, 200, 228, 0.1);
+}
+
+.calculator-page .calc-detail-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  color: hsl(var(--muted-foreground));
+}
+
+.calculator-page .calc-detail-main {
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.calculator-page .calc-detail-sub {
+  color: rgba(206, 224, 236, 0.5);
+  font-size: 0.76rem;
+  margin: 2px 0 0;
+}
+
+.calculator-page .calc-detail-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1 1 auto;
+}
+
+.calculator-page .calc-detail-value {
+  font-family: var(--app-font-mono);
+  font-size: 0.86rem;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+.calculator-page .calc-hourly-rate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgba(141, 200, 228, 0.18);
+  border-radius: 14px;
+  padding: 16px 18px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9rem;
+}
+
+.calculator-page .calc-hourly-rate-value {
+  color: hsl(var(--calc-accent));
+  font-weight: 700;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.calculator-page .calc-hourly-rate-value small {
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+/* ── "Stop driving for free." explainer ── */
+
+.calculator-page .calc-explainer {
+  padding: 100px 0 60px;
+  text-align: center;
+}
+
+.calculator-page .calc-explainer-title {
+  font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+  letter-spacing: -0.03em;
+  color: #fff;
+  margin: 0 0 16px;
+}
+
+.calculator-page .calc-explainer-subtitle {
+  max-width: 620px;
+  margin: 0 auto 48px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.98rem;
+  line-height: 1.65;
+}
+
+.calculator-page .calc-explainer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  text-align: left;
+}
+
+.calculator-page .calc-explainer-card {
+  background: linear-gradient(155deg, rgba(21, 45, 65, 0.4), rgba(6, 16, 27, 0.6));
+  border: 1px solid rgba(119, 187, 226, 0.14);
+  border-radius: 20px;
+  padding: 26px;
+}
+
+.calculator-page .calc-explainer-card .calc-card-icon {
+  margin-bottom: 18px;
+}
+
+.calculator-page .calc-explainer-card h3 {
+  font-size: 1.05rem;
+  color: #fff;
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
+}
+
+.calculator-page .calc-explainer-card p {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.86rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.calculator-page .calc-explainer-card:nth-child(2) .calc-card-icon {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.calculator-page .calc-explainer-card:nth-child(3) .calc-card-icon {
+  background: rgba(129, 102, 246, 0.14);
+  color: #a78bfa;
+}
+
+/* ── Signup CTA (§4.6) ── */
+
+.calculator-page .calc-cta {
+  padding: 20px 0 90px;
+}
+
+.calculator-page .calc-cta-panel {
+  border-radius: 24px;
+  padding: 56px 32px;
+  text-align: center;
+}
+
+.calculator-page .calc-cta-panel h2 {
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  color: #fff;
+  margin: 0 0 12px;
+  letter-spacing: -0.03em;
+}
+
+.calculator-page .calc-cta-panel p {
+  color: hsl(var(--muted-foreground));
+  max-width: 480px;
+  margin: 0 auto 26px;
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.calculator-page .calc-cta-button {
+  background: hsl(var(--calc-accent));
+  box-shadow: none;
+}
+
+/* ── Footer line (screenshot-specific — see calculator.tsx's header comment
+   for why this page doesn't reuse `signup.tsx`'s shared marketing Footer) ── */
+
+.calculator-page .calc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 28px 0 60px;
+  border-top: 1px solid rgba(141, 200, 228, 0.12);
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82rem;
+}
+
+.calculator-page .calc-footer-links {
+  display: flex;
+  gap: 22px;
+}
+
+.calculator-page .calc-footer-links a:hover {
+  color: hsl(var(--calc-accent));
+}
+
+@media (max-width: 900px) {
+  .calculator-page .calc-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calculator-page .calc-explainer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calculator-page .calc-hero {
+    padding-top: 150px;
+  }
+}
+
+@media (max-width: 560px) {
+  .calculator-page .calc-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .calculator-page .calc-card {
+    padding: 24px;
+  }
+
+  .calculator-page .calc-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

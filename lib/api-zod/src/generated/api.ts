@@ -1612,6 +1612,78 @@ export const ComputeRouteMatrixResponse = zod.array(ComputeRouteMatrixResponseIt
 
 
 /**
+ * PRD_Mobull_Public_Calculator.md Section 5, FR-1. The unauthenticated counterpart to `POST /places/autocomplete` for the no-login `mobull.app/calculator` page — same underlying Places API (New) `places:autocomplete` proxy (`../integrations/google-maps.ts`'s `autocompletePlaces`, reused as-is), just not mounted behind `requireOrgSession` and rate-limited on a separate, IP-keyed bucket instead of `organizationId` (FR-2) — a marketing-page visitor has no organization. `GOOGLE_MAPS_API_KEY` never reaches the browser (FR-4), same as the authenticated route. Debounced/suppressed-under-3-chars behavior is entirely a frontend concern; this route answers whatever request it's given.
+ * @summary Unauthenticated address suggestions for the public calculator page
+ */
+
+
+
+
+export const AutocompletePublicPlacesBody = zod.object({
+  "input": zod.string().min(1),
+  "sessionToken": zod.string().min(1).describe('One token per address-entry session (FR-11), reused across every Autocomplete call and the terminating Place Details call in that session.'),
+  "originLat": zod.number().optional(),
+  "originLng": zod.number().optional()
+}).describe('`originLat`\/`originLng` are optional for now — Home Base coordinates don\'t exist in the DB yet (a later phase\'s job); when omitted, `locationBias` is left off the upstream Google request entirely rather than erroring.')
+
+export const AutocompletePublicPlacesResponse = zod.object({
+  "suggestions": zod.array(zod.object({
+  "placeId": zod.string(),
+  "text": zod.string().describe('Full suggestion text, e.g. \"1102 Flatbush Ave, Brooklyn, NY, USA\".'),
+  "matches": zod.array(zod.object({
+  "startOffset": zod.number().int(),
+  "endOffset": zod.number().int()
+})).describe('Matched-substring offsets (FR-13), so the frontend can bold what the owner typed within `text`.')
+}))
+})
+
+
+/**
+ * PRD_Mobull_Public_Calculator.md Section 5, FR-1. The unauthenticated counterpart to `POST /places/details` — same Place Details (New) proxy (`../integrations/google-maps.ts`'s `getPlaceDetails`), same `sessionToken`-closes-the-Autocomplete-session semantics, on the same IP-keyed `"public_places"` rate-limit bucket as `POST /public/places/autocomplete` above (FR-2).
+ * @summary Unauthenticated place-details resolution for the public calculator page
+ */
+
+
+
+
+export const GetPublicPlaceDetailsBody = zod.object({
+  "placeId": zod.string().min(1),
+  "sessionToken": zod.string().min(1).describe('The same token used for the preceding `\/places\/autocomplete` calls in this address-entry session; passing it here closes that billing session (FR-11).')
+})
+
+export const GetPublicPlaceDetailsResponse = zod.object({
+  "placeId": zod.string(),
+  "latitude": zod.number(),
+  "longitude": zod.number(),
+  "formattedAddress": zod.string()
+})
+
+
+/**
+ * PRD_Mobull_Public_Calculator.md Section 5, FR-1/FR-3/FR-5. The unauthenticated counterpart to `POST /routes/compute` — same Routes API `computeRoutes` proxy (`../integrations/google-maps.ts`'s `computeRoute`), same one-way response (callers double it for the round trip), same error-shape conventions (`no_route_found` 422, upstream failure 502) so the calculator page's failure-state handling can share logic with the in-app Fuel Gauge.
+ * Two differences from the authenticated route, both because this is the one public endpoint that spends a real, priced Google API call with no cache to fall back on:
+ * - Rate-limited on a separate, much tighter, IP-keyed bucket (`"public_routing"`, FR-2) instead of the per-organization `"routing"` bucket. - FR-3 bot mitigation: `formRenderedAt` (when the calculator form was rendered client-side) and `website` (a honeypot field that must be left blank) are required/optional inputs respectively. A filled-in `website`, or a `formRenderedAt` too close to "now" (a real visitor takes at least a few seconds to fill in a price and two addresses before clicking Calculate Route), is rejected as `400 invalid_request` — the same generic code an ordinary validation failure would return, so a scripted caller can't distinguish "the honeypot tripped" from "a field was missing."
+ * @summary Unauthenticated one-way drive distance/time for the public calculator page
+ */
+
+
+
+
+export const ComputePublicRouteBody = zod.object({
+  "originPlaceId": zod.string().min(1),
+  "destinationPlaceId": zod.string().min(1),
+  "departureTime": zod.coerce.date().describe('The trip\'s intended departure, ISO 8601.'),
+  "formRenderedAt": zod.coerce.date().describe('Client-recorded timestamp of when the calculator form was rendered (page load \/ component mount), ISO 8601. The server rejects a request arriving implausibly soon after this timestamp as a likely scripted call rather than a human filling in a price and two addresses.'),
+  "website": zod.string().optional().describe('Honeypot field (FR-3) — must be left blank. Real visitors never see or fill this field (hidden from the rendered form); a non-empty value marks the request as an automated submission and it is rejected.')
+}).describe('PRD_Mobull_Public_Calculator.md Section 5, FR-3. Same origin\/destination\/ departureTime shape as `ComputeRouteRequest`, plus two bot-mitigation fields specific to this unauthenticated route.')
+
+export const ComputePublicRouteResponse = zod.object({
+  "miles": zod.number(),
+  "minutes": zod.number()
+}).describe('One-way distance\/time — callers double it themselves for the round trip (PRD §6.1).')
+
+
+/**
  * PRD_Mobull_Weather_Coverage.md Sections 5-7 (FR-3 through FR-10). Server-side proxy to Google's Weather API (New) `forecast.days:lookup` (`../integrations/google-weather.ts`'s `getDailyForecast`) — one call per location returns up to 10 days (Google's own cap, FR-10), no `date` parameter (FR-5): every date in the available horizon comes back in one response.
  * Cache-aside on `weather_cache` (FR-6-FR-8, a short TTL shared across every organization asking about the same ~1km-rounded coordinates — deliberately NOT organization-scoped, FR-9) and rate-limited per organization (FR-4, bucket `"weather"`).
  * `placeId` is accepted in the request body but not required for the Google call itself (lat/lng drive both the cache key and the upstream lookup) — it's reserved for potential future cache-key/logging use.

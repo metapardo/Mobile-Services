@@ -31,6 +31,19 @@ class CorsRejectedError extends Error {}
 
 const app: Express = express();
 
+// Required for `req.ip` (and the `X-Forwarded-For` chain generally) to reflect the
+// real client address rather than Vercel's own edge/proxy hop — both the long-lived
+// `.listen()` process (`index.ts`) and the per-request Vercel Function entry point
+// (`detail-hub/api/[...path].ts`) sit behind a reverse proxy in every real deployment.
+// This matters concretely for `PRD_Mobull_Public_Calculator.md` §5 FR-2's
+// IP-keyed rate limiting (`middlewares/public-rate-limit.ts`) — without `trust proxy`,
+// every anonymous visitor behind Vercel's edge would appear to share one internal IP,
+// collapsing every visitor into a single shared rate-limit bucket. `true` trusts the
+// entire `X-Forwarded-For` chain (Express takes the left-most/original entry), which is
+// fine here: Vercel's own edge is the only hop in front of this app, so there's no
+// untrusted intermediary that could spoof the header before it reaches Vercel.
+app.set("trust proxy", true);
+
 app.use(
   pinoHttp({
     logger,

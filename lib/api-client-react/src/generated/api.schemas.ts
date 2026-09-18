@@ -1052,6 +1052,22 @@ export interface RouteMatrixElementResult {
 }
 
 /**
+ * PRD_Mobull_Public_Calculator.md Section 5, FR-3. Same origin/destination/ departureTime shape as `ComputeRouteRequest`, plus two bot-mitigation fields specific to this unauthenticated route.
+ */
+export interface PublicComputeRouteRequest {
+  /** @minLength 1 */
+  originPlaceId: string;
+  /** @minLength 1 */
+  destinationPlaceId: string;
+  /** The trip's intended departure, ISO 8601. */
+  departureTime: string;
+  /** Client-recorded timestamp of when the calculator form was rendered (page load / component mount), ISO 8601. The server rejects a request arriving implausibly soon after this timestamp as a likely scripted call rather than a human filling in a price and two addresses. */
+  formRenderedAt: string;
+  /** Honeypot field (FR-3) — must be left blank. Real visitors never see or fill this field (hidden from the rendered form); a non-empty value marks the request as an automated submission and it is rejected. */
+  website?: string;
+}
+
+/**
  * `placeId` is accepted but not required for the Google call itself — the actual upstream/cache lookup uses `latitude`/`longitude` only. It's carried here for potential future cache-key/logging use.
  */
 export interface WeatherForecastRequest {

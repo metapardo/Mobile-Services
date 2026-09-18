@@ -80,6 +80,15 @@
         "value": "space grotesk",
         "createdAt": "2026-09-15T21:46:40.036Z",
         "reason": "pre-existing, intentional marketing-page font choice documented in signup.css's own header comment (faithful port of a separate marketing-site design system, scoped to .site-shell) — predates this session, not part of the copy/layout work done here"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "artifacts/detail-hub/src/pages/calculator.css"
+        ],
+        "createdAt": "2026-09-18T16:41:38.178Z",
+        "reason": "Literal pixel-match to the user-supplied 'Calculator page.png' mockup's title gradient treatment, not decorative AI-tell embellishment — verified by direct visual comparison against the reference image"
       }
     ]
   }

@@ -60,6 +60,7 @@ import type {
   PayrollRunResult,
   PayrollSummaryResult,
   PlaceDetailsResult,
+  PublicComputeRouteRequest,
   RecordBookingPaymentRequest,
   RefundBookingRequest,
   ReviewTimeOffRequestRequest,
@@ -3976,6 +3977,224 @@ export const useComputeRouteMatrix = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getComputeRouteMatrixMutationOptions(options));
+    }
+
+export const getAutocompletePublicPlacesUrl = () => {
+
+
+
+
+  return `/api/public/places/autocomplete`
+}
+
+/**
+ * PRD_Mobull_Public_Calculator.md Section 5, FR-1. The unauthenticated counterpart to `POST /places/autocomplete` for the no-login `mobull.app/calculator` page — same underlying Places API (New) `places:autocomplete` proxy (`../integrations/google-maps.ts`'s `autocompletePlaces`, reused as-is), just not mounted behind `requireOrgSession` and rate-limited on a separate, IP-keyed bucket instead of `organizationId` (FR-2) — a marketing-page visitor has no organization. `GOOGLE_MAPS_API_KEY` never reaches the browser (FR-4), same as the authenticated route. Debounced/suppressed-under-3-chars behavior is entirely a frontend concern; this route answers whatever request it's given.
+ * @summary Unauthenticated address suggestions for the public calculator page
+ */
+export const autocompletePublicPlaces = async (autocompletePlacesRequest: AutocompletePlacesRequest, options?: Parameters<typeof customFetch>[1]): Promise<AutocompletePlacesResult> => {
+
+  return customFetch<AutocompletePlacesResult>(getAutocompletePublicPlacesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(autocompletePlacesRequest)
+  }
+);}
+
+
+
+
+
+export const getAutocompletePublicPlacesMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof autocompletePublicPlaces>>, TError,{data: BodyType<AutocompletePlacesRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof autocompletePublicPlaces>>, TError,{data: BodyType<AutocompletePlacesRequest>}, TContext> => {
+
+const mutationKey = ['autocompletePublicPlaces'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof autocompletePublicPlaces>>, {data: BodyType<AutocompletePlacesRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  autocompletePublicPlaces(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AutocompletePublicPlacesMutationResult = NonNullable<Awaited<ReturnType<typeof autocompletePublicPlaces>>>
+    export type AutocompletePublicPlacesMutationBody = BodyType<AutocompletePlacesRequest>
+    export type AutocompletePublicPlacesMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Unauthenticated address suggestions for the public calculator page
+ */
+export const useAutocompletePublicPlaces = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof autocompletePublicPlaces>>, TError,{data: BodyType<AutocompletePlacesRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof autocompletePublicPlaces>>,
+        TError,
+        {data: BodyType<AutocompletePlacesRequest>},
+        TContext
+      > => {
+      return useMutation(getAutocompletePublicPlacesMutationOptions(options));
+    }
+
+export const getGetPublicPlaceDetailsUrl = () => {
+
+
+
+
+  return `/api/public/places/details`
+}
+
+/**
+ * PRD_Mobull_Public_Calculator.md Section 5, FR-1. The unauthenticated counterpart to `POST /places/details` — same Place Details (New) proxy (`../integrations/google-maps.ts`'s `getPlaceDetails`), same `sessionToken`-closes-the-Autocomplete-session semantics, on the same IP-keyed `"public_places"` rate-limit bucket as `POST /public/places/autocomplete` above (FR-2).
+ * @summary Unauthenticated place-details resolution for the public calculator page
+ */
+export const getPublicPlaceDetails = async (getPlaceDetailsRequest: GetPlaceDetailsRequest, options?: Parameters<typeof customFetch>[1]): Promise<PlaceDetailsResult> => {
+
+  return customFetch<PlaceDetailsResult>(getGetPublicPlaceDetailsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(getPlaceDetailsRequest)
+  }
+);}
+
+
+
+
+
+export const getGetPublicPlaceDetailsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getPublicPlaceDetails>>, TError,{data: BodyType<GetPlaceDetailsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getPublicPlaceDetails>>, TError,{data: BodyType<GetPlaceDetailsRequest>}, TContext> => {
+
+const mutationKey = ['getPublicPlaceDetails'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getPublicPlaceDetails>>, {data: BodyType<GetPlaceDetailsRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  getPublicPlaceDetails(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetPublicPlaceDetailsMutationResult = NonNullable<Awaited<ReturnType<typeof getPublicPlaceDetails>>>
+    export type GetPublicPlaceDetailsMutationBody = BodyType<GetPlaceDetailsRequest>
+    export type GetPublicPlaceDetailsMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Unauthenticated place-details resolution for the public calculator page
+ */
+export const useGetPublicPlaceDetails = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getPublicPlaceDetails>>, TError,{data: BodyType<GetPlaceDetailsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof getPublicPlaceDetails>>,
+        TError,
+        {data: BodyType<GetPlaceDetailsRequest>},
+        TContext
+      > => {
+      return useMutation(getGetPublicPlaceDetailsMutationOptions(options));
+    }
+
+export const getComputePublicRouteUrl = () => {
+
+
+
+
+  return `/api/public/routes/compute`
+}
+
+/**
+ * PRD_Mobull_Public_Calculator.md Section 5, FR-1/FR-3/FR-5. The unauthenticated counterpart to `POST /routes/compute` — same Routes API `computeRoutes` proxy (`../integrations/google-maps.ts`'s `computeRoute`), same one-way response (callers double it for the round trip), same error-shape conventions (`no_route_found` 422, upstream failure 502) so the calculator page's failure-state handling can share logic with the in-app Fuel Gauge.
+ * Two differences from the authenticated route, both because this is the one public endpoint that spends a real, priced Google API call with no cache to fall back on:
+ * - Rate-limited on a separate, much tighter, IP-keyed bucket (`"public_routing"`, FR-2) instead of the per-organization `"routing"` bucket. - FR-3 bot mitigation: `formRenderedAt` (when the calculator form was rendered client-side) and `website` (a honeypot field that must be left blank) are required/optional inputs respectively. A filled-in `website`, or a `formRenderedAt` too close to "now" (a real visitor takes at least a few seconds to fill in a price and two addresses before clicking Calculate Route), is rejected as `400 invalid_request` — the same generic code an ordinary validation failure would return, so a scripted caller can't distinguish "the honeypot tripped" from "a field was missing."
+ * @summary Unauthenticated one-way drive distance/time for the public calculator page
+ */
+export const computePublicRoute = async (publicComputeRouteRequest: PublicComputeRouteRequest, options?: Parameters<typeof customFetch>[1]): Promise<ComputeRouteResult> => {
+
+  return customFetch<ComputeRouteResult>(getComputePublicRouteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(publicComputeRouteRequest)
+  }
+);}
+
+
+
+
+
+export const getComputePublicRouteMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computePublicRoute>>, TError,{data: BodyType<PublicComputeRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof computePublicRoute>>, TError,{data: BodyType<PublicComputeRouteRequest>}, TContext> => {
+
+const mutationKey = ['computePublicRoute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof computePublicRoute>>, {data: BodyType<PublicComputeRouteRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  computePublicRoute(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ComputePublicRouteMutationResult = NonNullable<Awaited<ReturnType<typeof computePublicRoute>>>
+    export type ComputePublicRouteMutationBody = BodyType<PublicComputeRouteRequest>
+    export type ComputePublicRouteMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Unauthenticated one-way drive distance/time for the public calculator page
+ */
+export const useComputePublicRoute = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computePublicRoute>>, TError,{data: BodyType<PublicComputeRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof computePublicRoute>>,
+        TError,
+        {data: BodyType<PublicComputeRouteRequest>},
+        TContext
+      > => {
+      return useMutation(getComputePublicRouteMutationOptions(options));
     }
 
 export const getWeatherForecastUrl = () => {

@@ -14,5 +14,6 @@ export * from "./payroll";
 export * from "./reports";
 export * from "./route-cache";
 export * from "./rate-limit";
+export * from "./public-rate-limit";
 export * from "./weather-cache";
 export { eq, and, or, gt, isNull, sql } from "drizzle-orm";

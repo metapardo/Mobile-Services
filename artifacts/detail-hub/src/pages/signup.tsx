@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Redirect, useLocation, Link } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,18 +23,17 @@ import {
   EyeOff,
   Gauge,
   Loader2,
-  Menu,
   Send,
   ShieldCheck,
   Sparkles,
   UserRound,
-  X,
 } from 'lucide-react';
 import { useSignup, getGetAuthSessionQueryKey } from '@workspace/api-client-react';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { useSession } from '@/hooks/use-session';
 import { useQueryClient } from '@tanstack/react-query';
-import mobullMark from '@/assets/mobull-mark.png';
+import { trackEvent } from '@/lib/analytics';
+import { Header, Footer, scrollToAccess, setActiveLenis } from '@/components/marketing-chrome';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
 // MARKETING_SITE_REVAMP_BRIEF.md — real product screenshots (a demo org, no
@@ -213,51 +212,11 @@ function useIsDesktopViewport(breakpoint: number): boolean | null {
   return isDesktop;
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Lenis smooth scroll
-//
-// Scoped exactly like the page's dark theme / the prior scroll-behavior
-// effect: initialized in a `useEffect` on `Signup()` mount, destroyed on
-// unmount, never touched globally (no app-root/`main.tsx` changes) — other
-// routes (`/calendar`, `/clients`, `/checkout`, etc.) keep native scroll.
-//
-// `activeLenis` is a module-level singleton rather than context/props
-// because only one `Signup()` is ever mounted at a time (same pattern this
-// file already uses for `scrollToAccess()` being a plain module function
-// callable from `Header`/`Footer` without prop-drilling). It's set/cleared
-// by `Signup()`'s Lenis effect below.
-// ─────────────────────────────────────────────────────────────────────────
-
-let activeLenis: Lenis | null = null;
-
-function lenisScrollToHash(hash: string) {
-  const target = document.querySelector(hash) as HTMLElement | null;
-  if (!target) return;
-  if (activeLenis) {
-    // Lenis caches document height at mount and via its own ResizeObserver,
-    // but late-loading media (the showcase video, the grow-section
-    // screenshots) can still shift final page height after that initial
-    // measurement, leaving Lenis's cached scroll limit shorter than the
-    // page actually is — any target below that stale limit then silently
-    // fails to scroll at all. Forcing a resize immediately before every
-    // programmatic scroll keeps this correct regardless of timing.
-    activeLenis.resize();
-    activeLenis.scrollTo(target, { offset: 0 });
-  } else {
-    // Lenis hasn't mounted yet (or already unmounted) — fall back to native
-    // smooth scroll rather than doing nothing.
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-}
-
-// MARKETING_SITE_REVAMP_BRIEF.md — Section 6 (Compare) and 7 (FAQ) are
-// removed entirely, so the FAQ nav item goes with them (no page destination
-// left for it to scroll to).
-const navItems = [
-  { label: 'Why Mobull', href: '#why' },
-  { label: 'How it works', href: '#workflow' },
-  { label: 'For your business', href: '#features' },
-];
+// Lenis smooth scroll, `lenisScrollToHash`/`scrollToAccess`, `navItems`, and
+// the `Logo`/`Header`/`Footer` chrome all now live in
+// `@/components/marketing-chrome` — extracted so `calculator.tsx` can share
+// the same header/logo/footer (`PRD_Mobull_Public_Calculator.md` §3) instead
+// of this page owning private, unexported copies of all of it.
 
 // The one feature list shown throughout Section 8 (Get Started for Free) —
 // every item applies the whole time, Day 0 through ongoing, so unlike the
@@ -317,10 +276,6 @@ const flowSteps: { label: string; copy: string; icon: IconType }[] = [
   { label: 'Take payment', copy: "Record it — Zelle, Venmo, or cash — and get back on the road.", icon: CreditCard },
 ];
 
-function scrollToAccess() {
-  lenisScrollToHash('#access');
-}
-
 const signupSchema = z.object({
   name: z.string().min(1, 'Your name is required'),
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
@@ -329,88 +284,6 @@ const signupSchema = z.object({
 });
 
 type SignupFormValues = z.infer<typeof signupSchema>;
-
-function Logo() {
-  return (
-    <a
-      className="brand"
-      href="#top"
-      onClick={(e) => {
-        e.preventDefault();
-        lenisScrollToHash('#top');
-      }}
-      data-testid="link-brand"
-    >
-      <span className="brand-mark">
-        <img src={mobullMark} alt="Mobull logo mark" data-testid="img-logo" />
-      </span>
-      <span>mobull</span>
-    </a>
-  );
-}
-
-function Header({ open, setOpen }: { open: boolean; setOpen: (value: boolean) => void }) {
-  const go = (e: ReactMouseEvent, href: string) => {
-    e.preventDefault();
-    setOpen(false);
-    lenisScrollToHash(href);
-  };
-  return (
-    <header className="topbar">
-      <div className="container-wide nav-row">
-        <Logo />
-        <nav className="nav-links" aria-label="Main navigation">
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              onClick={(e) => go(e, item.href)}
-              data-testid={`link-nav-${item.label.toLowerCase().replaceAll(' ', '-')}`}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-        <div className="nav-actions">
-          <Link href="/login" className="button-ghost nav-cta" data-testid="link-login-nav">
-            Log in
-          </Link>
-          <button className="button-primary nav-cta" onClick={scrollToAccess} data-testid="button-nav-request">
-            Sign up <ArrowUpRight size={14} />
-          </button>
-        </div>
-        <button
-          className="menu-toggle"
-          aria-label={open ? 'Close menu' : 'Open menu'}
-          onClick={() => setOpen(!open)}
-          data-testid="button-mobile-menu"
-        >
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </div>
-      {open && (
-        <nav className="mobile-nav" aria-label="Mobile navigation">
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              onClick={(e) => go(e, item.href)}
-              data-testid={`link-mobile-${item.label.toLowerCase().replaceAll(' ', '-')}`}
-            >
-              {item.label}
-            </a>
-          ))}
-          <Link href="/login" onClick={() => setOpen(false)} data-testid="link-login-mobile">
-            Log in
-          </Link>
-          <button className="button-primary" onClick={scrollToAccess} data-testid="button-mobile-request">
-            Sign up <ArrowUpRight size={15} />
-          </button>
-        </nav>
-      )}
-    </header>
-  );
-}
 
 /**
  * The two pre-transcoded, web-ready cloud videos (H.264 + VP9, no audio) take
@@ -996,40 +869,6 @@ function AccessSection({ children }: { children: ReactNode }) {
   );
 }
 
-function Footer() {
-  return (
-    <footer className="footer">
-      <div className="container-wide footer-row">
-        <Logo />
-        <span className="footer-note">© 2026 Mobull · Know before you go.</span>
-        <div className="footer-links">
-          <a
-            href="#why"
-            onClick={(e) => {
-              e.preventDefault();
-              lenisScrollToHash('#why');
-            }}
-            data-testid="link-footer-why"
-          >
-            Why Mobull
-          </a>
-          <a
-            href="#top"
-            className="back-top"
-            onClick={(e) => {
-              e.preventDefault();
-              lenisScrollToHash('#top');
-            }}
-            data-testid="link-back-top"
-          >
-            Back to top <ArrowUpRight size={12} />
-          </a>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
 export default function Signup() {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -1043,10 +882,32 @@ export default function Signup() {
   // scroll untouched.
   useEffect(() => {
     const lenis = new Lenis({ autoRaf: true });
-    activeLenis = lenis;
+    setActiveLenis(lenis);
+
+    // Scroll-depth tracking for this landing page specifically: PostHog's autocapture
+    // covers clicks/form submits/pageviews but not scroll position, so this is a real
+    // custom event (`landing_page_scrolled`) rather than something the dashboard gives
+    // for free. Reads Lenis's own `progress` (0-1, already accounts for this page's
+    // real scrollable height) instead of a native `window.scroll` listener — this page
+    // scrolls via Lenis, not raw window scroll, so a native listener would miss most of
+    // it. Fires each milestone at most once per page load (a fresh `firedMilestones` set
+    // per mount), so a single session doesn't spam duplicate events by scrolling back
+    // and forth across the same point.
+    const milestones = [25, 50, 75, 90, 100];
+    const firedMilestones = new Set<number>();
+    lenis.on('scroll', ({ progress }: { progress: number }) => {
+      const depthPercent = Math.round(progress * 100);
+      for (const milestone of milestones) {
+        if (depthPercent >= milestone && !firedMilestones.has(milestone)) {
+          firedMilestones.add(milestone);
+          trackEvent('landing_page_scrolled', { depth_percent: milestone });
+        }
+      }
+    });
+
     return () => {
       lenis.destroy();
-      activeLenis = null;
+      setActiveLenis(null);
     };
   }, []);
 

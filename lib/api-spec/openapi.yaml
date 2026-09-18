@@ -2206,6 +2206,184 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /public/places/autocomplete:
+    post:
+      operationId: autocompletePublicPlaces
+      tags: [public-maps]
+      summary: Unauthenticated address suggestions for the public calculator page
+      description: >-
+        PRD_Mobull_Public_Calculator.md Section 5, FR-1. The unauthenticated
+        counterpart to `POST /places/autocomplete` for the no-login
+        `mobull.app/calculator` page — same underlying Places API (New)
+        `places:autocomplete` proxy (`../integrations/google-maps.ts`'s
+        `autocompletePlaces`, reused as-is), just not mounted behind
+        `requireOrgSession` and rate-limited on a separate, IP-keyed bucket instead of
+        `organizationId` (FR-2) — a marketing-page visitor has no organization.
+        `GOOGLE_MAPS_API_KEY` never reaches the browser (FR-4), same as the
+        authenticated route. Debounced/suppressed-under-3-chars behavior is entirely a
+        frontend concern; this route answers whatever request it's given.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutocompletePlacesRequest"
+      responses:
+        "200":
+          description: Suggestion list, ordered by Google's relevance ranking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutocompletePlacesResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: >-
+            FR-2 — this IP address is over the `"public_places"` rate-limit bucket
+            (much tighter than the per-organization `"places"` bucket) for the
+            current window. No cache layer exists for Places calls, so this is a hard
+            failure; the frontend should degrade the field to plain text, same
+            fallback as the authenticated route's 502.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: >-
+            Places API (New) Autocomplete request failed or returned an unexpected
+            shape. The frontend should degrade the field to plain text, never block
+            the form.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /public/places/details:
+    post:
+      operationId: getPublicPlaceDetails
+      tags: [public-maps]
+      summary: Unauthenticated place-details resolution for the public calculator page
+      description: >-
+        PRD_Mobull_Public_Calculator.md Section 5, FR-1. The unauthenticated
+        counterpart to `POST /places/details` — same Place Details (New) proxy
+        (`../integrations/google-maps.ts`'s `getPlaceDetails`), same
+        `sessionToken`-closes-the-Autocomplete-session semantics, on the same
+        IP-keyed `"public_places"` rate-limit bucket as
+        `POST /public/places/autocomplete` above (FR-2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetPlaceDetailsRequest"
+      responses:
+        "200":
+          description: Resolved coordinates and formatted address for the selected place.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceDetailsResult"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Google has no place matching this placeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: >-
+            FR-2 — this IP address is over the `"public_places"` rate-limit bucket
+            (shared with `/public/places/autocomplete`) for the current window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Place Details (New) request failed or returned an unexpected shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /public/routes/compute:
+    post:
+      operationId: computePublicRoute
+      tags: [public-maps]
+      summary: Unauthenticated one-way drive distance/time for the public calculator page
+      description: >-
+        PRD_Mobull_Public_Calculator.md Section 5, FR-1/FR-3/FR-5. The unauthenticated
+        counterpart to `POST /routes/compute` — same Routes API `computeRoutes` proxy
+        (`../integrations/google-maps.ts`'s `computeRoute`), same one-way response
+        (callers double it for the round trip), same error-shape conventions
+        (`no_route_found` 422, upstream failure 502) so the calculator page's
+        failure-state handling can share logic with the in-app Fuel Gauge.
+
+        Two differences from the authenticated route, both because this is the one
+        public endpoint that spends a real, priced Google API call with no cache to
+        fall back on:
+
+        - Rate-limited on a separate, much tighter, IP-keyed bucket
+        (`"public_routing"`, FR-2) instead of the per-organization `"routing"` bucket.
+        - FR-3 bot mitigation: `formRenderedAt` (when the calculator form was
+        rendered client-side) and `website` (a honeypot field that must be left
+        blank) are required/optional inputs respectively. A filled-in `website`, or a
+        `formRenderedAt` too close to "now" (a real visitor takes at least a few
+        seconds to fill in a price and two addresses before clicking Calculate
+        Route), is rejected as `400 invalid_request` — the same generic code an
+        ordinary validation failure would return, so a scripted caller can't
+        distinguish "the honeypot tripped" from "a field was missing."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicComputeRouteRequest"
+      responses:
+        "200":
+          description: One-way distance and drive time for the requested departure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComputeRouteResult"
+        "400":
+          description: >-
+            Invalid request body, OR the FR-3 honeypot/timing bot check rejected this
+            request (deliberately indistinguishable from an ordinary validation
+            failure — see the description above).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >-
+            Google returned no route between these two places (FR-5) — never a
+            fabricated distance; the frontend must show Unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: >-
+            FR-2 — this IP address is over the `"public_routing"` rate-limit bucket
+            for the current window. This endpoint has no cache to fall back to, so
+            this is a hard failure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Routes API request failed or returned an unexpected shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /weather/forecast:
     post:
       operationId: weatherForecast
@@ -4014,6 +4192,42 @@ components:
         - miles
         - minutes
         - error
+    PublicComputeRouteRequest:
+      type: object
+      description: >-
+        PRD_Mobull_Public_Calculator.md Section 5, FR-3. Same origin/destination/
+        departureTime shape as `ComputeRouteRequest`, plus two bot-mitigation fields
+        specific to this unauthenticated route.
+      properties:
+        originPlaceId:
+          type: string
+          minLength: 1
+        destinationPlaceId:
+          type: string
+          minLength: 1
+        departureTime:
+          type: string
+          format: date-time
+          description: The trip's intended departure, ISO 8601.
+        formRenderedAt:
+          type: string
+          format: date-time
+          description: >-
+            Client-recorded timestamp of when the calculator form was rendered
+            (page load / component mount), ISO 8601. The server rejects a request
+            arriving implausibly soon after this timestamp as a likely scripted
+            call rather than a human filling in a price and two addresses.
+        website:
+          type: string
+          description: >-
+            Honeypot field (FR-3) — must be left blank. Real visitors never see or
+            fill this field (hidden from the rendered form); a non-empty value
+            marks the request as an automated submission and it is rejected.
+      required:
+        - originPlaceId
+        - destinationPlaceId
+        - departureTime
+        - formRenderedAt
     WeatherForecastRequest:
       type: object
       description: >-

@@ -138,6 +138,59 @@ function grade(travelLoad: number): FuelGaugeGrade {
   return 'weak';
 }
 
+// ── Shared cost model (PRD_Mobull_Public_Calculator.md §4.1) ────────────────
+
+/**
+ * Inputs to the pure cost-math step of the Fuel Gauge (Step 2 of this file's
+ * doc comment) — no anchor selection, no bookings/employee/settings-row
+ * inputs. Extracted so the public, no-login `/calculator` page
+ * (`src/pages/calculator.tsx`) and this file's own `computeFuelGauge` share
+ * one implementation instead of two that can silently drift apart the next
+ * time a threshold or a rounding rule changes in only one of them.
+ */
+export interface TravelCostInput {
+  roundTripMiles: number;
+  roundTripMinutes: number;
+  gasPrice: number;
+  vehicleMpg: number;
+  techHourlyCost: number;
+  servicePrice: number;
+}
+
+export interface TravelCostResult {
+  /** Round-trip fuel dollars — its own line, never pre-summed with `driveCost` (FR-23a). */
+  fuelCost: number;
+  /** Round-trip drive-time dollars — its own line, never pre-summed with `fuelCost` (FR-23a). */
+  driveCost: number;
+  travelCost: number;
+  youKeep: number;
+  travelLoad: number;
+  grade: FuelGaugeGrade;
+}
+
+/**
+ * The pure formula (§6.1): round-trip fuel $ + round-trip drive-time $ ->
+ * travel cost -> you-keep -> travel-load % -> grade. Never throws, never
+ * looks at bookings/anchors/settings rows — every input is supplied by the
+ * caller.
+ */
+export function computeTravelCost({
+  roundTripMiles,
+  roundTripMinutes,
+  gasPrice,
+  vehicleMpg,
+  techHourlyCost,
+  servicePrice,
+}: TravelCostInput): TravelCostResult {
+  const fuelCost = (roundTripMiles / vehicleMpg) * gasPrice;
+  const driveCost = (roundTripMinutes / 60) * techHourlyCost;
+  const travelCost = fuelCost + driveCost;
+  const youKeep = servicePrice - travelCost;
+  const travelLoad = travelCost / servicePrice;
+
+  return { fuelCost, driveCost, travelCost, youKeep, travelLoad, grade: grade(travelLoad) };
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function toMins(hhmm: string): number {
@@ -294,15 +347,20 @@ export async function computeFuelGauge(
     const roundTripMinutes = route.minutes * 2;
 
     // Two costs, computed and returned separately — never pre-summed (FR-6/FR-23a).
-    const fuelCost = (roundTripMiles / settings.vehicleMpg) * settings.gasPrice;
-    const driveCost = (roundTripMinutes / 60) * settings.techHourlyCost;
-    const travelCost = fuelCost + driveCost;
-
-    const youKeep = servicePrice - travelCost;
-    const travelLoad = travelCost / servicePrice;
+    // Formula itself now lives in `computeTravelCost` (§4.1 of
+    // `PRD_Mobull_Public_Calculator.md`) so this and the public calculator
+    // page can't silently drift apart.
+    const { fuelCost, driveCost, youKeep, travelLoad, grade: resultGrade } = computeTravelCost({
+      roundTripMiles,
+      roundTripMinutes,
+      gasPrice: settings.gasPrice,
+      vehicleMpg: settings.vehicleMpg,
+      techHourlyCost: settings.techHourlyCost,
+      servicePrice,
+    });
 
     return {
-      grade: grade(travelLoad),
+      grade: resultGrade,
       servicePrice,
       youKeep,
       travelLoad,

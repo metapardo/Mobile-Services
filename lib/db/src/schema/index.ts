@@ -65,3 +65,9 @@ export * from "./rate-limit-counter";
 // org-scoped with RLS" — see that file's doc comment before assuming it's missing
 // organizationId by mistake.
 export * from "./weather-cache";
+
+// PRD_Mobull_Public_Calculator.md §5 (FR-2). `public-rate-limit-counter` is the
+// THIRD exception to "every table here is org-scoped with RLS" — an anonymous
+// calculator-page visitor has no organizationId to scope to; see that file's doc
+// comment for the full reasoning.
+export * from "./public-rate-limit-counter";

@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "src/pages/calculator.css"
+        ],
+        "createdAt": "2026-09-18T15:13:23.181Z",
+        "reason": "Pixel-matching PRD_Mobull_Public_Calculator.md's reference mockup, which shows a literal white-to-cyan gradient on the word 'Calculator' in the H1 — explicit task priority is visual fidelity to that screenshot over the no-gradient-text default."
+      }
+    ]
+  }
+}

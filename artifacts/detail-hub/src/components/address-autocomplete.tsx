@@ -25,6 +25,18 @@
  * (`CommandItem` — plain hover/selected background, no glass/card
  * treatment). The text field itself is a plain flat input, unchanged from
  * every other input on this page.
+ *
+ * `PRD_Mobull_Public_Calculator.md` §4.2 — the public, no-login `/calculator`
+ * page reuses this exact component but can't call the authenticated
+ * `useAutocompletePlaces`/`useGetPlaceDetails` hooks (both sit behind
+ * `requireOrgSession` server-side and would 401 for an anonymous visitor).
+ * `useAutocompleteHook`/`useGetPlaceDetailsHook` let a caller inject the
+ * public equivalents (`useAutocompletePublicPlaces`/`useGetPublicPlaceDetails`
+ * — same request/response shapes, just a different, unauthenticated route)
+ * instead. Both hooks are always called unconditionally (rules-of-hooks —
+ * the override, when present, is a stable module-level function reference,
+ * so which hook runs never changes across renders of a given instance); the
+ * unused one just never has `.mutate` invoked, so it never fires a request.
  */
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useAutocompletePlaces, useGetPlaceDetails, type PlaceSuggestion } from '@workspace/api-client-react';
@@ -51,6 +63,10 @@ interface AddressAutocompleteProps {
   id?: string;
   className?: string;
   'data-testid'?: string;
+  /** Injects a public/unauthenticated autocomplete hook (e.g. `useAutocompletePublicPlaces`) in place of the default authenticated one. See file header. */
+  useAutocompleteHook?: typeof useAutocompletePlaces;
+  /** Injects a public/unauthenticated place-details hook (e.g. `useGetPublicPlaceDetails`) in place of the default authenticated one. See file header. */
+  useGetPlaceDetailsHook?: typeof useGetPlaceDetails;
 }
 
 const DEBOUNCE_MS = 250;
@@ -83,6 +99,8 @@ export function AddressAutocomplete({
   placeholder,
   id,
   className,
+  useAutocompleteHook,
+  useGetPlaceDetailsHook,
   ...rest
 }: AddressAutocompleteProps) {
   const reactId = useId();
@@ -98,8 +116,10 @@ export function AddressAutocomplete({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
-  const autocomplete = useAutocompletePlaces();
-  const placeDetails = useGetPlaceDetails();
+  const useAutocomplete = useAutocompleteHook ?? useAutocompletePlaces;
+  const useDetails = useGetPlaceDetailsHook ?? useGetPlaceDetails;
+  const autocomplete = useAutocomplete();
+  const placeDetails = useDetails();
 
   const ensureSession = useCallback((): string => {
     if (sessionToken) return sessionToken;

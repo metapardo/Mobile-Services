@@ -11,6 +11,7 @@ import { useSession } from '@/hooks/use-session';
 
 import Login from '@/pages/login';
 import Signup from '@/pages/signup';
+import Calculator from '@/pages/calculator';
 import Home from '@/pages/home';
 import Calendar from '@/pages/calendar';
 
@@ -104,11 +105,16 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <Switch>
-            {/* `/`, `/login`, and `/signup` are the only routes that must stay ungated —
-                everything else renders behind `AuthGate` below. */}
+            {/* `/`, `/login`, `/signup`, and `/calculator` are the only routes that must
+                stay ungated — everything else renders behind `AuthGate` below.
+                `/calculator` (`PRD_Mobull_Public_Calculator.md`) is the first ungated
+                marketing route beyond those original three: a public, no-login tool with
+                its own indexable SEO surface (see that page's own `<title>`/meta-description
+                effect and `public/sitemap.xml`). */}
             <Route path="/" component={RootRoute} />
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
+            <Route path="/calculator" component={Calculator} />
             <Route>
               <AuthGate>
                 <AppShell />
