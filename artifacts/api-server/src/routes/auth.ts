@@ -22,6 +22,7 @@ import { auth } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { captureAndFlush } from "../lib/sentry";
 import { toFetchHeaders, forwardSetCookies } from "../lib/http-bridge";
+import { sendSignupAlertEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -209,6 +210,20 @@ router.post("/auth/signup", async (req, res) => {
       organizationId: organization.id,
     });
     res.status(201).json(data);
+
+    // PRD_Mobull_Email_Notifications_Resend.md — internal signup alert. Fired only
+    // after every step above has already succeeded and the response is on its way;
+    // fire-and-forget (not awaited) so a Resend outage can never add latency to, or
+    // fail/roll back, a signup that already succeeded. `.catch()` here is defense in
+    // depth — `sendSignupAlertEmail` itself never rejects (see `lib/email.ts`).
+    sendSignupAlertEmail({
+      name: signUpResult.user.name,
+      email: signUpResult.user.email,
+      organizationName: organization.name,
+      signupAt: signUpResult.user.createdAt,
+    }).catch((err) => {
+      logger.error({ err }, "POST /auth/signup: signup alert email failed to send");
+    });
     return;
   } catch (err) {
     // Compensating cleanup — see the design note above for why this exists instead of

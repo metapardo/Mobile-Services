@@ -8,6 +8,12 @@ import {
   deleteBooking,
   recordBookingPayment,
   refundBooking,
+  getClientById,
+  getPackageById,
+  db,
+  userTable,
+  organizationTable,
+  eq,
   BookingValidationError,
   BookingOverlapError,
   BookingPastDateError,
@@ -15,6 +21,12 @@ import {
   type BookingWithRelations,
 } from "@workspace/db";
 import { computeRoute } from "../integrations/google-maps";
+import {
+  sendBookingConfirmationCreatorEmail,
+  sendBookingConfirmationClientEmail,
+  sendBookingCancellationCreatorEmail,
+  sendBookingCancellationClientEmail,
+} from "../lib/email";
 import {
   ListBookingsResponse,
   ListBookingAnchorsQueryParams,
@@ -104,6 +116,140 @@ function toWire(row: BookingWithRelations) {
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
   };
+}
+
+/**
+ * PRD_Mobull_Email_Notifications_Resend.md — shared data-gathering for the booking
+ * confirmation (creation) and cancellation (delete / status->cancelled) emails, both of
+ * which need the same shape of context: the creator's email (`bookings.createdBy`, per
+ * the PRD's "Decided" line — the original creator regardless of who performs a later
+ * cancellation), the client's name/email, the organization's display name, and the
+ * assigned packages' names/prices.
+ *
+ * Deliberately lives here (not in `lib/email.ts`) rather than in `lib/email.ts` — that
+ * module is a thin Resend wrapper with no DB access; the composition of "what goes in
+ * the email" belongs with the route handler that already owns the org-scoped queries.
+ *
+ * Takes only the booking fields it actually needs (not the full `BookingWithRelations`)
+ * so the same helper works for `DELETE /bookings/:id`'s pre-delete snapshot as well as
+ * the live rows `createBooking`/`updateBooking` return.
+ */
+async function buildBookingEmailContext(
+  organizationId: string,
+  booking: Pick<BookingWithRelations, "clientId" | "packageIds" | "date" | "startTime" | "address" | "createdBy">,
+): Promise<{
+  creatorEmail: string | null;
+  clientName: string;
+  clientEmail: string | null;
+  businessName: string;
+  services: string[];
+  price: number;
+  date: string;
+  startTime: string;
+  address: string;
+}> {
+  const [creatorRows, client, orgRows, packages] = await Promise.all([
+    db.select({ email: userTable.email }).from(userTable).where(eq(userTable.id, booking.createdBy)),
+    getClientById(organizationId, booking.clientId),
+    db.select({ name: organizationTable.name }).from(organizationTable).where(eq(organizationTable.id, organizationId)),
+    Promise.all(booking.packageIds.map((packageId) => getPackageById(organizationId, packageId))),
+  ]);
+
+  const resolvedPackages = packages.filter((p): p is NonNullable<typeof p> => p !== null);
+
+  return {
+    creatorEmail: creatorRows[0]?.email ?? null,
+    clientName: client?.name ?? "Client",
+    clientEmail: client?.email ?? null,
+    businessName: orgRows[0]?.name ?? "Your detailing service",
+    services: resolvedPackages.map((p) => p.name),
+    price: resolvedPackages.reduce((sum, p) => sum + Number(p.price), 0),
+    date: booking.date,
+    startTime: booking.startTime,
+    address: booking.address,
+  };
+}
+
+/**
+ * Booking confirmation emails (#2/#3 in the PRD) — `POST /bookings`'s success path
+ * calls this fire-and-forget (see that route below). Creator confirmation always fires
+ * if a creator email is on file (it always should be — `createdBy` is a `NOT NULL` FK
+ * to `user`, whose own `email` column is `NOT NULL`); client confirmation is skipped
+ * silently (no error, no log) when `clients.email` is null, per the PRD's explicit rule.
+ */
+async function dispatchBookingConfirmationEmails(
+  organizationId: string,
+  booking: BookingWithRelations,
+): Promise<void> {
+  const ctx = await buildBookingEmailContext(organizationId, booking);
+
+  if (ctx.creatorEmail) {
+    await sendBookingConfirmationCreatorEmail({
+      to: ctx.creatorEmail,
+      clientName: ctx.clientName,
+      date: ctx.date,
+      startTime: ctx.startTime,
+      services: ctx.services,
+      address: ctx.address,
+      price: ctx.price,
+    });
+  } else {
+    logger.warn(
+      { bookingId: booking.id, createdBy: booking.createdBy },
+      "POST /bookings: booking creator has no email on file — confirmation email to creator skipped",
+    );
+  }
+
+  if (ctx.clientEmail) {
+    await sendBookingConfirmationClientEmail({
+      to: ctx.clientEmail,
+      date: ctx.date,
+      startTime: ctx.startTime,
+      services: ctx.services,
+      address: ctx.address,
+      businessName: ctx.businessName,
+    });
+  }
+  // `clients.email` null -> intentionally no email, no log (PRD: "skipped silently").
+}
+
+/**
+ * Cancellation emails (#4 in the PRD) — called from both of the PRD's two distinct
+ * triggers: `DELETE /bookings/:id` succeeding, and `PATCH /bookings/:id` succeeding
+ * with `status` transitioning *to* `cancelled` from something that wasn't already
+ * `cancelled`. Same recipients/email-on-file rule as the confirmation emails above.
+ */
+async function dispatchBookingCancellationEmails(
+  organizationId: string,
+  booking: Pick<BookingWithRelations, "id" | "clientId" | "packageIds" | "date" | "startTime" | "address" | "createdBy">,
+): Promise<void> {
+  const ctx = await buildBookingEmailContext(organizationId, booking);
+
+  if (ctx.creatorEmail) {
+    await sendBookingCancellationCreatorEmail({
+      to: ctx.creatorEmail,
+      date: ctx.date,
+      startTime: ctx.startTime,
+      services: ctx.services,
+      address: ctx.address,
+    });
+  } else {
+    logger.warn(
+      { bookingId: booking.id, createdBy: booking.createdBy },
+      "booking creator has no email on file — cancellation email to creator skipped",
+    );
+  }
+
+  if (ctx.clientEmail) {
+    await sendBookingCancellationClientEmail({
+      to: ctx.clientEmail,
+      date: ctx.date,
+      startTime: ctx.startTime,
+      services: ctx.services,
+      address: ctx.address,
+      businessName: ctx.businessName,
+    });
+  }
 }
 
 /**
@@ -197,6 +343,18 @@ router.post("/bookings", requireOrgSession, async (req, res) => {
     }, computeRoute);
     const data = CreateBookingResponse.parse(toWire(row));
     res.status(201).json(data);
+
+    // PRD_Mobull_Email_Notifications_Resend.md #2/#3 — booking confirmation emails
+    // (creator + client, when the client has an email on file). Fired only after the
+    // booking write above already succeeded and the response is on its way;
+    // fire-and-forget (not awaited) so gathering the extra client/package/creator/org
+    // context this needs — and Resend's own round-trip — can never add latency to, or
+    // fail/roll back, a booking that already succeeded. `.catch()` here is defense in
+    // depth — the dispatched functions already swallow their own failures internally.
+    dispatchBookingConfirmationEmails(req.organizationId!, row).catch((err) => {
+      logger.error({ err, bookingId: row.id }, "POST /bookings: booking confirmation emails failed");
+    });
+    return;
   } catch (err) {
     if (err instanceof BookingOverlapError) {
       // BUG-3 (`BUGS_Mobull_2026-09-10.md`) — 409, not 400: the request is
@@ -296,6 +454,16 @@ router.patch("/bookings/:id", requireOrgSession, async (req, res) => {
   const body = parsedBody.data;
 
   try {
+    // PRD_Mobull_Email_Notifications_Resend.md #4 — the cancellation email only fires
+    // on an actual transition INTO `cancelled` (not on every edit of an
+    // already-cancelled booking, and not on an edit that never touches `status`).
+    // Reading the current status here, before `updateBooking` applies the patch, is
+    // the only way to compare "before" vs. "after" — `updateBooking` itself only ever
+    // returns the post-patch row. A `null` here (booking doesn't exist) is harmless:
+    // `updateBooking` below will also return `null` for the same id, and the existing
+    // 404 handling covers it — `transitionedToCancelled` just stays `false`.
+    const previous = await getBookingById(req.organizationId!, parsedParams.data.id);
+
     const row = await updateBooking(req.organizationId!, parsedParams.data.id, {
       ...(body.clientId !== undefined && { clientId: body.clientId }),
       ...(body.packageIds !== undefined && { packageIds: body.packageIds }),
@@ -322,6 +490,17 @@ router.patch("/bookings/:id", requireOrgSession, async (req, res) => {
     }
     const data = UpdateBookingResponse.parse(toWire(row));
     res.status(200).json(data);
+
+    // PRD_Mobull_Email_Notifications_Resend.md #4 — cancellation trigger (b): status
+    // transitions TO `cancelled` FROM something that wasn't already `cancelled`. Same
+    // fire-and-forget/`.catch()` reasoning as `POST /bookings` above.
+    const transitionedToCancelled = previous !== null && previous.status !== "cancelled" && row.status === "cancelled";
+    if (transitionedToCancelled) {
+      dispatchBookingCancellationEmails(req.organizationId!, row).catch((err) => {
+        logger.error({ err, bookingId: row.id }, "PATCH /bookings/:id: cancellation emails failed");
+      });
+    }
+    return;
   } catch (err) {
     if (err instanceof BookingOverlapError) {
       // BUG-3 (`BUGS_Mobull_2026-09-10.md`) — 409, not 400: the request is
@@ -358,6 +537,14 @@ router.patch("/bookings/:id", requireOrgSession, async (req, res) => {
  * DELETE /bookings/:id — hard delete (see `deleteBooking`'s own doc comment in
  * `@workspace/db` for why this is safe for bookings specifically, unlike clients/
  * packages/employees).
+ *
+ * PRD_Mobull_Email_Notifications_Resend.md #4 — cancellation trigger (a). Since this is
+ * a genuine hard delete, the row is gone immediately after `deleteBooking` succeeds —
+ * there's nothing left to query for the cancellation email's content afterward. So the
+ * full booking is read BEFORE the delete and that captured snapshot (not a fresh query)
+ * is what gets passed to `dispatchBookingCancellationEmails`. The client/package/creator/
+ * org lookups that email needs happen inside that dispatch call, after the delete —
+ * that's safe: none of those other tables are touched by deleting a booking.
  */
 router.delete("/bookings/:id", requireOrgSession, async (req, res) => {
   const parsedParams = DeleteBookingParams.safeParse(req.params);
@@ -366,12 +553,25 @@ router.delete("/bookings/:id", requireOrgSession, async (req, res) => {
     return;
   }
   try {
+    const existing = await getBookingById(req.organizationId!, parsedParams.data.id);
+    if (!existing) {
+      res.status(404).json({ error: "booking_not_found" });
+      return;
+    }
+
     const deleted = await deleteBooking(req.organizationId!, parsedParams.data.id);
     if (!deleted) {
+      // Race: existed a moment ago (the read above), gone now (concurrent delete).
+      // No email was sent for this attempt — nothing to reconcile.
       res.status(404).json({ error: "booking_not_found" });
       return;
     }
     res.status(204).send();
+
+    dispatchBookingCancellationEmails(req.organizationId!, existing).catch((err) => {
+      logger.error({ err, bookingId: existing.id }, "DELETE /bookings/:id: cancellation emails failed");
+    });
+    return;
   } catch (err) {
     logger.error({ err }, "DELETE /bookings/:id: unexpected failure");
     await captureAndFlush(err);
