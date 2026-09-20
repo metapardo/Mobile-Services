@@ -38,6 +38,7 @@ import {
   type FetchRoute,
 } from '@/lib/fuel-gauge';
 import { AddressAutocomplete, type AddressAutocompleteSelection } from '@/components/address-autocomplete';
+import { ClientForm, clientFormValuesToPayload, isClientFormValid } from '@/components/client-form';
 import { WeatherIcon } from '@/components/weather-icon';
 // BUG-8 (`BUGS_Mobull_2026-09-10_Round2.md`) — `addDays` for the
 // "tomorrow's first slot" default when the shop's last bookable hour has
@@ -437,12 +438,15 @@ function FuelGaugeRow({
 }
 
 // ─── Quick-add customer form state ────────────────────────────────────────────
-// Per FR-3: quick-add is First name / Last name / phone only — email and
-// address are dropped from the UI (a real reduction from the old
-// `newClientValid`, which required a regex-valid email and a non-empty
-// address before "Save customer" enabled).
-interface NewClientState { firstName: string; lastName: string; phone: string }
-const EMPTY_NEW_CLIENT: NewClientState = { firstName: '', lastName: '', phone: '' };
+// Per FR-3: quick-add's *default* view is First name / Last name / phone
+// only — email and address stay hidden unless the operator opts into the
+// "Add more details" disclosure (`PRD_Mobull_Client_Creation_Parity.md`).
+// That disclosure renders the same shared `ClientForm` used by
+// `clients.tsx`'s Add Client dialog and `client-detail.tsx`'s Edit dialog for
+// its `email`/`address`/`notes` fields, so this state carries those fields
+// too even though the fast path never shows them.
+interface NewClientState { firstName: string; lastName: string; phone: string; email: string; address: string; notes: string }
+const EMPTY_NEW_CLIENT: NewClientState = { firstName: '', lastName: '', phone: '', email: '', address: '', notes: '' };
 
 // OBS-2 (`BUGS_Mobull_2026-09-10.md`) — same floor as `packages.tsx`'s own
 // package form; this quick-add modal creates packages through a separate
@@ -541,6 +545,11 @@ export default function BookingNew() {
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
   const [newClient, setNewClient] = useState<NewClientState>(EMPTY_NEW_CLIENT);
   const [creatingClient, setCreatingClient] = useState(false);
+  // Quick-add's "Add more details" disclosure (`PRD_Mobull_Client_Creation_Parity.md`)
+  // — collapsed by default so the fast first/last/phone path stays the
+  // default interaction; expanding it reveals the shared `ClientForm`'s
+  // email/address/notes fields without forcing them on every quick-add.
+  const [showMoreClientDetails, setShowMoreClientDetails] = useState(false);
   const [selectedPackages, setSelectedPackages] = useState<number[]>([]);
   const [newPackage, setNewPackage] = useState<NewPackageState>(EMPTY_NEW_PACKAGE);
   const [creatingPackage, setCreatingPackage] = useState(false);
@@ -613,18 +622,6 @@ export default function BookingNew() {
   const [showCustomers, setShowCustomers] = useState(false);
   const [showServices, setShowServices] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-
-  // Landing here from the clients page's "Add your first client" empty-state
-  // CTA (`?newClient=1`) — this page doubles as the only place a client can be
-  // created, so jump straight into the "new customer" step of the customer
-  // takeover instead of making the visitor rediscover it.
-  useEffect(() => {
-    if (new URLSearchParams(search).get('newClient') === '1') {
-      setShowCustomers(true);
-      setCreatingClient(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Search
   const [clientSearch, setClientSearch] = useState('');
@@ -1057,6 +1054,7 @@ export default function BookingNew() {
         setSelectedClient(created.id);
         setShowCustomers(false);
         setCreatingClient(false);
+        setShowMoreClientDetails(false);
         setNewClient(EMPTY_NEW_CLIENT);
         setClientSearch('');
       },
@@ -1067,21 +1065,31 @@ export default function BookingNew() {
     },
   });
 
-  const newClientValid =
-    newClient.firstName.trim().length > 0 &&
-    newClient.phone.trim().length > 0;
+  // Same shared validation `client-detail.tsx`'s Edit dialog and
+  // `clients.tsx`'s Add Client dialog use — with only first name + phone
+  // filled in, `full` below is non-empty and email is untouched, so this is
+  // exactly as permissive as the old firstName+phone-only check for the fast
+  // path. It only starts blocking submission if someone expands "Add more
+  // details" and types a malformed email.
+  const newClientValid = isClientFormValid({
+    name: `${newClient.firstName} ${newClient.lastName}`.trim(),
+    phone: newClient.phone,
+    email: newClient.email,
+    address: newClient.address,
+    notes: newClient.notes,
+  });
 
   const handleCreateClient = () => {
     if (!newClientValid || createClientMutation.isPending) return;
     const full = `${newClient.firstName} ${newClient.lastName}`.trim();
     createClientMutation.mutate({
-      data: {
+      data: clientFormValuesToPayload({
         name: full,
-        phone: newClient.phone.trim(),
-        // Email/address are optional on the real `clients` schema — a
-        // quick-added client simply won't have either on file until someone
-        // fills them in later from the Clients page (FR-4).
-      },
+        phone: newClient.phone,
+        email: newClient.email,
+        address: newClient.address,
+        notes: newClient.notes,
+      }),
     });
   };
 
@@ -1093,7 +1101,8 @@ export default function BookingNew() {
     const spaceIdx = trimmed.indexOf(' ');
     const firstName = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
     const lastName = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
-    setNewClient({ firstName, lastName, phone: '' });
+    setNewClient({ ...EMPTY_NEW_CLIENT, firstName, lastName });
+    setShowMoreClientDetails(false);
     setCreatingClient(true);
   };
 
@@ -1479,7 +1488,7 @@ export default function BookingNew() {
           title={creatingClient ? 'New customer' : 'Select customer'}
           showBack={creatingClient}
           onBack={() => {
-            if (creatingClient) { setCreatingClient(false); return; }
+            if (creatingClient) { setCreatingClient(false); setShowMoreClientDetails(false); return; }
             setShowCustomers(false);
           }}
         >
@@ -1553,8 +1562,9 @@ export default function BookingNew() {
             </div>
           ) : (
             <div className="px-4 py-5 space-y-3">
-              {/* FR-3: First name, Last name, phone number only — email and
-                  address are dropped from this fast path (FR-4). Labels match
+              {/* FR-3: First name, Last name, phone number, and email are
+                  always shown on this fast path — address/notes stay behind
+                  the "Add more details" expand below (FR-4). Labels match
                   this file's own "Date" micro-label convention below, for
                   in-screen consistency and a real accessible name once the
                   placeholder disappears behind typed text. */}
@@ -1598,6 +1608,47 @@ export default function BookingNew() {
                   onChange={e => setNewClient(p => ({ ...p, phone: e.target.value }))}
                 />
               </div>
+              <div>
+                <label htmlFor="quick-client-email" className="block text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                  Email
+                </label>
+                <input
+                  id="quick-client-email"
+                  type="email"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-border text-[15px] focus:outline-none focus:border-primary transition-colors bg-background"
+                  placeholder="Email"
+                  value={newClient.email}
+                  onChange={e => setNewClient(p => ({ ...p, email: e.target.value }))}
+                  data-testid="input-quick-client-email"
+                />
+              </div>
+
+              {/* Optional expand — keeps the fast first/last/phone/email default
+                  above untouched (`PRD_Mobull_Client_Creation_Parity.md`
+                  guardrail) while still giving access to the same shared
+                  `ClientForm`'s address/notes fields for anyone who wants to
+                  add them at booking time instead of later from the Clients
+                  page. */}
+              <button
+                type="button"
+                onClick={() => setShowMoreClientDetails(v => !v)}
+                className="w-full flex items-center justify-between px-1 py-2 text-[13px] font-medium text-primary"
+                data-testid="button-toggle-client-details"
+              >
+                <span>Add more details</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${showMoreClientDetails ? 'rotate-180' : ''}`} />
+              </button>
+              {showMoreClientDetails && (
+                <div className="pb-1">
+                  <ClientForm
+                    fields={['address', 'notes']}
+                    values={{ name: '', phone: '', email: '', address: newClient.address, notes: newClient.notes }}
+                    onChange={(v) => setNewClient(p => ({ ...p, address: v.address, notes: v.notes }))}
+                    testIdPrefix="quick-client-"
+                  />
+                </div>
+              )}
+
               <button
                 onClick={handleCreateClient}
                 disabled={!newClientValid || createClientMutation.isPending}

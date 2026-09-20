@@ -25,11 +25,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@workspace/blue-glass-design-system/components/ui/dialog';
-import { Input } from '@workspace/blue-glass-design-system/components/ui/input';
-import { Label } from '@workspace/blue-glass-design-system/components/ui/label';
-import { Textarea } from '@workspace/blue-glass-design-system/components/ui/textarea';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import {
+  ClientForm,
+  clientFormValuesToPayload,
+  clientToFormValues,
+  isClientFormValid,
+  EMPTY_CLIENT_FORM_VALUES,
+} from '@/components/client-form';
 
 export default function ClientDetail() {
   const params = useParams();
@@ -52,17 +54,11 @@ export default function ClientDetail() {
   const packagesQuery = useListPackages({ includeArchived: true });
 
   const [editOpen, setEditOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', phone: '', email: '', address: '', notes: '' });
+  const [formData, setFormData] = useState(EMPTY_CLIENT_FORM_VALUES);
 
   useEffect(() => {
     if (client) {
-      setFormData({
-        name: client.name,
-        phone: client.phone,
-        email: client.email ?? '',
-        address: client.address ?? '',
-        notes: client.notes ?? '',
-      });
+      setFormData(clientToFormValues(client));
     }
   }, [client?.id]);
 
@@ -83,26 +79,13 @@ export default function ClientDetail() {
     },
   });
 
-  // Email/address are optional on the real `clients` schema (a quick-added
-  // client from the appointment-creation flow may have neither) — only
-  // format-validate email when something's actually typed, don't require
-  // either field to be present just to save an unrelated edit.
-  const formValid =
-    formData.name.trim().length > 0 &&
-    formData.phone.trim().length > 0 &&
-    (formData.email.trim().length === 0 || EMAIL_RE.test(formData.email.trim()));
+  const formValid = isClientFormValid(formData);
 
   const handleSave = () => {
     if (!formValid) return;
     updateClientMutation.mutate({
       id: clientId,
-      data: {
-        name: formData.name.trim(),
-        phone: formData.phone.trim(),
-        email: formData.email.trim() ? formData.email.trim() : null,
-        address: formData.address.trim() ? formData.address.trim() : null,
-        notes: formData.notes.trim() ? formData.notes.trim() : null,
-      },
+      data: clientFormValuesToPayload(formData),
     });
   };
 
@@ -179,52 +162,7 @@ export default function ClientDetail() {
                 <DialogTitle>Edit Client</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-4">
-                <div>
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    data-testid="input-name"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    data-testid="input-phone"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    data-testid="input-email"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    data-testid="input-address"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes || ''}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    data-testid="input-notes"
-                  />
-                </div>
+                <ClientForm values={formData} onChange={setFormData} />
                 <Button
                   onClick={handleSave}
                   className="w-full"
