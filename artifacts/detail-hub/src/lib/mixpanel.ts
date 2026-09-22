@@ -51,6 +51,19 @@ export function initMixpanel(): void {
   mixpanel.init(token, {
     autocapture: false,
     track_pageview: false,
+    // Session Replay (docs.mixpanel.com/docs/tracking-methods/sdks/javascript/javascript-replay).
+    // `record_sessions_percent: 100` is what actually turns replay collection on — the
+    // percent-of-sessions knob, not a boolean; Mixpanel's own recommended starting value.
+    // `record_heatmap_data` is a no-op unless replay is enabled (the `record_sessions_percent`
+    // line above), per that same guide. `mixpanel-browser@^2.83.0` (already installed)
+    // is well past the v2.50.0 minimum this feature requires. Left every masking default
+    // (`record_mask_all_text`/`record_mask_all_inputs`, both default `true`) untouched —
+    // nothing here asked to unmask any field, and this app collects real client
+    // name/phone/address/notes text in visible inputs across the booking and client
+    // flows, so keeping Mixpanel's own privacy-safe default is the right call absent an
+    // explicit unmask request.
+    record_sessions_percent: 100,
+    record_heatmap_data: true,
   });
   initialized = true;
 }
