@@ -5,6 +5,7 @@ import { setBaseUrl } from '@workspace/api-client-react';
 import App from './App';
 import { ErrorFallback } from '@/components/error-fallback';
 import { initAnalytics } from '@/lib/analytics';
+import { initMixpanel } from '@/lib/mixpanel';
 
 import './index.css';
 
@@ -38,6 +39,12 @@ if (import.meta.env.PROD && sentryDsn) {
 // VITE_POSTHOG_KEY-gated pattern as the Sentry DSN above) and `trackEvent`, the safe
 // wrapper other components (e.g. the marketing page's scroll-depth tracking) call.
 initAnalytics();
+
+// See `src/lib/mixpanel.ts` for the Mixpanel init/gating logic — a second, independent
+// analytics tool alongside PostHog above (deliberate: both run). Unlike PostHog/Sentry,
+// gated on `VITE_MIXPANEL_TOKEN` presence alone, not additionally on `PROD` (see that
+// file's own comment for why).
+initMixpanel();
 
 // The generated API hooks (`@workspace/api-client-react`) call relative paths like
 // `/api/auth/login`. `api-server` now deploys as a Vercel Serverless Function under

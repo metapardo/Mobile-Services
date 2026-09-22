@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Redirect } from 'wouter';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { AuthShell } from '@/components/auth-shell';
@@ -5,6 +6,7 @@ import { Button } from '@workspace/blue-glass-design-system/components/ui/button
 import { useSession } from '@/hooks/use-session';
 import { useGetSettings, getGetSettingsQueryKey } from '@workspace/api-client-react';
 import { OnboardingFlow } from '@/components/onboarding-flow';
+import { identifyMixpanelUser, registerMixpanelOrganization } from '@/lib/mixpanel';
 
 /**
  * Gates its children behind a valid session with an active organization. Mounted once,
@@ -32,6 +34,18 @@ import { OnboardingFlow } from '@/components/onboarding-flow';
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { data, isPending, isError, refetch, isRefetching } = useSession();
   const hasSessionWithOrg = !!data?.authenticated && !!data.organizationId;
+
+  // Mixpanel identity lifecycle: the exact point a valid session + active organization
+  // is confirmed (this gate's own reason for existing) — not merely "a login/signup
+  // response came back", which can race with a session that turns out to have no
+  // active organization (see the `!data.organizationId` state below). Real user id
+  // from session data, never email/placeholder.
+  useEffect(() => {
+    if (hasSessionWithOrg && data?.user?.id && data.organizationId) {
+      identifyMixpanelUser(data.user.id);
+      registerMixpanelOrganization(data.organizationId);
+    }
+  }, [hasSessionWithOrg, data?.user?.id, data?.organizationId]);
 
   // Only fetch once we know there's a session + org to fetch settings for —
   // no point racing this against the session check itself.

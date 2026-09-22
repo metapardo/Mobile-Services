@@ -28,6 +28,7 @@ import {
   EmptyContent,
 } from '@workspace/blue-glass-design-system/components/ui/empty';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
+import { trackMixpanelEvent } from '@/lib/mixpanel';
 
 type PackageCategory = 'Exterior' | 'Interior' | 'Full' | 'Add-on';
 
@@ -76,8 +77,27 @@ export default function Packages() {
 
   const createPackageMutation = useCreatePackage({
     mutation: {
-      onSuccess: async () => {
+      onSuccess: async (created) => {
         await invalidatePackages();
+        // `getListPackagesQueryKey` needs the same `{ includeArchived: true }` params
+        // this page's own `packagesQuery` above was called with — `invalidatePackages`
+        // uses the shorter, param-less key on purpose (a `queryKey` prefix match
+        // invalidates every params variant), but reading the cache back requires the
+        // exact key the data actually landed under. `await` above means the refetch
+        // this invalidation triggered has already resolved, so this reads the
+        // post-creation total, not a stale pre-creation snapshot. Archived packages
+        // are excluded — "packages now configured" means the live catalog, matching
+        // this same page's own `activePackages` filter below.
+        const refreshed =
+          queryClient.getQueryData<PackageResult[]>(getListPackagesQueryKey({ includeArchived: true })) ?? [];
+        const packageCountTotal = refreshed.filter((p) => !p.archived).length;
+        trackMixpanelEvent('package_created', {
+          category: created.category,
+          price: created.price,
+          duration_minutes: created.durationMinutes,
+          is_addon: created.isAddon,
+          package_count_total: packageCountTotal,
+        });
         toast({ title: 'Package created' });
         setEditOpen(false);
       },

@@ -33,6 +33,7 @@ import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { useSession } from '@/hooks/use-session';
 import { useQueryClient } from '@tanstack/react-query';
 import { trackEvent } from '@/lib/analytics';
+import { identifyMixpanelUser, trackMixpanelEvent } from '@/lib/mixpanel';
 import { Header, Footer, scrollToAccess, setActiveLenis } from '@/components/marketing-chrome';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
@@ -729,7 +730,17 @@ function SignupPanel() {
 
   const signupMutation = useSignup({
     mutation: {
-      onSuccess: async () => {
+      onSuccess: async (created) => {
+        // Mixpanel identity lifecycle for `signup_completed`: `.identify()` must run
+        // BEFORE tracking the event (never track a post-identity event before identity
+        // is established) — the id comes straight from this successful
+        // `POST /auth/signup` response, never a placeholder.
+        identifyMixpanelUser(created.user.id);
+        trackMixpanelEvent('signup_completed', {
+          signup_method: 'email',
+          organization_name: created.organization.name,
+        });
+
         // Signup now also signs the caller in and activates the new
         // organization (see `SignupResult.token`/`organizationId`) — refresh
         // the cached session query so `AuthGate`/`useSession` pick up the new

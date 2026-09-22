@@ -25,6 +25,7 @@ import {
 import { EmptyState } from '@/components/empty-state';
 import { ClientForm, clientFormValuesToPayload, isClientFormValid, EMPTY_CLIENT_FORM_VALUES } from '@/components/client-form';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
+import { trackMixpanelEvent } from '@/lib/mixpanel';
 import { format } from 'date-fns';
 
 export default function Clients() {
@@ -72,6 +73,11 @@ export default function Clients() {
   const createClientMutation = useCreateClient({
     mutation: {
       onSuccess: async () => {
+        trackMixpanelEvent('client_added', {
+          source: 'clients_page',
+          has_email: formData.email.trim().length > 0,
+          has_address: formData.address.trim().length > 0,
+        });
         await queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
         toast({ title: 'Client added' });
         setAddOpen(false);

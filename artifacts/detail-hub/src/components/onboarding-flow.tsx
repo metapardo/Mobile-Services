@@ -33,7 +33,7 @@
  * real `POST /employees` calls and the final `PATCH /settings` — nothing
  * here creates an `employees` row before that (FR-8/FR-10).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -47,12 +47,18 @@ import { Input } from '@workspace/blue-glass-design-system/components/ui/input';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
 import { AddressAutocomplete, type AddressAutocompleteSelection } from '@/components/address-autocomplete';
 import { EMPLOYEE_COLORS } from '@/pages/payroll-team';
+import { trackMixpanelEvent } from '@/lib/mixpanel';
 import screen2Team from '@/assets/onboarding/screen2-team.png';
 import screen3Hq from '@/assets/onboarding/screen3-hq.png';
 import screen4Phone from '@/assets/onboarding/screen4-phone.png';
 import screen5Finish from '@/assets/onboarding/screen5-finish.png';
 
 const TOTAL_STEPS = 5;
+
+/** Confirmed step order (this file's own header comment): Welcome, Team,
+ *  Headquarters, Job ROI, Get Started — index 0 unused so `STEP_NAMES[step]`
+ *  lines up directly with the `step` state's 1-based numbering. */
+const STEP_NAMES = ['', 'welcome', 'team', 'headquarters', 'job_roi', 'get_started'] as const;
 
 // ─── Starfield background ───────────────────────────────────────────────────
 
@@ -183,6 +189,15 @@ export function OnboardingFlow() {
   const goNext = () => setStep(s => Math.min(s + 1, TOTAL_STEPS));
   const goBack = () => setStep(s => Math.max(s - 1, 1));
 
+  // `onboarding_step_viewed` — fires when each step becomes visible (forward or
+  // backward navigation both count as "viewed"), not just on forward progression.
+  useEffect(() => {
+    trackMixpanelEvent('onboarding_step_viewed', {
+      step_name: STEP_NAMES[step],
+      step_order: step,
+    });
+  }, [step]);
+
   // Screen 3 — FR-14: write through immediately on selection, not deferred.
   const handleAddressSelect = (place: AddressAutocompleteSelection) => {
     setHomeAddress(place.formattedAddress);
@@ -232,6 +247,13 @@ export function OnboardingFlow() {
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getListEmployeesQueryKey() }),
       ]);
+      // Fires once, only on a genuinely completed step 5 (not on an error partway
+      // through, which returns early via the `catch` below without reaching here).
+      // `teamMode` is guaranteed non-null by this point — step 2's "Next" stays
+      // disabled until a choice is made (see that step's `NextBtn`) — but the
+      // conditional spread still honors "omit rather than send a placeholder" for
+      // the type checker's sake.
+      trackMixpanelEvent('onboarding_completed', teamMode ? { team_mode: teamMode } : undefined);
       setLocation('/calendar');
     } catch (err) {
       const message = (err as { data?: { message?: string } })?.data?.message ?? 'Something went wrong finishing setup. Please try again.';

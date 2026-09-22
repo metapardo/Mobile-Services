@@ -6,9 +6,10 @@ import {
   useCreateBooking, useCreateClient, useCreatePackage,
   useGetSettings, useComputeRoute, useListBookingAnchors, useComputeRouteMatrix,
   getListBookingsQueryKey, getListClientsQueryKey, getListPackagesQueryKey, getListBookingAnchorsQueryKey,
-  type CreateBookingRequestStatus, type CreatePackageRequestCategory, type BookingResult,
+  type CreateBookingRequestStatus, type CreatePackageRequestCategory, type BookingResult, type PackageResult,
 } from '@workspace/api-client-react';
 import { evenSplit, isoDateOnly } from '@/lib/api-adapters';
+import { trackMixpanelEvent } from '@/lib/mixpanel';
 import { getCalendarReturnPath } from '@/lib/calendar-return';
 import { getSetupProfile } from '@/lib/setup-store';
 import {
@@ -993,6 +994,12 @@ export default function BookingNew() {
   const createBookingMutation = useCreateBooking({
     mutation: {
       onSuccess: async (created) => {
+        trackMixpanelEvent('appointment_created', {
+          package_count: selectedPackages.length,
+          total_price: totalPrice,
+          employee_count: selectedEmployees.length,
+          has_selected_address: !!addressSelection,
+        });
         await queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() });
         toast({ title: 'Appointment booked' });
         // Land back on the calendar at the new booking's own date, in
@@ -1050,6 +1057,11 @@ export default function BookingNew() {
   const createClientMutation = useCreateClient({
     mutation: {
       onSuccess: async (created) => {
+        trackMixpanelEvent('client_added', {
+          source: 'booking_flow_quick_add',
+          has_email: newClient.email.trim().length > 0,
+          has_address: newClient.address.trim().length > 0,
+        });
         await queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
         setSelectedClient(created.id);
         setShowCustomers(false);
@@ -1110,6 +1122,19 @@ export default function BookingNew() {
     mutation: {
       onSuccess: async (created) => {
         await queryClient.invalidateQueries({ queryKey: getListPackagesQueryKey() });
+        // `useListPackages()` above is called with no params, so `includeArchived`
+        // defaults to `false` server-side (`routes/packages.ts`) — the refreshed cache
+        // under this same param-less key is already the active/non-archived count,
+        // no extra client-side filter needed (unlike `packages.tsx`'s own admin view,
+        // which explicitly requests `{ includeArchived: true }` and filters client-side).
+        const refreshed = queryClient.getQueryData<PackageResult[]>(getListPackagesQueryKey()) ?? [];
+        trackMixpanelEvent('package_created', {
+          category: created.category,
+          price: created.price,
+          duration_minutes: created.durationMinutes,
+          is_addon: created.isAddon,
+          package_count_total: refreshed.length,
+        });
         setSelectedPackages(p => [...p, created.id]);
         setNewPackage(EMPTY_NEW_PACKAGE);
         setCreatingPackage(false);

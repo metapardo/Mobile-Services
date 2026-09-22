@@ -1,13 +1,15 @@
+import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@workspace/blue-glass-design-system/components/ui/toaster';
 import { TooltipProvider } from '@workspace/blue-glass-design-system/components/ui/tooltip';
 import { Loader2 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
-import { Route, Switch, Router as WouterRouter, Redirect } from 'wouter';
+import { Route, Switch, Router as WouterRouter, Redirect, useLocation } from 'wouter';
 import { BottomNav } from '@/components/bottom-nav';
 import { SidebarNav } from '@/components/sidebar-nav';
 import { AuthGate } from '@/components/auth-gate';
 import { useSession } from '@/hooks/use-session';
+import { trackMixpanelPageview } from '@/lib/mixpanel';
 
 import Login from '@/pages/login';
 import Signup from '@/pages/signup';
@@ -99,11 +101,29 @@ function RootRoute() {
   return <Signup />;
 }
 
+/**
+ * `page_viewed` — one listener, not hand-instrumented per page (Mixpanel spec). Fires
+ * once per path change via a single top-level `useLocation()` effect, mirrored here
+ * rather than inside `Router()` so it also sees the public `/`, `/login`, `/signup`,
+ * `/calculator` routes those switch cases live under, not just the gated `AppShell`
+ * tree. Renders nothing.
+ */
+function MixpanelPageviewTracker() {
+  const [path] = useLocation();
+
+  useEffect(() => {
+    trackMixpanelPageview(path);
+  }, [path]);
+
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+          <MixpanelPageviewTracker />
           <Switch>
             {/* `/`, `/login`, `/signup`, and `/calculator` are the only routes that must
                 stay ungated — everything else renders behind `AuthGate` below.

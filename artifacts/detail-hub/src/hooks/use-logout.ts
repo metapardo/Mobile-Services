@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLogout as useLogoutMutation } from '@workspace/api-client-react';
 import { getGetAuthSessionQueryKey } from '@/hooks/use-session';
 import { useToast } from '@workspace/blue-glass-design-system/hooks/use-toast';
+import { resetMixpanel } from '@/lib/mixpanel';
 
 /**
  * Shared logout action for every entry point (sidebar, mobile "More" menu, settings, etc.)
@@ -30,6 +31,7 @@ export function useLogout() {
     mutation: {
       onSuccess: () => {
         queryClient.setQueryData(getGetAuthSessionQueryKey(), { authenticated: false });
+        resetMixpanel();
         setLocation('/login');
       },
       onError: (err) => {
