@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import mobullMark from '@/assets/mobull-mark.png';
+import signupLogoLockup from '@/assets/signup-logo-lockup.png';
 
 /**
  * Shared full-screen background (gradient orbs) + centered glass-card shell used by
@@ -43,12 +43,11 @@ export function AuthShell({
           {showLogo && (
             <div className="flex flex-col items-center mb-8">
               <img
-                src={mobullMark}
-                alt="Mobull logo mark"
-                className="h-12 w-12 object-contain mb-3"
+                src={signupLogoLockup}
+                alt="Mobull"
+                className="h-[162px] w-auto object-contain"
                 data-testid="img-auth-logo"
               />
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">Mobull</h1>
             </div>
           )}
           {children}
