@@ -14,6 +14,7 @@
  * same array, in both the desktop `nav-links` and the mobile `mobile-nav`
  * blocks — one list drives both renders, no parallel special-case list.
  */
+import { trackMixpanelEvent } from '@/lib/mixpanel';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Link, useLocation } from 'wouter';
 import type Lenis from 'lenis';
@@ -120,7 +121,8 @@ export function Header({ open, setOpen }: { open: boolean; setOpen: (value: bool
   // `#access` section — falling back to a real navigation to `/signup`
   // there instead of silently no-op'ing (per `lenisScrollToHash`'s
   // "target doesn't exist" guard).
-  const goToSignup = () => {
+  const goToSignup = (ctaLocation: 'nav' | 'mobile_menu') => {
+    trackMixpanelEvent('signup_cta_clicked', { cta_location: ctaLocation });
     setOpen(false);
     if (document.querySelector('#access')) {
       scrollToAccess();
@@ -155,7 +157,7 @@ export function Header({ open, setOpen }: { open: boolean; setOpen: (value: bool
           <Link href="/login" className="button-ghost nav-cta" data-testid="link-login-nav">
             Log in
           </Link>
-          <button className="button-primary nav-cta" onClick={goToSignup} data-testid="button-nav-request">
+          <button className="button-primary nav-cta" onClick={() => goToSignup('nav')} data-testid="button-nav-request">
             Sign up <ArrowUpRight size={14} />
           </button>
         </div>
@@ -194,7 +196,7 @@ export function Header({ open, setOpen }: { open: boolean; setOpen: (value: bool
           <Link href="/login" onClick={() => setOpen(false)} data-testid="link-login-mobile">
             Log in
           </Link>
-          <button className="button-primary" onClick={goToSignup} data-testid="button-mobile-request">
+          <button className="button-primary" onClick={() => goToSignup('mobile_menu')} data-testid="button-mobile-request">
             Sign up <ArrowUpRight size={15} />
           </button>
         </nav>

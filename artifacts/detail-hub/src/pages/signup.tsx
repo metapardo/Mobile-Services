@@ -317,7 +317,14 @@ function Hero() {
           Mobull prices gas, drive time, and weather into every appointment — before you book.
         </p>
         <div className="hero-actions reveal reveal-delay-3">
-          <button className="button-ghost" onClick={scrollToAccess} data-testid="button-hero-access">
+          <button
+            className="button-ghost"
+            onClick={() => {
+              trackMixpanelEvent('signup_cta_clicked', { cta_location: 'hero' });
+              scrollToAccess();
+            }}
+            data-testid="button-hero-access"
+          >
             Get Started Now <ArrowUpRight size={16} />
           </button>
         </div>
@@ -714,6 +721,15 @@ function SignupPanel() {
   const queryClient = useQueryClient();
   const [showPassword, setShowPassword] = useState(false);
 
+  // Funnel step `signup_started`: first focus into any field of the signup form,
+  // at most once per page load. Separates "saw the form" from "engaged with it".
+  const signupStartedRef = useRef(false);
+  const handleFormFocus = () => {
+    if (signupStartedRef.current) return;
+    signupStartedRef.current = true;
+    trackMixpanelEvent('signup_started');
+  };
+
   const {
     register,
     handleSubmit,
@@ -755,6 +771,7 @@ function SignupPanel() {
       },
       onError: (err) => {
         const message = err?.data?.message ?? 'Something went wrong creating your account. Please try again.';
+        trackMixpanelEvent('signup_failed', { error_message: message });
         toast({ title: 'Signup failed', description: message, variant: 'destructive' });
       },
     },
@@ -765,7 +782,7 @@ function SignupPanel() {
   };
 
   return (
-    <form className="access-form" onSubmit={handleSubmit(onSubmit)} data-testid="form-signup">
+    <form className="access-form" onSubmit={handleSubmit(onSubmit)} onFocus={handleFormFocus} data-testid="form-signup">
       <div className="field-group">
         <label htmlFor="organization-name">Business name</label>
         <input
@@ -923,6 +940,24 @@ export default function Signup() {
   }, []);
 
   const { data: session, isPending: sessionPending } = useSession();
+
+  // Funnel step 1 `landing_page_viewed`: fired once per mount, only after the session
+  // check resolves to a logged-out visitor. The generic `page_viewed` (App.tsx) also
+  // fires for `/` when a logged-in user hits it on the way to the `/calendar`
+  // redirect, which would inflate landing traffic — this event excludes them.
+  const landingTrackedRef = useRef(false);
+  useEffect(() => {
+    if (sessionPending || session?.authenticated || landingTrackedRef.current) return;
+    landingTrackedRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    trackMixpanelEvent('landing_page_viewed', {
+      landing_path: window.location.pathname,
+      referrer: document.referrer || undefined,
+      utm_source: params.get('utm_source') ?? undefined,
+      utm_medium: params.get('utm_medium') ?? undefined,
+      utm_campaign: params.get('utm_campaign') ?? undefined,
+    });
+  }, [sessionPending, session?.authenticated]);
 
   // Already authenticated — no reason to be on the signup page.
   if (!sessionPending && session?.authenticated) {

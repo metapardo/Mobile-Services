@@ -995,6 +995,10 @@ export default function BookingNew() {
     mutation: {
       onSuccess: async (created) => {
         trackMixpanelEvent('appointment_created', {
+          // `bookingsQuery.data` is still the pre-create list here (invalidated below),
+          // so an empty list means this is the org's first appointment. Only set when
+          // the list actually loaded, so a failed fetch never mislabels a booking.
+          is_first_appointment: bookingsQuery.isSuccess ? (bookingsQuery.data?.length ?? 0) === 0 : undefined,
           package_count: selectedPackages.length,
           total_price: totalPrice,
           employee_count: selectedEmployees.length,
