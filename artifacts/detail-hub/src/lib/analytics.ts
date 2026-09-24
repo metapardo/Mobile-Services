@@ -1,4 +1,26 @@
-import posthog from 'posthog-js';
+import posthog, { type CaptureResult } from 'posthog-js';
+
+/**
+ * Drops the browser's benign "ResizeObserver loop ..." warnings, which exception
+ * autocapture reports as `$exception` events. The browser settles the layout on the
+ * next frame, so no user flow breaks — capturing these only adds noise to the error
+ * list and hides real exceptions. Runs as a `before_send` hook (see `initAnalytics`).
+ */
+function dropResizeObserverLoopErrors(event: CaptureResult | null): CaptureResult | null {
+  if (event?.event === '$exception') {
+    const exceptions = event.properties?.$exception_list;
+    const isResizeObserverLoop =
+      Array.isArray(exceptions) &&
+      exceptions.some(
+        (exception) =>
+          typeof exception?.value === 'string' && exception.value.startsWith('ResizeObserver loop'),
+      );
+    if (isResizeObserverLoop) {
+      return null;
+    }
+  }
+  return event;
+}
 
 /**
  * `initialized` tracks whether `posthog.init()` actually ran, rather than relying on
@@ -22,6 +44,7 @@ export function initAnalytics(): void {
     posthog.init(posthogKey, {
       api_host: posthogHost,
       person_profiles: 'identified_only',
+      before_send: dropResizeObserverLoopErrors,
     });
     initialized = true;
   }
