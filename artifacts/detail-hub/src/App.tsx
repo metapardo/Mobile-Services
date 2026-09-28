@@ -14,6 +14,7 @@ import { trackMixpanelPageview } from '@/lib/mixpanel';
 import Login from '@/pages/login';
 import Signup from '@/pages/signup';
 import Calculator from '@/pages/calculator';
+import Demo from '@/pages/demo';
 import Home from '@/pages/home';
 import Calendar from '@/pages/calendar';
 
@@ -125,16 +126,18 @@ function App() {
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <MixpanelPageviewTracker />
           <Switch>
-            {/* `/`, `/login`, `/signup`, and `/calculator` are the only routes that must
-                stay ungated — everything else renders behind `AuthGate` below.
-                `/calculator` (`PRD_Mobull_Public_Calculator.md`) is the first ungated
-                marketing route beyond those original three: a public, no-login tool with
-                its own indexable SEO surface (see that page's own `<title>`/meta-description
-                effect and `public/sitemap.xml`). */}
+            {/* `/`, `/login`, `/signup`, `/calculator`, and `/demo` are the only routes
+                that must stay ungated — everything else renders behind `AuthGate` below.
+                `/calculator` (`PRD_Mobull_Public_Calculator.md`) and `/demo`
+                (`PRD_Mobull_Demo_Request_Page.md`) are ungated marketing routes beyond
+                the original three: public, no-login pages with their own indexable SEO
+                surface (see each page's own `<title>`/meta-description effect and
+                `public/sitemap.xml`). */}
             <Route path="/" component={RootRoute} />
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
             <Route path="/calculator" component={Calculator} />
+            <Route path="/demo" component={Demo} />
             <Route>
               <AuthGate>
                 <AppShell />

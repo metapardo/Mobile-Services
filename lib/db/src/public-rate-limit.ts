@@ -26,14 +26,20 @@ import { publicRateLimitCounterTable } from "./schema";
  *     per-organization `routing` bucket. Paired with `/public/routes/compute`'s
  *     honeypot/timing bot check (FR-3) as defense in depth, not the only line of
  *     defense.
+ *   - `demo_requests: 5/hr` (`PRD_Mobull_Demo_Request_Page.md`) — a real visitor
+ *     submits this form once, maybe twice if they mistype something and resubmit.
+ *     5/hr comfortably covers that while capping how much spam a single IP hammering
+ *     `POST /public/demo-requests` can push into `support@mobull.app`'s inbox and the
+ *     `demo_requests` table, alongside that route's own honeypot check.
  *
- * Both are placeholder guesses pending real public-traffic data, same caveat as
- * `./rate-limit.ts`'s `RATE_LIMIT_DEFAULTS` — revisit once `/calculator` has actual
+ * All three are placeholder guesses pending real public-traffic data, same caveat as
+ * `./rate-limit.ts`'s `RATE_LIMIT_DEFAULTS` — revisit once these pages have actual
  * organic traffic to look at.
  */
 export const PUBLIC_RATE_LIMIT_DEFAULTS = {
   public_places: { limit: 30, windowMinutes: 60 },
   public_routing: { limit: 10, windowMinutes: 60 },
+  demo_requests: { limit: 5, windowMinutes: 60 },
 } as const;
 
 /**

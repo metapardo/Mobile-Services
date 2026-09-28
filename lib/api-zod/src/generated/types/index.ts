@@ -36,6 +36,8 @@ export * from './createTimeLogRequest';
 export * from './createTimeOffRequestRequest';
 export * from './dailyForecastResult';
 export * from './dailyForecastResultCondition';
+export * from './demoRequestBody';
+export * from './demoRequestResult';
 export * from './employeeResult';
 export * from './employeeResultPaymentMethod';
 export * from './employeeResultWorkerType';

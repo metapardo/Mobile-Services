@@ -77,6 +77,7 @@ export const navItems: NavItem[] = [
   { label: 'How it works', href: '#workflow' },
   { label: 'For your business', href: '#features' },
   { label: 'Drive Cost Calculator', href: '/calculator', type: 'route' },
+  { label: 'Request a Demo', href: '/demo?source=nav', type: 'route' },
 ];
 
 export function scrollToAccess() {

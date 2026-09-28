@@ -589,6 +589,19 @@
   box-shadow: none;
 }
 
+.calculator-page .calc-cta-demo-link {
+  display: block;
+  margin-top: 18px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.86rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.calculator-page .calc-cta-demo-link:hover {
+  color: hsl(var(--calc-accent));
+}
+
 /* ── Footer line (screenshot-specific — see calculator.tsx's header comment
    for why this page doesn't reuse `signup.tsx`'s shared marketing Footer) ── */
 

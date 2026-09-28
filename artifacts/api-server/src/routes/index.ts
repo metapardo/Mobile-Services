@@ -15,6 +15,7 @@ import placesRouter from "./places";
 import routingRouter from "./routing";
 import weatherRouter from "./weather";
 import publicMapsRouter from "./public-maps";
+import demoRequestsRouter from "./demo-requests";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(placesRouter);
 router.use(routingRouter);
 router.use(weatherRouter);
 router.use(publicMapsRouter);
+router.use(demoRequestsRouter);
 
 export default router;

@@ -1068,6 +1068,31 @@ export interface PublicComputeRouteRequest {
 }
 
 /**
+ * PRD_Mobull_Demo_Request_Page.md. `phone` is validated server-side as exactly 10 digits once non-digit characters are stripped — send it in whatever display format the input auto-formats to (e.g. `"(516) 555-1234"`); the server normalizes and stores digits-only.
+ */
+export interface DemoRequestBody {
+  /** @minLength 1 */
+  name: string;
+  email: string;
+  /**
+     * Must contain exactly 10 digits once non-digit characters are stripped (US-only, by design) — rejected as `400 invalid_request` otherwise.
+     * @minLength 1
+     */
+  phone: string;
+  businessName?: string | null;
+  note?: string | null;
+  /** Honeypot field — must be left blank. Real visitors never see or fill this field (hidden from the rendered form); a non-empty value marks the request as an automated submission and is silently discarded (same `200` response as a genuine submission, see this operation's description). */
+  website?: string;
+}
+
+/**
+ * Deliberately minimal and identical whether or not the honeypot check silently discarded the submission — no `id` or other field a bot could use to tell the two cases apart.
+ */
+export interface DemoRequestResult {
+  success: boolean;
+}
+
+/**
  * `placeId` is accepted but not required for the Google call itself — the actual upstream/cache lookup uses `latitude`/`longitude` only. It's carried here for potential future cache-key/logging use.
  */
 export interface WeatherForecastRequest {

@@ -37,6 +37,8 @@ import type {
   CreateTimeLogRequest,
   CreateTimeOffRequestRequest,
   DailyForecastResult,
+  DemoRequestBody,
+  DemoRequestResult,
   EmployeeResult,
   EmployeeRoleResult,
   ErrorResponse,
@@ -4195,6 +4197,81 @@ export const useComputePublicRoute = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getComputePublicRouteMutationOptions(options));
+    }
+
+export const getCreateDemoRequestUrl = () => {
+
+
+
+
+  return `/api/public/demo-requests`
+}
+
+/**
+ * PRD_Mobull_Demo_Request_Page.md. No `requireOrgSession` — there is no organization yet; the prospect submitting this hasn't created an account. Rate-limited on the IP-keyed `"demo_requests"` bucket (`publicRateLimitMiddleware`, same shared middleware as `/public/places/*` and `/public/routes/compute` above, separate bucket).
+ * The submitted row is the durable source of truth (written first); a best-effort notification email to Mobull's support inbox is dispatched fire-and-forget afterward and never affects this response, per the PRD's Goals section — a Resend failure never blocks or errors the visitor's submission.
+ * `phone` must be exactly 10 digits once non-digit characters are stripped (US-only, by design per the PRD) — anything else is rejected as `400 invalid_request`, defense-in-depth alongside the frontend's own auto-formatting/validation.
+ * `website` is an honeypot (real visitors never see or fill this field). A non-empty value returns the exact same `200` success shape as a genuine submission — the row is never written and the email never sent — so a bot never learns it was caught.
+ * @summary Submit a demo request from the public, unauthenticated /demo page
+ */
+export const createDemoRequest = async (demoRequestBody: DemoRequestBody, options?: Parameters<typeof customFetch>[1]): Promise<DemoRequestResult> => {
+
+  return customFetch<DemoRequestResult>(getCreateDemoRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(demoRequestBody)
+  }
+);}
+
+
+
+
+
+export const getCreateDemoRequestMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDemoRequest>>, TError,{data: BodyType<DemoRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDemoRequest>>, TError,{data: BodyType<DemoRequestBody>}, TContext> => {
+
+const mutationKey = ['createDemoRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDemoRequest>>, {data: BodyType<DemoRequestBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createDemoRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDemoRequestMutationResult = NonNullable<Awaited<ReturnType<typeof createDemoRequest>>>
+    export type CreateDemoRequestMutationBody = BodyType<DemoRequestBody>
+    export type CreateDemoRequestMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Submit a demo request from the public, unauthenticated /demo page
+ */
+export const useCreateDemoRequest = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDemoRequest>>, TError,{data: BodyType<DemoRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDemoRequest>>,
+        TError,
+        {data: BodyType<DemoRequestBody>},
+        TContext
+      > => {
+      return useMutation(getCreateDemoRequestMutationOptions(options));
     }
 
 export const getWeatherForecastUrl = () => {

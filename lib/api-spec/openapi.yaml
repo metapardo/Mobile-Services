@@ -45,6 +45,11 @@ tags:
       calendar-view weather indicators (PRD_Mobull_Weather_Coverage.md Sections 5-7).
       `GOOGLE_WEATHER_API_KEY` is read only in `artifacts/api-server` and never reaches
       the browser.
+  - name: demo-requests
+    description: >-
+      Public, unauthenticated demo-request lead capture for the no-login `/demo`
+      marketing page (PRD_Mobull_Demo_Request_Page.md) — submitted before a prospect
+      has ever created an account or organization.
 paths:
   /healthz:
     get:
@@ -2384,6 +2389,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /public/demo-requests:
+    post:
+      operationId: createDemoRequest
+      tags: [demo-requests]
+      summary: Submit a demo request from the public, unauthenticated /demo page
+      description: >-
+        PRD_Mobull_Demo_Request_Page.md. No `requireOrgSession` — there is no
+        organization yet; the prospect submitting this hasn't created an account.
+        Rate-limited on the IP-keyed `"demo_requests"` bucket
+        (`publicRateLimitMiddleware`, same shared middleware as `/public/places/*` and
+        `/public/routes/compute` above, separate bucket).
+
+        The submitted row is the durable source of truth (written first); a
+        best-effort notification email to Mobull's support inbox is dispatched
+        fire-and-forget afterward and never affects this response, per the PRD's
+        Goals section — a Resend failure never blocks or errors the visitor's
+        submission.
+
+        `phone` must be exactly 10 digits once non-digit characters are stripped
+        (US-only, by design per the PRD) — anything else is rejected as
+        `400 invalid_request`, defense-in-depth alongside the frontend's own
+        auto-formatting/validation.
+
+        `website` is an honeypot (real visitors never see or fill this field). A
+        non-empty value returns the exact same `200` success shape as a genuine
+        submission — the row is never written and the email never sent — so a bot
+        never learns it was caught.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoRequestBody"
+      responses:
+        "200":
+          description: >-
+            The submission was accepted. Returned identically whether or not the
+            honeypot check silently discarded it (see description above).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoRequestResult"
+        "400":
+          description: >-
+            Missing required field, or `phone` is not exactly 10 digits after
+            stripping non-digit characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: >-
+            This IP address is over the `"demo_requests"` rate-limit bucket for the
+            current window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /weather/forecast:
     post:
       operationId: weatherForecast
@@ -4228,6 +4291,55 @@ components:
         - destinationPlaceId
         - departureTime
         - formRenderedAt
+    DemoRequestBody:
+      type: object
+      description: >-
+        PRD_Mobull_Demo_Request_Page.md. `phone` is validated server-side as exactly
+        10 digits once non-digit characters are stripped — send it in whatever
+        display format the input auto-formats to (e.g. `"(516) 555-1234"`); the
+        server normalizes and stores digits-only.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          minLength: 1
+          description: >-
+            Must contain exactly 10 digits once non-digit characters are stripped
+            (US-only, by design) — rejected as `400 invalid_request` otherwise.
+        businessName:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        website:
+          type: string
+          description: >-
+            Honeypot field — must be left blank. Real visitors never see or fill
+            this field (hidden from the rendered form); a non-empty value marks the
+            request as an automated submission and is silently discarded (same
+            `200` response as a genuine submission, see this operation's
+            description).
+      required:
+        - name
+        - email
+        - phone
+    DemoRequestResult:
+      type: object
+      description: >-
+        Deliberately minimal and identical whether or not the honeypot check
+        silently discarded the submission — no `id` or other field a bot could use
+        to tell the two cases apart.
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
     WeatherForecastRequest:
       type: object
       description: >-

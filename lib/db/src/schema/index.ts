@@ -71,3 +71,9 @@ export * from "./weather-cache";
 // calculator-page visitor has no organizationId to scope to; see that file's doc
 // comment for the full reasoning.
 export * from "./public-rate-limit-counter";
+
+// PRD_Mobull_Demo_Request_Page.md. `demo-request` is the FOURTH exception to "every
+// table here is org-scoped with RLS" — a demo request predates any organization
+// existing, same shape-of-reasoning as `billing-webhook-event.ts`'s no-RLS precedent;
+// see that file's doc comment (and this one's) for the full reasoning.
+export * from "./demo-request";

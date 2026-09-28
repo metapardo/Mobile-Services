@@ -598,6 +598,9 @@ function SignupCta() {
         <Link href="/signup" className="button-primary calc-cta-button" data-testid="link-calc-signup-cta">
           Get Started Free
         </Link>
+        <Link href="/demo?source=calculator_cta" className="calc-cta-demo-link" data-testid="link-calc-demo-cta">
+          Prefer to talk first? Request a demo
+        </Link>
       </div>
     </section>
   );

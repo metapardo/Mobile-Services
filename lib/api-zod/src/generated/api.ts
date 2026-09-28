@@ -1684,6 +1684,31 @@ export const ComputePublicRouteResponse = zod.object({
 
 
 /**
+ * PRD_Mobull_Demo_Request_Page.md. No `requireOrgSession` — there is no organization yet; the prospect submitting this hasn't created an account. Rate-limited on the IP-keyed `"demo_requests"` bucket (`publicRateLimitMiddleware`, same shared middleware as `/public/places/*` and `/public/routes/compute` above, separate bucket).
+ * The submitted row is the durable source of truth (written first); a best-effort notification email to Mobull's support inbox is dispatched fire-and-forget afterward and never affects this response, per the PRD's Goals section — a Resend failure never blocks or errors the visitor's submission.
+ * `phone` must be exactly 10 digits once non-digit characters are stripped (US-only, by design per the PRD) — anything else is rejected as `400 invalid_request`, defense-in-depth alongside the frontend's own auto-formatting/validation.
+ * `website` is an honeypot (real visitors never see or fill this field). A non-empty value returns the exact same `200` success shape as a genuine submission — the row is never written and the email never sent — so a bot never learns it was caught.
+ * @summary Submit a demo request from the public, unauthenticated /demo page
+ */
+
+
+
+
+export const CreateDemoRequestBody = zod.object({
+  "name": zod.string().min(1),
+  "email": zod.string().email(),
+  "phone": zod.string().min(1).describe('Must contain exactly 10 digits once non-digit characters are stripped (US-only, by design) — rejected as `400 invalid_request` otherwise.'),
+  "businessName": zod.string().nullish(),
+  "note": zod.string().nullish(),
+  "website": zod.string().optional().describe('Honeypot field — must be left blank. Real visitors never see or fill this field (hidden from the rendered form); a non-empty value marks the request as an automated submission and is silently discarded (same `200` response as a genuine submission, see this operation\'s description).')
+}).describe('PRD_Mobull_Demo_Request_Page.md. `phone` is validated server-side as exactly 10 digits once non-digit characters are stripped — send it in whatever display format the input auto-formats to (e.g. `\"(516) 555-1234\"`); the server normalizes and stores digits-only.')
+
+export const CreateDemoRequestResponse = zod.object({
+  "success": zod.boolean()
+}).describe('Deliberately minimal and identical whether or not the honeypot check silently discarded the submission — no `id` or other field a bot could use to tell the two cases apart.')
+
+
+/**
  * PRD_Mobull_Weather_Coverage.md Sections 5-7 (FR-3 through FR-10). Server-side proxy to Google's Weather API (New) `forecast.days:lookup` (`../integrations/google-weather.ts`'s `getDailyForecast`) — one call per location returns up to 10 days (Google's own cap, FR-10), no `date` parameter (FR-5): every date in the available horizon comes back in one response.
  * Cache-aside on `weather_cache` (FR-6-FR-8, a short TTL shared across every organization asking about the same ~1km-rounded coordinates — deliberately NOT organization-scoped, FR-9) and rate-limited per organization (FR-4, bucket `"weather"`).
  * `placeId` is accepted in the request body but not required for the Google call itself (lat/lng drive both the cache key and the upstream lookup) — it's reserved for potential future cache-key/logging use.

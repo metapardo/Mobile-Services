@@ -1,0 +1,139 @@
+/*
+ * Scoped styles for the public `/demo` page — layered on top of
+ * `signup.css`'s `.site-shell` theme (imported alongside it in `demo.tsx`,
+ * same pattern `calculator.tsx` uses for `.calculator-page`) so the shared
+ * `Header`/`Footer`/nav/fonts/color tokens match the rest of the marketing
+ * site exactly. Everything below is scoped under `.demo-page` so none of it
+ * leaks into `/`, `/signup`, or `/calculator`.
+ *
+ * The form itself reuses `signup.css`'s `.access-form`/`.field-group`/
+ * `.field-error`/`.form-fineprint`/`.field-group-honeypot` classes directly
+ * (no re-styled duplicate input treatment here) — only the page-level hero,
+ * card shell, and confirmation-state layout are new.
+ */
+
+.demo-page .demo-hero {
+  padding: 190px 0 40px;
+  text-align: center;
+}
+
+.demo-page .demo-eyebrow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(141, 200, 228, 0.22);
+  color: hsl(var(--primary));
+  font-family: var(--app-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.demo-page .demo-title {
+  font-family: var(--app-font-sans);
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 20px auto 18px;
+  color: #fff;
+}
+
+.demo-page .demo-title-accent {
+  color: hsl(var(--primary));
+}
+
+.demo-page .demo-subtitle {
+  max-width: 560px;
+  margin: 0 auto;
+  color: hsl(var(--muted-foreground));
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.demo-page .demo-panel-wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 0 90px;
+}
+
+.demo-page .demo-panel {
+  border-radius: 24px;
+  padding: 40px 36px;
+}
+
+.demo-page .demo-form-heading {
+  margin: 0 0 24px;
+}
+
+.demo-page .demo-form-heading h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin: 0 0 6px;
+}
+
+.demo-page .demo-form-heading p {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.demo-page .demo-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 13px;
+}
+
+.demo-page .demo-confirmation {
+  text-align: center;
+  padding: 24px 4px 8px;
+}
+
+.demo-page .demo-confirmation-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
+  border-radius: 999px;
+  background: rgba(56, 189, 130, 0.14);
+  color: #4ade80;
+}
+
+.demo-page .demo-confirmation h2 {
+  font-size: 1.4rem;
+  color: #fff;
+  margin: 0 0 10px;
+  letter-spacing: -0.02em;
+}
+
+.demo-page .demo-confirmation p {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.98rem;
+  line-height: 1.6;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.demo-page .demo-error {
+  color: hsl(var(--destructive));
+  font-size: 0.82rem;
+  margin: -6px 0 4px;
+}
+
+@media (max-width: 560px) {
+  .demo-page .demo-hero {
+    padding-top: 150px;
+  }
+
+  .demo-page .demo-panel {
+    padding: 28px 22px;
+  }
+
+  .demo-page .demo-field-row {
+    grid-template-columns: 1fr;
+  }
+}

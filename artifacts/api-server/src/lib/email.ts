@@ -128,8 +128,19 @@ type SendEmailParams = {
     | "booking_confirmation_creator"
     | "booking_confirmation_client"
     | "booking_cancellation_creator"
-    | "booking_cancellation_client";
+    | "booking_cancellation_client"
+    | "demo_request_notification";
 };
+
+/**
+ * Outcome of a `sendEmail` call — used only by `sendDemoRequestNotificationEmail`
+ * (its caller, `routes/demo-requests.ts`, needs to log the outcome onto the
+ * `demo_requests` row's `emailedAt`/`emailError` columns per
+ * `PRD_Mobull_Demo_Request_Page.md`). The other five callers below ignore this return
+ * value entirely and stay `Promise<void>` — this is additive, not a contract change
+ * for them.
+ */
+export type SendEmailResult = { success: boolean; error?: string };
 
 /**
  * Core send — every exported function below funnels through this. Never throws: a
@@ -139,7 +150,7 @@ type SendEmailParams = {
  * case) is logged via the existing `logger` — sufficient for v1 traceability per the
  * PRD's own Assumptions section (no dedicated `notification_log` table).
  */
-async function sendEmail(params: SendEmailParams): Promise<void> {
+async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   if (!resendClient) {
     // Already logged once at module load — this would otherwise spam identical
     // warnings on every signup/booking/cancellation in an unconfigured environment.
@@ -147,7 +158,7 @@ async function sendEmail(params: SendEmailParams): Promise<void> {
       { emailType: params.emailType, to: params.to },
       "email send skipped — Resend not configured (RESEND_API_KEY unset)",
     );
-    return;
+    return { success: false, error: "resend_not_configured" };
   }
   try {
     const { data, error } = await resendClient.emails.send({
@@ -162,17 +173,19 @@ async function sendEmail(params: SendEmailParams): Promise<void> {
         { emailType: params.emailType, to: params.to, error },
         "email send failed — Resend API returned an error",
       );
-      return;
+      return { success: false, error: error.message ?? "resend_api_error" };
     }
     logger.info(
       { emailType: params.emailType, to: params.to, resendId: data?.id },
       "email sent",
     );
+    return { success: true };
   } catch (err) {
     logger.error(
       { err, emailType: params.emailType, to: params.to },
       "email send failed — unexpected exception calling Resend",
     );
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -365,5 +378,57 @@ export async function sendBookingCancellationClientEmail(params: {
       `Was scheduled for: ${dateTime}\n` +
       `Service(s): ${params.services.length > 0 ? params.services.join(", ") : "No services listed"}\n` +
       `Address: ${params.address}\n`,
+  });
+}
+
+/**
+ * 5. Demo request notification → `support@mobull.app` (`PRD_Mobull_Demo_Request_Page.md`),
+ *    fired after `POST /public/demo-requests` writes its row (`routes/demo-requests.ts`).
+ *    Reuses `FROM_ADDRESS` as the recipient too — this is Mobull's own support inbox
+ *    notifying itself of a new lead, same identity the PRD's "Decided" line calls out,
+ *    not a new literal. Best-effort only: the `demo_requests` row (not this email) is
+ *    the durable record of the submission per the PRD's Goals section.
+ *
+ *    Unlike the other five functions in this file, returns `SendEmailResult` rather
+ *    than `void` — never throws (same guardrail as every other function here), but
+ *    its caller (`routes/demo-requests.ts`) needs to know whether the send actually
+ *    succeeded in order to write that outcome onto the same row's
+ *    `emailedAt`/`emailError` columns, which none of the other five callers need to
+ *    do.
+ */
+export async function sendDemoRequestNotificationEmail(params: {
+  name: string;
+  email: string;
+  phone: string;
+  businessName: string | null;
+  note: string | null;
+}): Promise<SendEmailResult> {
+  const name = escapeHtml(params.name);
+  const email = escapeHtml(params.email);
+  const phone = escapeHtml(params.phone);
+  const businessName = params.businessName ? escapeHtml(params.businessName) : null;
+  const note = params.note ? escapeHtml(params.note) : null;
+
+  return sendEmail({
+    to: FROM_ADDRESS,
+    emailType: "demo_request_notification",
+    subject: `New demo request: ${params.name}`,
+    html: `
+      <p>Someone just requested a demo.</p>
+      <ul>
+        <li><strong>Name:</strong> ${name}</li>
+        <li><strong>Email:</strong> ${email}</li>
+        <li><strong>Phone:</strong> ${phone}</li>
+        <li><strong>Business name:</strong> ${businessName ?? "Not provided"}</li>
+        <li><strong>Note:</strong> ${note ?? "Not provided"}</li>
+      </ul>
+    `,
+    text:
+      `Someone just requested a demo.\n\n` +
+      `Name: ${params.name}\n` +
+      `Email: ${params.email}\n` +
+      `Phone: ${params.phone}\n` +
+      `Business name: ${params.businessName ?? "Not provided"}\n` +
+      `Note: ${params.note ?? "Not provided"}\n`,
   });
 }
