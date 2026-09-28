@@ -93,31 +93,48 @@ export async function getSettings(organizationId: string): Promise<Settings | nu
  * if a caller managed to smuggle it in, the RLS `WITH CHECK` predicate this row is
  * scoped under would reject any attempt to move it to a different organization.
  *
- * Self-healing: if the UPDATE affects zero rows (no settings row exists yet — a
- * legacy organization that predates `createDefaultSettings`, or a genuine
- * signup-time insert failure), this falls back to creating one from
- * `SETTINGS_DEFAULTS` plus whatever the caller supplied, rather than leaving the
- * organization permanently unable to ever reach a settings row through the API.
- * `homeAddress` is required either way (`NOT NULL`, no DB default) — the settings
- * form always sends it, so this only matters for the edge case this whole path
- * exists to fix.
+ * Bug fix (reported live: Settings showed a freshly-typed San Diego home address, but
+ * the Fuel Gauge kept computing drive time from the org's *previous* HQ on the other
+ * side of the country): `settings.tsx`'s `AddressAutocomplete` clears its local
+ * `hqLatitude`/`hqLongitude` to `null` the moment the owner types (a stale coordinate
+ * pair must never survive edited-but-not-yet-reselected text), which `toUpdateRequest`
+ * then serializes as `undefined` on the wire. Previously, `undefined` here meant
+ * "caller didn't mention this column" and the UPDATE below left whatever coordinates
+ * were already in the row untouched — so `homeAddress` moved to the new text while the
+ * old, now-unrelated `hqLatitude`/`hqLongitude`/`hqGooglePlaceId` silently lived on,
+ * and the Fuel Gauge (which reads those columns directly, never re-geocoding
+ * `homeAddress` live — see `booking-new.tsx`'s `hqHasCoordinates`) kept confidently
+ * costing jobs against a location the business no longer operates from. There was no
+ * error and nothing looked wrong in Settings, which is what made this so hard to spot.
+ * Per `settings.ts` (the API route)'s own `toWire` comment, the intended contract is
+ * "null until Home Base is re-saved through the Places-autocomplete field" — i.e. an
+ * address update with no accompanying coordinates should *clear* the old ones, not
+ * inherit them. `hqHasCoordinates` already treats null coordinates as a normal,
+ * well-handled state (`booking-new.tsx`'s "no-hq" Fuel Gauge state points the owner
+ * back to Settings) — a bare `homeAddress` update now lands there instead of on a
+ * confidently wrong number.
  */
 export async function updateSettings(
   organizationId: string,
   patch: Partial<Omit<InsertSettings, "organizationId">>,
 ): Promise<Settings | null> {
+  const effectivePatch =
+    patch.homeAddress !== undefined && patch.hqLatitude === undefined
+      ? { ...patch, hqLatitude: null, hqLongitude: null, hqGooglePlaceId: null }
+      : patch;
+
   return withOrganization(organizationId, async (tx) => {
     const [updated] = await tx
       .update(settingsTable)
-      .set(patch)
+      .set(effectivePatch)
       .where(eq(settingsTable.organizationId, organizationId))
       .returning();
     if (updated) return updated;
 
-    if (patch.homeAddress === undefined) return null;
+    if (effectivePatch.homeAddress === undefined) return null;
     const [created] = await tx
       .insert(settingsTable)
-      .values({ organizationId, ...SETTINGS_DEFAULTS, ...patch, homeAddress: patch.homeAddress })
+      .values({ organizationId, ...SETTINGS_DEFAULTS, ...effectivePatch, homeAddress: effectivePatch.homeAddress })
       .returning();
     return created ?? null;
   });
