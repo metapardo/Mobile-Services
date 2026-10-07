@@ -174,7 +174,7 @@ export default function Demo() {
       {
         onSuccess: (result) => {
           if (!result.success) return;
-          trackMixpanelEvent('demo_request_submitted', {
+          trackMixpanelEvent('demo_signup_completed', {
             has_business_name: hasBusinessName,
             has_note: hasNote,
             source,
