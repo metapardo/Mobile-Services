@@ -37,6 +37,13 @@ import { identifyMixpanelUser, trackMixpanelEvent } from '@/lib/mixpanel';
 import { Header, Footer, scrollToAccess, setActiveLenis } from '@/components/marketing-chrome';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
+// PRD_Mobull_Hero_Redesign.md draft preview — DRAFT ASSET, NOT CLEARED FOR PRODUCTION:
+// Singer Vehicle Design's own promotional photography of their "All-Terrain
+// Competition Study" Porsche (visible PORSCHE branding, Singer's custom car).
+// PRD risk #4 explicitly flags this exact licensing/trademark question as unresolved.
+// Swap for a licensed/owned photo before shipping; blueClouds* imports above are kept
+// (unused) per the PRD's own "ease rollback" note rather than deleted.
+import heroPorscheBeach from '@/assets/hero-porsche-beach.jpg';
 // MARKETING_SITE_REVAMP_BRIEF.md — real product screenshots (a demo org, no
 // real customer data) for Section 2's "Book the right Jobs" (the Fuel
 // Gauge tap-to-reveal breakdown) and "Right Job, Right Time" (the
@@ -287,34 +294,35 @@ const signupSchema = z.object({
 type SignupFormValues = z.infer<typeof signupSchema>;
 
 /**
- * The two pre-transcoded, web-ready cloud videos (H.264 + VP9, no audio) take
- * the place of the source design's static storm-hero image, layered under the
- * same `.hero-image` positioning/opacity/drift treatment.
+ * PRD_Mobull_Hero_Redesign.md ("Make every mile pay."). Replaces the prior
+ * centered cloud-video hero with a left-aligned block over a full-bleed photo
+ * — DRAFT: `heroPorscheBeach` is Singer Vehicle Design's own promotional
+ * photography (not cleared for production, PRD risk #4), and the responsive
+ * AVIF/WebP/srcset pipeline + mobile art direction the PRD also asks for
+ * aren't done yet. `blueCloudsMp4`/`blueCloudsWebm` stay imported (unused)
+ * per the PRD's own "ease rollback" note rather than being deleted outright.
  */
 function Hero() {
   return (
     <section className="hero" id="top">
-      <video
-        className="hero-image"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="auto"
+      <img
+        className="hero-image hero-image-photo"
+        src={heroPorscheBeach}
+        alt=""
         aria-hidden="true"
-        data-testid="video-storm-hero"
-      >
-        <source src={blueCloudsWebm} type="video/webm" />
-        <source src={blueCloudsMp4} type="video/mp4" />
-      </video>
+        data-testid="img-hero-photo"
+      />
+
       <div className="container-wide hero-content">
+        <div className="eyebrow">VALUE IN MOTION</div>
         <h1 className="text-foreground">
-          Not every job
+          Make every
           <br />
-          <em>is worth the drive.</em>
+          <span className="hero-accent">mile pay.</span>
         </h1>
         <p className="hero-copy reveal reveal-delay-2">
-          Mobull prices gas, drive time, and weather into every appointment — before you book.
+          Mobull builds gas, drive time, and weather into every appointment, so you know what you keep before you
+          book.
         </p>
         <div className="hero-actions reveal reveal-delay-3">
           <button
@@ -325,7 +333,7 @@ function Hero() {
             }}
             data-testid="button-hero-access"
           >
-            Get Started Now <ArrowUpRight size={16} />
+            Learn more <ArrowUpRight size={16} />
           </button>
         </div>
         <div className="hero-footer reveal reveal-delay-3">
@@ -337,6 +345,7 @@ function Hero() {
           <span className="scroll-cue">Scroll to forecast</span>
         </div>
       </div>
+
     </section>
   );
 }

@@ -135,15 +135,28 @@
 .site-shell .menu-toggle{display:none;background:transparent;color:hsl(var(--foreground));border:0;padding:8px}
 .site-shell .mobile-nav{display:none}
 
-.site-shell .hero{min-height:800px;position:relative;display:grid;align-items:end;isolation:isolate;overflow:hidden}
+.site-shell .hero{min-height:800px;position:relative;display:grid;align-items:center;isolation:isolate;overflow:hidden}
 .site-shell .hero-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-3;opacity:1;filter:brightness(1.6) saturate(1.15);animation:site-shell-drift 16s ease-in-out infinite;bottom:16px;height:calc(100% - 16px)}
+/* PRD_Mobull_Hero_Redesign.md draft: a still photo, not the cloud video this base
+   `.hero-image` rule was tuned for — no brightness/saturate boost (would wash the
+   photo out), no drift (motion blur in the photo already reads as speed), and
+   object-position pushed right so the car never sits under the left-aligned text
+   and stays in frame on narrower widths. Additive modifier, `.hero-image` unchanged
+   for easy rollback to the video per the PRD's own note. */
+.site-shell .hero-image-photo{filter:none;animation:none;object-position:78% center}
 .site-shell .hero::before{content:"";position:absolute;inset:0;z-index:-2;background:linear-gradient(90deg,rgba(4,14,25,.97) 0%,rgba(4,14,25,.65) 49%,rgba(4,14,25,.26) 100%),linear-gradient(0deg,hsl(var(--background)) 8%,transparent 40%)}
+/* Stronger left-side + lighter-sky coverage than the base scrim above (photo has
+   real texture/contrast the abstract cloud video didn't, including a bright sky at
+   top-right per the PRD's own open question) — applied only when the photo variant
+   (`.hero-image-photo`) is present, so the video rollback path keeps the original
+   scrim untouched. */
+.site-shell .hero:has(.hero-image-photo)::before{background:linear-gradient(90deg,rgba(2,9,16,.92) 0%,rgba(3,11,19,.72) 38%,rgba(4,14,25,.4) 70%,rgba(4,14,25,.22) 100%),linear-gradient(0deg,hsl(var(--background)) 10%,transparent 46%),linear-gradient(180deg,rgba(2,9,16,.45) 0%,transparent 28%)}
 .site-shell .hero::after{content:"";position:absolute;inset:0;z-index:-1;opacity:.38;background-image:linear-gradient(rgba(134,196,226,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(134,196,226,.07) 1px,transparent 1px);background-size:54px 54px;mask-image:linear-gradient(to bottom,black,transparent 70%)}
-.site-shell .hero-content{display:flex;flex-direction:column;align-items:center;padding:180px 0 76px;text-align:center}
-.site-shell .hero h1{font-family:var(--app-font-sans);max-width:900px;font-size:85px;letter-spacing:-.06em;line-height:.82;margin:26px auto 30px}
-.site-shell .hero h1 em{color:#fff;font-style:normal}
-.site-shell .hero-copy{max-width:600px;color:#fff;font-family:var(--app-font-sans);font-size:clamp(1.1rem,1.65vw,1.375rem);line-height:1.4;letter-spacing:-.01em;margin:0 auto 30px}
-.site-shell .hero-actions{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
+.site-shell .hero-content{display:flex;flex-direction:column;align-items:flex-start;padding:180px 0 76px;text-align:left}
+.site-shell .hero h1{font-family:var(--app-font-sans);max-width:900px;font-size:clamp(3.4rem,6.2vw,6.25rem);letter-spacing:-.06em;line-height:.82;margin:26px 0 22px;text-align:left}
+.site-shell .hero h1 .hero-accent{color:hsl(var(--primary));font-style:normal}
+.site-shell .hero-copy{max-width:600px;color:#fff;font-family:var(--app-font-sans);font-size:clamp(1.1rem,1.65vw,1.375rem);line-height:1.4;letter-spacing:-.01em;margin:0 0 30px;text-align:left}
+.site-shell .hero-actions{display:flex;align-items:center;justify-content:flex-start;gap:12px;flex-wrap:wrap}
 .site-shell .hero-footer{display:flex;justify-content:space-between;align-items:end;align-self:stretch;width:100%;gap:20px;margin-top:130px;text-align:left}
 .site-shell .hero-caption{color:hsl(var(--foreground));font-size:.75rem;max-width:230px;line-height:1.5}
 .site-shell .scroll-cue{display:inline-flex;align-items:center;gap:9px;color:hsl(var(--foreground));font-size:.7rem;font-family:var(--app-font-mono);text-transform:uppercase;letter-spacing:.1em}
