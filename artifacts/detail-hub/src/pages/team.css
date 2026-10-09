@@ -1,0 +1,73 @@
+/**
+ * `/team` page-specific styles, layered on `signup.css` the same way
+ * `demo.css`/`calculator.css` layer on it (PRD_Mobull_Team_Page.md). Reuses
+ * `.section`/`.section-heading`/`.section-title`/`.section-intro`/`.eyebrow`/
+ * `.glass` from `signup.css` directly rather than re-deriving them — only
+ * what's genuinely new to this page (profile cards, the office card) lives
+ * here.
+ */
+
+/* One card today (Sean), centered rather than stretched to the full content
+   width — a lone full-bleed profile card reads as a layout mistake. The track
+   itself is capped (not just the card): an `auto` track sizes to the headshot's
+   900px intrinsic width and centering that oversized track leaves the card
+   visibly left of center. `auto-fit` keeps this correct when a second card is
+   added later — two capped columns, still centered, no rule change needed. */
+.site-shell .leader-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 420px));
+  justify-content: center;
+  gap: 24px;
+}
+
+.site-shell .leader-card { display: flex; flex-direction: column; border-radius: 22px; overflow: hidden; padding: 0; }
+.site-shell .leader-card-photo { aspect-ratio: 4 / 3; background: rgba(4, 18, 31, .55); }
+.site-shell .leader-card-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.site-shell .leader-card-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: hsl(var(--primary));
+  background: rgba(84, 204, 255, .08);
+}
+.site-shell .leader-card-body { padding: 24px; }
+.site-shell .leader-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.site-shell .leader-card-title { margin: 0 0 6px; }
+.site-shell .leader-card-body h3 { font-size: 1.3rem; letter-spacing: -.03em; margin: 0; }
+.site-shell .leader-card-body p { color: hsl(var(--muted-foreground)); font-size: .92rem; line-height: 1.6; margin: 14px 0 0; }
+.site-shell .leader-card-linkedin {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: hsl(var(--primary));
+  background: rgba(84, 204, 255, .1);
+  border: 1px solid rgba(141, 200, 228, .2);
+  transition: background-color .2s ease, transform .2s ease;
+}
+.site-shell .leader-card-linkedin:hover { background: rgba(84, 204, 255, .18); transform: translateY(-2px); }
+
+.site-shell .office-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 28px;
+  padding: 40px;
+  border-radius: 26px;
+}
+.site-shell .office-detail h3 { font-size: 1.4rem; letter-spacing: -.03em; margin: 0 0 6px; }
+.site-shell .office-detail p { color: hsl(var(--muted-foreground)); font-size: .92rem; margin: 0; }
+.site-shell .office-detail p + p { margin-top: 4px; }
+.site-shell .office-detail a { color: hsl(var(--primary)); text-decoration: none; }
+.site-shell .office-detail a:hover { text-decoration: underline; }
+
+@media (max-width: 820px) {
+  .site-shell .office-card { flex-direction: column; align-items: flex-start; padding: 28px; }
+}

@@ -12,7 +12,6 @@ import {
   type Variants,
 } from 'framer-motion';
 import {
-  ArrowUpRight,
   BarChart3,
   CalendarClock,
   CalendarDays,
@@ -35,6 +34,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { trackEvent } from '@/lib/analytics';
 import { identifyMixpanelUser, trackMixpanelEvent } from '@/lib/mixpanel';
 import { Header, Footer, scrollToAccess, setActiveLenis } from '@/components/marketing-chrome';
+import { MarketingHero } from '@/components/marketing-hero';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
 // PRD_Mobull_Hero_Redesign.md draft preview — DRAFT ASSET, NOT CLEARED FOR PRODUCTION:
@@ -293,60 +293,18 @@ const signupSchema = z.object({
 
 type SignupFormValues = z.infer<typeof signupSchema>;
 
-/**
- * PRD_Mobull_Hero_Redesign.md ("Make every mile pay."). Replaces the prior
- * centered cloud-video hero with a left-aligned block over a full-bleed photo
- * — DRAFT: `heroPorscheBeach` is Singer Vehicle Design's own promotional
- * photography (not cleared for production, PRD risk #4), and the responsive
- * AVIF/WebP/srcset pipeline + mobile art direction the PRD also asks for
- * aren't done yet. `blueCloudsMp4`/`blueCloudsWebm` stay imported (unused)
- * per the PRD's own "ease rollback" note rather than being deleted outright.
- */
 function Hero() {
   return (
-    <section className="hero" id="top">
-      <img
-        className="hero-image hero-image-photo"
-        src={heroPorscheBeach}
-        alt=""
-        aria-hidden="true"
-        data-testid="img-hero-photo"
-      />
-
-      <div className="container-wide hero-content">
-        <div className="eyebrow">VALUE IN MOTION</div>
-        <h1 className="text-foreground">
-          Make every
-          <br />
-          <span className="hero-accent">mile pay.</span>
-        </h1>
-        <p className="hero-copy reveal reveal-delay-2">
-          Mobull builds gas, drive time, and weather into every appointment, so you know what you keep before you
-          book.
-        </p>
-        <div className="hero-actions reveal reveal-delay-3">
-          <button
-            className="button-ghost"
-            onClick={() => {
-              trackMixpanelEvent('signup_cta_clicked', { cta_location: 'hero' });
-              scrollToAccess();
-            }}
-            data-testid="button-hero-access"
-          >
-            Learn more <ArrowUpRight size={16} />
-          </button>
-        </div>
-        <div className="hero-footer reveal reveal-delay-3">
-          <p className="hero-caption">
-            The weather changes.
-            <br />
-            <strong>Your margin shouldn&rsquo;t.</strong>
-          </p>
-          <span className="scroll-cue">Scroll to forecast</span>
-        </div>
-      </div>
-
-    </section>
+    <MarketingHero
+      eyebrow="VALUE IN MOTION"
+      photoSrc={heroPorscheBeach}
+      buttonLabel="Get started"
+      onButtonClick={() => {
+        trackMixpanelEvent('signup_cta_clicked', { cta_location: 'hero' });
+        scrollToAccess();
+      }}
+      data-testid="section-hero"
+    />
   );
 }
 

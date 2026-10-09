@@ -15,6 +15,7 @@ import Login from '@/pages/login';
 import Signup from '@/pages/signup';
 import Calculator from '@/pages/calculator';
 import Demo from '@/pages/demo';
+import Team from '@/pages/team';
 import Home from '@/pages/home';
 import Calendar from '@/pages/calendar';
 
@@ -126,18 +127,20 @@ function App() {
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <MixpanelPageviewTracker />
           <Switch>
-            {/* `/`, `/login`, `/signup`, `/calculator`, and `/demo` are the only routes
-                that must stay ungated — everything else renders behind `AuthGate` below.
-                `/calculator` (`PRD_Mobull_Public_Calculator.md`) and `/demo`
-                (`PRD_Mobull_Demo_Request_Page.md`) are ungated marketing routes beyond
-                the original three: public, no-login pages with their own indexable SEO
-                surface (see each page's own `<title>`/meta-description effect and
-                `public/sitemap.xml`). */}
+            {/* `/`, `/login`, `/signup`, `/calculator`, `/demo`, and `/team` are the only
+                routes that must stay ungated — everything else renders behind `AuthGate`
+                below. `/calculator` (`PRD_Mobull_Public_Calculator.md`), `/demo`
+                (`PRD_Mobull_Demo_Request_Page.md`), and `/team` (`PRD_Mobull_Team_Page.md`
+                — nav label "About", route stays `/team` to match that PRD's own internal
+                references) are ungated marketing routes beyond the original three: public,
+                no-login pages with their own indexable SEO surface (see each page's own
+                `<title>`/meta-description effect and `public/sitemap.xml`). */}
             <Route path="/" component={RootRoute} />
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
             <Route path="/calculator" component={Calculator} />
             <Route path="/demo" component={Demo} />
+            <Route path="/team" component={Team} />
             <Route>
               <AuthGate>
                 <AppShell />

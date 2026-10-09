@@ -78,6 +78,11 @@ export const navItems: NavItem[] = [
   { label: 'For your business', href: '#features' },
   { label: 'Drive Cost Calculator', href: '/calculator', type: 'route' },
   { label: 'Request a Demo', href: '/demo?source=nav', type: 'route' },
+  // PRD_Mobull_Team_Page.md — nav-facing label is "About" (route stays `/team`,
+  // see that page's own file-header comment for why). Appended last, same as
+  // every route entry above it when it was added; PRD's own "Nav crowding" open
+  // question (six items, mobile menu) isn't otherwise resolved here.
+  { label: 'About', href: '/team', type: 'route' },
 ];
 
 export function scrollToAccess() {
