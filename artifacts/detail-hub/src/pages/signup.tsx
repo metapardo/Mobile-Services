@@ -33,7 +33,7 @@ import { useSession } from '@/hooks/use-session';
 import { useQueryClient } from '@tanstack/react-query';
 import { trackEvent } from '@/lib/analytics';
 import { identifyMixpanelUser, trackMixpanelEvent } from '@/lib/mixpanel';
-import { Header, Footer, scrollToAccess, setActiveLenis, lenisScrollToHash } from '@/components/marketing-chrome';
+import { Header, Footer, setActiveLenis, lenisScrollToHash } from '@/components/marketing-chrome';
 import { MarketingHero } from '@/components/marketing-hero';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
@@ -279,7 +279,7 @@ const journeyStops: JourneyStop[] = [
 const flowSteps: { label: string; copy: string; icon: IconType }[] = [
   { label: 'Sign up', copy: 'Tell us what you do, and where you take jobs.', icon: UserRound },
   { label: 'Create account', copy: 'Set your hours, your radius, and what a job actually costs you to run.', icon: ShieldCheck },
-  { label: 'Fuel Gauge', copy: 'See what the job pays — gas cost and drive time — before you book it.', icon: BarChart3 },
+  { label: 'Trip Calculator', copy: 'See what the job pays — gas cost and drive time — before you book it.', icon: BarChart3 },
   { label: 'Book a Job', copy: 'Mobull suggests times that keep you in the same area as jobs you already have booked.', icon: CalendarDays },
   { label: 'Take payment', copy: "Record it — Zelle, Venmo, or cash — and get back on the road.", icon: CreditCard },
 ];
@@ -294,14 +294,19 @@ const signupSchema = z.object({
 type SignupFormValues = z.infer<typeof signupSchema>;
 
 function Hero() {
+  const [, setLocation] = useLocation();
+
   return (
     <MarketingHero
-      eyebrow="VALUE IN MOTION"
       photoSrc={heroPorscheBeach}
-      buttonLabel="Get started"
+      buttonLabel="Check a job free"
       onButtonClick={() => {
-        trackMixpanelEvent('signup_cta_clicked', { cta_location: 'hero' });
-        scrollToAccess();
+        // Renamed from `signup_cta_clicked` — this button no longer leads toward
+        // sign-up, it leads to the free calculator, so counting its clicks as
+        // sign-up intent would be misleading. Same `cta_location` property shape
+        // other CTA click events in this file already use.
+        trackMixpanelEvent('calculator_cta_clicked', { cta_location: 'hero' });
+        setLocation('/calculator');
       }}
       data-testid="section-hero"
     />

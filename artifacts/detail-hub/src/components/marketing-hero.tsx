@@ -1,11 +1,11 @@
 /**
- * PRD_Mobull_Hero_Redesign.md ("Make every mile pay."). Shared hero used by both
- * the homepage (`signup.tsx`) and `/team` (`pages/team.tsx`, per
- * PRD_Mobull_Team_Page.md's explicit "reuse the redesigned hero component...
- * rather than building a second one" — a second near-identical hero would drift
- * from this one over time). Headline and subhead are identical across both pages
- * by design, so they're fixed here rather than passed as props; the eyebrow,
- * background photo, and button are the only things that differ per page.
+ * PRD_Mobull_Hero_Redesign.md. Shared hero used by both the homepage
+ * (`signup.tsx`) and `/team` (`pages/team.tsx`, per PRD_Mobull_Team_Page.md's
+ * explicit "reuse the redesigned hero component... rather than building a
+ * second one" — a second near-identical hero would drift from this one over
+ * time). Headline and subhead are identical across both pages by design, so
+ * they're fixed here rather than passed as props; the eyebrow, background
+ * photo, and button are the only things that differ per page.
  *
  * DRAFT: both `photoSrc` values callers pass in today (`heroPorscheBeach` on the
  * homepage, `teamHeroPorsche` on `/team`) are Singer Vehicle Design's own
@@ -18,7 +18,8 @@
 import { ArrowUpRight } from 'lucide-react';
 
 export interface MarketingHeroProps {
-  eyebrow: string;
+  /** Omit to render no eyebrow at all (the homepage drops it; `/team` still passes "THE TEAM"). */
+  eyebrow?: string;
   photoSrc: string;
   buttonLabel: string;
   onButtonClick: () => void;
@@ -37,15 +38,15 @@ export function MarketingHero({ eyebrow, photoSrc, buttonLabel, onButtonClick, .
       />
 
       <div className="container-wide hero-content">
-        <div className="eyebrow">{eyebrow}</div>
+        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h1 className="text-foreground">
-          Make every
+          Know what a job pays
           <br />
-          <span className="hero-accent">mile pay.</span>
+          <span className="hero-accent">before you take it.</span>
         </h1>
         <p className="hero-copy reveal reveal-delay-2">
-          Mobull builds gas, drive time, and weather into every appointment, so you know what you keep before you
-          book.
+          Mobull is a scheduling app for mobile detailers. It shows the gas, drive time, and weather for every job,
+          and what you keep after the drive. You find out before you book.
         </p>
         <div className="hero-actions reveal reveal-delay-3">
           <button className="button-ghost" onClick={onButtonClick} data-testid="button-hero-access">

@@ -195,7 +195,7 @@ export function Header({ open, setOpen }: { open: boolean; setOpen: (value: bool
             Log in
           </Link>
           <button className="button-primary nav-cta" onClick={() => goToSignup('nav')} data-testid="button-nav-request">
-            Sign up <ArrowUpRight size={14} />
+            Free Trial <ArrowUpRight size={14} />
           </button>
         </div>
         <button
@@ -234,7 +234,7 @@ export function Header({ open, setOpen }: { open: boolean; setOpen: (value: bool
             Log in
           </Link>
           <button className="button-primary" onClick={() => goToSignup('mobile_menu')} data-testid="button-mobile-request">
-            Sign up <ArrowUpRight size={15} />
+            Free Trial <ArrowUpRight size={15} />
           </button>
         </nav>
       )}
