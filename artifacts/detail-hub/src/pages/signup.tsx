@@ -33,7 +33,7 @@ import { useSession } from '@/hooks/use-session';
 import { useQueryClient } from '@tanstack/react-query';
 import { trackEvent } from '@/lib/analytics';
 import { identifyMixpanelUser, trackMixpanelEvent } from '@/lib/mixpanel';
-import { Header, Footer, scrollToAccess, setActiveLenis } from '@/components/marketing-chrome';
+import { Header, Footer, scrollToAccess, setActiveLenis, lenisScrollToHash } from '@/components/marketing-chrome';
 import { MarketingHero } from '@/components/marketing-hero';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
@@ -904,6 +904,22 @@ export default function Signup() {
       lenis.destroy();
       setActiveLenis(null);
     };
+  }, []);
+
+  // Completes `marketing-chrome.tsx`'s `navigateToAnchor`: a nav/footer link clicked from
+  // another page (e.g. "Why Mobull" from `/calculator`) navigates here as `/#why` via
+  // wouter's `setLocation`, which does update `window.location.hash` (its `pushState` call
+  // carries the full target including the hash) but — unlike a real browser navigation —
+  // never triggers the browser's own "scroll to the element matching the hash" behavior,
+  // since wouter never does a full page load. This picks that hash up once Signup has
+  // mounted and the Lenis instance above is live, and finishes the scroll by hand. A single
+  // rAF defer is enough margin for the section els to exist in the DOM first paint; the
+  // `resize()` inside `lenisScrollToHash` itself (see that function) is what then protects
+  // against late-loading media having shifted the page's real scrollable height.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    requestAnimationFrame(() => lenisScrollToHash(hash));
   }, []);
 
   const { data: session, isPending: sessionPending } = useSession();

@@ -89,14 +89,41 @@ export function scrollToAccess() {
   lenisScrollToHash('#access');
 }
 
+/** Pages that render the one-pager sections (`#why`/`#workflow`/`#features`/`#top`/`#access`) this helper's hashes target — `/signup` is the same component as `/` (`RootRoute` renders `Signup` for both). */
+function isHomePath(pathname: string): boolean {
+  return pathname === '/' || pathname === '/signup';
+}
+
+/**
+ * Cross-page-safe version of `lenisScrollToHash`: on the homepage, scrolls in place;
+ * anywhere else, navigates home with the hash attached (`Signup`'s own mount effect in
+ * `signup.tsx` consumes `window.location.hash` once it lands and finishes the scroll —
+ * see that effect's comment for why this can't just be a DOM-existence check).
+ *
+ * Deliberately keyed on the route, not `document.querySelector(hash)`: `#top` is no
+ * longer unique to the homepage now that `/team` reuses the same shared `MarketingHero`
+ * component (which also sets `id="top"` on its own hero section) — an existence check
+ * would find a real match on `/team` and scroll within that page instead of going home,
+ * silently reproducing the exact bug this function exists to fix.
+ */
+function navigateToAnchor(hash: string, pathname: string, setLocation: (path: string) => void) {
+  if (isHomePath(pathname)) {
+    lenisScrollToHash(hash);
+  } else {
+    setLocation(`/${hash}`);
+  }
+}
+
 export function Logo() {
+  const [location, setLocation] = useLocation();
+
   return (
     <a
       className="brand"
-      href="#top"
+      href={isHomePath(location) ? '#top' : '/'}
       onClick={(e) => {
         e.preventDefault();
-        lenisScrollToHash('#top');
+        navigateToAnchor('#top', location, setLocation);
       }}
       data-testid="link-brand"
     >
@@ -113,12 +140,16 @@ function navTestId(prefix: string, label: string) {
 }
 
 export function Header({ open, setOpen }: { open: boolean; setOpen: (value: boolean) => void }) {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
+  // "Why Mobull" / "How it works" / "For your business" — `#why`/`#workflow`/`#features`
+  // exist only on the homepage, so these no-op on every other page unless they also
+  // navigate home first. See `navigateToAnchor`'s own comment for why this is keyed on
+  // the route rather than a `document.querySelector` existence check.
   const go = (e: ReactMouseEvent, href: string) => {
     e.preventDefault();
     setOpen(false);
-    lenisScrollToHash(href);
+    navigateToAnchor(href, location, setLocation);
   };
 
   // The "Sign up" CTA normally just scrolls down to this same page's
@@ -212,6 +243,8 @@ export function Header({ open, setOpen }: { open: boolean; setOpen: (value: bool
 }
 
 export function Footer() {
+  const [location, setLocation] = useLocation();
+
   return (
     <footer className="footer">
       <div className="container-wide footer-row">
@@ -219,21 +252,21 @@ export function Footer() {
         <span className="footer-note">© 2026 Mobull · Know before you go.</span>
         <div className="footer-links">
           <a
-            href="#why"
+            href={isHomePath(location) ? '#why' : '/#why'}
             onClick={(e) => {
               e.preventDefault();
-              lenisScrollToHash('#why');
+              navigateToAnchor('#why', location, setLocation);
             }}
             data-testid="link-footer-why"
           >
             Why Mobull
           </a>
           <a
-            href="#top"
+            href={isHomePath(location) ? '#top' : '/'}
             className="back-top"
             onClick={(e) => {
               e.preventDefault();
-              lenisScrollToHash('#top');
+              navigateToAnchor('#top', location, setLocation);
             }}
             data-testid="link-back-top"
           >
