@@ -37,13 +37,7 @@ import { Header, Footer, setActiveLenis, lenisScrollToHash } from '@/components/
 import { MarketingHero } from '@/components/marketing-hero';
 import blueCloudsMp4 from '@/assets/video/blue-clouds.mp4';
 import blueCloudsWebm from '@/assets/video/blue-clouds.webm';
-// PRD_Mobull_Hero_Redesign.md draft preview — DRAFT ASSET, NOT CLEARED FOR PRODUCTION:
-// Singer Vehicle Design's own promotional photography of their "All-Terrain
-// Competition Study" Porsche (visible PORSCHE branding, Singer's custom car).
-// PRD risk #4 explicitly flags this exact licensing/trademark question as unresolved.
-// Swap for a licensed/owned photo before shipping; blueClouds* imports above are kept
-// (unused) per the PRD's own "ease rollback" note rather than deleted.
-import heroPorscheBeach from '@/assets/hero-porsche-beach.jpg';
+import heroPorscheWash from '@/assets/hero-porsche-wash.jpg';
 // MARKETING_SITE_REVAMP_BRIEF.md — real product screenshots (a demo org, no
 // real customer data) for Section 2's "Book the right Jobs" (the Fuel
 // Gauge tap-to-reveal breakdown) and "Right Job, Right Time" (the
@@ -298,7 +292,7 @@ function Hero() {
 
   return (
     <MarketingHero
-      photoSrc={heroPorscheBeach}
+      photoSrc={heroPorscheWash}
       buttonLabel="Check a job free"
       onButtonClick={() => {
         // Renamed from `signup_cta_clicked` — this button no longer leads toward
